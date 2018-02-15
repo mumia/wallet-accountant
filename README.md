@@ -1,0 +1,2 @@
+# wallet-accountant
+The frontend
