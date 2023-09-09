@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  dev:
+    build:
+      dockerfile: docker/Dockerfile
+    environment:
+      - EVENTSTORE_CONNETION_STRING=esdb://eventstore:2113?keepAliveTimeout=10000&keepAliveInterval=10000&tls=false
+          #"esdb+discover://eventstore:2113?keepAliveTimeout=10000&keepAliveInterval=10000&tls=false",
+    ports:
+      - "8080:8080"
+      - "40000:40000"
+    volumes:
+      - "./:/app"
+      - "./docker/dev-entrypoint.sh:/root/entrypoint.sh"
+    entrypoint: ["/root/entrypoint.sh"]
+    working_dir: "/app"
+    depends_on:
+      - eventstore
+    networks:
+        wallet-accountant: ~
+
+  eventstore:
+    image: "eventstore/eventstore"
+    environment:
+      - EVENTSTORE_CLUSTER_SIZE=1
+      - EVENTSTORE_RUN_PROJECTIONS=All
+      - EVENTSTORE_START_STANDARD_PROJECTIONS=True
+      - EVENTSTORE_EXT_TCP_PORT=1113
+      - EVENTSTORE_HTTP_PORT=2113
+      - EVENTSTORE_INSECURE=true
+      - EVENTSTORE_DB=/var/lib/event-store-data
+      - EVENTSTORE_INDEX=/var/lib/event-store-index
+      - EVENTSTORE_LOG=/var/lib/event-store-logs
+#      - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
+      - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
+    ports:
+      - "1113:1113"
+      - "2113:2113"
+    volumes:
+      - "./dbdata/data:/var/lib/event-store-data"
+      - "./dbdata/index:/var/lib/event-store-index"
+      - "./dbdata/logs:/var/lib/event-store-logs"
+    networks:
+      wallet-accountant: ~
+
+networks:
+  wallet-accountant: ~
