@@ -18,6 +18,6 @@ package eventstoredb
 //	return root, nil
 //}
 //
-//func (r *BaseRepository) Save(ctx context.Context, aggregateRoot aggregate.Root) error {
+//func (r *BaseRepository) Create(ctx context.Context, aggregateRoot aggregate.Root) error {
 //	return r.repository.SaveAggregateRoot(ctx, aggregateRoot)
 //}
