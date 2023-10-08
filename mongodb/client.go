@@ -23,7 +23,6 @@ func NewMongoClient() (*MongoClient, error) {
 	opts.SetWriteConcern(writeconcern.Majority())
 	opts.SetReadConcern(readconcern.Majority())
 	opts.SetReadPreference(readpref.Primary())
-	//opts.SetRegistry(NewRegistry())
 
 	client, err := mongo.Connect(context.Background(), opts)
 	if err != nil {
