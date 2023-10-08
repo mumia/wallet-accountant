@@ -13,7 +13,7 @@ import (
 	"walletaccountant/projector"
 )
 
-var deadlineTimeout = 1 * time.Minute
+var deadlineTimeout = 60 * time.Minute
 var projectionStream = fmt.Sprintf("$ce-%s", AggregateType)
 var subscriptionGroup = fmt.Sprintf("subscription-group-%s", AggregateType)
 
