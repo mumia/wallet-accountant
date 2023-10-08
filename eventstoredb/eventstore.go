@@ -9,36 +9,14 @@ import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/uuid"
 	"io"
-	"walletaccountant/definitions"
 )
 
 var _ eventhorizon.EventStore = &EventStore{}
 
 type EventStore struct {
-	client        *esdb.Client
+	client        EventStorerer
 	contentType   esdb.ContentType
 	aggregateType eventhorizon.AggregateType
-}
-
-type EventStoreFactory func(aggregateType eventhorizon.AggregateType) *EventStore
-
-func NewEventStoreFactory(
-	eventDataRegisters []definitions.EventDataRegisters,
-	client *esdb.Client,
-) (EventStoreFactory, error) {
-	for _, eventDataRegister := range eventDataRegisters {
-		for _, register := range eventDataRegister.Registers() {
-			eventhorizon.RegisterEventData(register.EventType, register.EventData)
-		}
-	}
-
-	return func(aggregateType eventhorizon.AggregateType) *EventStore {
-		return &EventStore{
-			client:        client,
-			contentType:   esdb.ContentTypeJson,
-			aggregateType: aggregateType,
-		}
-	}, nil
 }
 
 func (e EventStore) Save(ctx context.Context, events []eventhorizon.Event, originalVersion int) error {
@@ -150,7 +128,7 @@ func (e EventStore) convertStreamToEventList(stream *esdb.ReadStream, version in
 			return nil, err
 		}
 
-		event, err := e.createEvent(esdbEvent)
+		event, err := CreateEvent(esdbEvent)
 		if err != nil {
 			return nil, err
 		}
@@ -159,22 +137,4 @@ func (e EventStore) convertStreamToEventList(stream *esdb.ReadStream, version in
 	}
 
 	return events, nil
-}
-
-func (e EventStore) createEvent(esdbEvent *esdb.ResolvedEvent) (eventhorizon.Event, error) {
-	eventType := eventhorizon.EventType(esdbEvent.Event.EventType)
-	eventData, err := eventhorizon.CreateEventData(eventType)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(esdbEvent.Event.Data, eventData); err != nil {
-		return nil, err
-	}
-
-	return eventhorizon.NewEvent(
-		eventType,
-		eventData,
-		esdbEvent.Event.CreatedDate,
-	), nil
 }

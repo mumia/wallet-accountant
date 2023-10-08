@@ -11,18 +11,18 @@ import (
 var _ definitions.AggregateFactory = &Factory{}
 
 type Factory struct {
-	clock.Clock
+	clock *clock.Clock
 }
 
-func NewFactory(clock clock.Clock) *Factory {
-	return &Factory{clock}
+func NewFactory() *Factory {
+	return &Factory{}
 }
 
 func (factory *Factory) Factory() func(id uuid.UUID) eventhorizon.Aggregate {
 	return func(id uuid.UUID) eventhorizon.Aggregate {
 		return &Account{
 			AggregateBase: events.NewAggregateBase(AggregateType, id),
-			clock:         factory.Clock,
+			clock:         factory.clock,
 		}
 	}
 }

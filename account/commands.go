@@ -7,7 +7,7 @@ import (
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"github.com/looplab/eventhorizon/uuid"
 	"time"
-	"walletaccountant/definitions"
+	"walletaccountant/commands"
 	"walletaccountant/eventstoredb"
 )
 
@@ -21,29 +21,29 @@ const (
 )
 
 func RegisterCommandHandler(
-	eventStoreFactory eventstoredb.EventStoreFactory,
+	eventStoreFactory eventstoredb.EventStoreCreator,
 	commandHandler eventhorizon.CommandHandler,
 ) error {
 	busCommandHandler, ok := commandHandler.(*bus.CommandHandler)
 	if !ok {
-		return errors.New("")
+		return errors.New("command handler is not a bus command handler")
 	}
 
-	definitions.RegisterCommands(
+	commands.RegisterCommands(
 		[]func() eventhorizon.Command{
 			func() eventhorizon.Command { return &RegisterNewAccount{} },
 			func() eventhorizon.Command { return &StartNextMonth{} },
 		},
 	)
 
-	eventStore := eventStoreFactory(AggregateType)
+	eventStore := eventStoreFactory.CreateEventStore(AggregateType)
 
 	aggregateStore, err := events.NewAggregateStore(eventStore)
 	if err != nil {
 		return err
 	}
 
-	return definitions.RegisterCommandTypes(
+	return commands.RegisterCommandTypes(
 		aggregateStore,
 		busCommandHandler,
 		AggregateType,
@@ -55,7 +55,7 @@ func RegisterCommandHandler(
 }
 
 type RegisterNewAccount struct {
-	AccountId           uuid.UUID `json:"account_id"`
+	AccountId           Id        `json:"account_id"`
 	BankName            string    `json:"bank_name"`
 	Name                string    `json:"name"`
 	AccountType         Type      `json:"type"`
@@ -66,7 +66,7 @@ type RegisterNewAccount struct {
 }
 
 func (r RegisterNewAccount) AggregateID() uuid.UUID {
-	return r.AccountId
+	return uuid.UUID(r.AccountId)
 }
 
 func (r RegisterNewAccount) AggregateType() eventhorizon.AggregateType {
@@ -78,11 +78,11 @@ func (r RegisterNewAccount) CommandType() eventhorizon.CommandType {
 }
 
 type StartNextMonth struct {
-	AccountId uuid.UUID `json:"account_id"`
+	AccountId Id `json:"account_id"`
 }
 
 func (s StartNextMonth) AggregateID() uuid.UUID {
-	return s.AccountId
+	return uuid.UUID(s.AccountId)
 }
 
 func (s StartNextMonth) AggregateType() eventhorizon.AggregateType {

@@ -5,12 +5,17 @@ import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
 	"walletaccountant/account"
 	"walletaccountant/api"
 	"walletaccountant/clock"
+	"walletaccountant/commandapis"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
+	"walletaccountant/mongodb"
+	"walletaccountant/projector"
+	"walletaccountant/queryapis"
 )
 
 func main() {
@@ -20,14 +25,18 @@ func main() {
 			zap.NewDevelopment,
 			clock.NewClock,
 
-			// Routes
-			api.AsRoute(account.NewRegisterApi),
+			// Command routes
+			definitions.AsRoute(commandapis.NewRegisterNewAccountApi),
 
-			// Mediator
-			account.NewMediator,
+			// Query routes
+			definitions.AsRoute(queryapis.NewReadAllAccountsApi),
+			definitions.AsRoute(queryapis.NewReadAccountsApi),
 
-			// Repositories
-			//account.NewAccountRepository,
+			// CommandMediator
+			fx.Annotate(account.NewCommandMediator, fx.As(new(account.CommandMediatorer))),
+
+			// QueryMediator
+			fx.Annotate(account.NewQueryMediator, fx.As(new(account.QueryMediatorer))),
 
 			// Aggregate factory
 			definitions.AsAggregateFactory(account.NewFactory),
@@ -36,14 +45,43 @@ func main() {
 			definitions.AsEventDataRegister(account.NewEventRegister),
 
 			// Event Store DB
-			eventstoredb.NewClient,
-			fx.Annotate(eventstoredb.NewEventStoreFactory, fx.ParamTags(`group:"eventDataRegisters"`)),
+			fx.Annotate(eventstoredb.NewClient, fx.As(new(eventstoredb.EventStorerer))),
+			fx.Annotate(eventstoredb.NewEventStoreFactory, fx.As(new(eventstoredb.EventStoreCreator))),
+			fx.Annotate(eventstoredb.NewIdCreator, fx.As(new(eventstoredb.IdGenerator))),
+
+			// Mongo DB
+			mongodb.NewMongoClient,
+
+			// Projections
+			fx.Annotate(
+				projector.NewEventMatcherHandlerRegistry,
+				fx.ParamTags(`group:"eventMatcherHandleProviders"`),
+			),
+			definitions.AsEventMatcherHandleProvider(account.NewProjectionConfig),
+			fx.Annotate(account.NewProjection, fx.As(new(eventhorizon.EventHandler))),
+
+			// Read model repositories
+			fx.Annotate(account.NewReadModelRepository, fx.As(new(account.ReadModeler))),
 
 			// Event horizon stuff
 			fx.Annotate(bus.NewCommandHandler, fx.As(new(eventhorizon.CommandHandler))),
 		),
+		// Start api server
 		fx.Invoke(func(engine *gin.Engine) { /* Nothing to do here */ }),
+
 		// Command handler
 		fx.Invoke(account.RegisterCommandHandler),
+
+		// Event stream subscriptions
+		fx.Invoke(account.SubscribeEventStream),
+
+		// Event registration
+		fx.Invoke(fx.Annotate(eventstoredb.RegisterEvents, fx.ParamTags(`group:"eventDataRegisters"`))),
+
+		fx.WithLogger(
+			func(log *zap.Logger) fxevent.Logger {
+				return &fxevent.ZapLogger{Logger: log}
+			},
+		),
 	).Run()
 }

@@ -12,3 +12,7 @@ run:
 
 debug:
 	dlv debug --headless --listen=:40000 --api-version=2 --accept-multiclient
+
+test:
+	go test -coverpkg=./... -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html

@@ -23,3 +23,5 @@ go.work
 .idea
 dbdata/*
 wallet-accountant.iml
+
+coverage.html

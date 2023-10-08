@@ -1,0 +1,1 @@
+* https://medium.com/safetycultureengineering/flexible-mocking-for-testing-in-go-f952869e34f5

@@ -49,6 +49,7 @@ func (clock *Clock) Now() time.Time {
 		return time.Now()
 	}
 	defer clock.next()
+
 	instant := clock.instants[clock.instantsIndex]
 
 	clock.logDebug(fmt.Sprintf("Now: %s(%d) - %s", instant.Label, clock.instantsIndex, instant.Instant.String()))
