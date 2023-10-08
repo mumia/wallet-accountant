@@ -24,7 +24,9 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 	requires := require.New(t)
 	ctx := context.Background()
 
-	err := os.Setenv("FRONTEND_URL", "http://localhost")
+	err := os.Setenv("PORT", "59596")
+	requires.NoError(err)
+	err = os.Setenv("FRONTEND_URL", "http://localhost")
 	requires.NoError(err)
 
 	logger := zaptest.NewLogger(t)

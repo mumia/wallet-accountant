@@ -47,7 +47,9 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 	requires := require.New(t)
 	ctx := context.Background()
 
-	err := os.Setenv("FRONTEND_URL", "http://localhost")
+	err := os.Setenv("PORT", "59597")
+	requires.NoError(err)
+	err = os.Setenv("FRONTEND_URL", "http://localhost")
 	requires.NoError(err)
 
 	logger := zaptest.NewLogger(t)
@@ -107,7 +109,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
 		asserts.Equal(
-			"{\"error\":\"invalid character 'i' looking for beginning of object key string\"}",
+			"{\"error\":\"{\\\"code\\\":999,\\\"reason\\\":\\\"invalid character 'i' looking for beginning of object key string\\\",\\\"context\\\":null}\"}",
 			w.Body.String(),
 		)
 	})
