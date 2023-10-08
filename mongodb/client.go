@@ -18,14 +18,6 @@ type MongoClient struct {
 	*mongo.Client
 }
 
-//func NewRegistry() *bsoncodec.Registry {
-//	mongoRegistry := bson.NewRegistry()
-//	mongoRegistry.RegisterTypeEncoder(tUUID, bsoncodec.ValueEncoderFunc(uuidEncodeValue))
-//	mongoRegistry.RegisterTypeDecoder(tUUID, bsoncodec.ValueDecoderFunc(uuidDecodeValue))
-//
-//	return mongoRegistry
-//}
-
 func NewMongoClient() (*MongoClient, error) {
 	opts := options.Client().ApplyURI(os.Getenv(connectionStringName))
 	opts.SetWriteConcern(writeconcern.Majority())
