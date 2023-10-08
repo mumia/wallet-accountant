@@ -2,28 +2,23 @@ package definitions
 
 import "encoding/json"
 
-var _ json.Marshaler = &WalletAccountantError{}
+var _ error = &WalletAccountantError{}
 
-type WalletAccountantErrorContext map[string]any
+type ErrorCode int
+type ErrorReason string
+type ErrorContext map[string]any
 
 type WalletAccountantError struct {
-	SourceError   error
-	Message       string
-	Code          string
-	ContextFields WalletAccountantErrorContext
+	Reason  ErrorReason  `json:"error"`
+	Code    ErrorCode    `json:"code"`
+	Context ErrorContext `json:"context"`
 }
 
-func (e WalletAccountantError) Error() string {
-	return e.Message
-}
+func (error WalletAccountantError) Error() string {
+	response, err := json.Marshal(error)
+	if err != nil {
+		panic(err)
+	}
 
-func (e WalletAccountantError) MarshalJSON() ([]byte, error) {
-	return json.Marshal(
-		map[string]any{
-			"source_error": e.SourceError.Error(),
-			"message":      e.Message,
-			"code":         e.Code,
-			"context":      e.ContextFields,
-		},
-	)
+	return string(response)
 }

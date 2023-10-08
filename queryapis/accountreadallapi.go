@@ -29,7 +29,7 @@ func (api *ReadAllAccountsApi) Handle(ctx *gin.Context) {
 	if err != nil {
 		api.log.Error("Failed to query all accounts", zap.Error(err))
 
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, err)
 
 		return
 	}

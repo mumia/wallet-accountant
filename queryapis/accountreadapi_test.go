@@ -33,7 +33,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 
 	accountCalled := 0
 	mediator := account.QueryMediatorMock{
-		AccountFn: func(ctx *gin.Context, accountId *account.Id) (*account.Entity, error) {
+		AccountFn: func(ctx *gin.Context, accountId *account.Id) (*account.Entity, *definitions.WalletAccountantError) {
 			accountCalled++
 
 			asserts.Equal(&accountId1, accountId)
@@ -43,15 +43,10 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 				return &accountEntity1, nil
 
 			case 2:
-				return nil, errors.New("an error")
+				return nil, account.GenericError(errors.New("an error"), nil)
 
 			case 3:
-				return nil, account.ErrorAccountEntityNotFound{
-					SourceError:   errors.New("not found error"),
-					Message:       account.ErrorAccountEntityNotFoundMessage,
-					Code:          account.ErrorCodeAccountEntityNotFound,
-					ContextFields: definitions.WalletAccountantErrorContext{"_id": accountId},
-				}
+				return nil, account.InexistentAccountError(definitions.ErrorContext{})
 			}
 
 			t.Log("should not be called more than twice")
@@ -94,7 +89,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 			"/account/invaldid-uuid",
 			nil,
 			http.StatusBadRequest,
-			"{\"error\":\"Key: 'request.AccountId' Error:Field validation for 'AccountId' failed on the 'uuid' tag\"}",
+			"{\"error\":\"Key: 'request.AccountId' Error:Field validation for 'AccountId' failed on the 'uuid' tag\",\"code\":999,\"context\":null}",
 		)
 	})
 
@@ -107,7 +102,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 			"/account/"+accountId1.String(),
 			nil,
 			http.StatusInternalServerError,
-			"{\"error\":\"an error\"}",
+			"{\"error\":\"an error\",\"code\":999,\"context\":null}",
 		)
 	})
 
@@ -120,7 +115,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 			"/account/"+accountId1.String(),
 			nil,
 			http.StatusNotFound,
-			"{\"error\":\"account not found\"}",
+			"{\"error\":\"Account does not exist\",\"code\":102,\"context\":{}}",
 		)
 	})
 

@@ -7,6 +7,7 @@ import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 	"walletaccountant/commands"
@@ -43,6 +44,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 	defer tearDownCommandMediatorTest()
 
 	asserts := assert.New(t)
+	requires := require.New(t)
 
 	transferObject := RegisterNewAccountTransferObject{
 		BankName:            bankName,
@@ -88,7 +90,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 		commandMediator := NewCommandMediator(commandHandler, readModelRepository, idCreator)
 
 		accountId, err := commandMediator.RegisterNewAccount(&gin.Context{}, transferObject)
-		asserts.NoError(err)
+		requires.Nil(err)
 
 		asserts.Equal(&expectedAccountId, accountId)
 	})
@@ -162,7 +164,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 			)
 
 			accountId, err := commandMediator.RegisterNewAccount(&gin.Context{}, transferObject)
-			asserts.Error(err)
+			requires.Error(err)
 			asserts.Nil(accountId)
 		})
 	}
@@ -173,6 +175,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 	defer tearDownCommandMediatorTest()
 
 	asserts := assert.New(t)
+	requires := require.New(t)
 
 	t.Run("successfully starts next month on account", func(t *testing.T) {
 		expectedCommand := &StartNextMonth{AccountId: expectedAccountId}
@@ -206,7 +209,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 		commandMediator := NewCommandMediator(commandHandler, readModelRepository, nil)
 
 		err := commandMediator.StartNextMonth(&gin.Context{}, &expectedAccountId)
-		asserts.NoError(err)
+		requires.Nil(err)
 	})
 
 	failureTestCases := [...]struct {
@@ -282,7 +285,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 			)
 
 			err := commandMediator.StartNextMonth(&gin.Context{}, &expectedAccountId)
-			asserts.Error(err)
+			requires.Error(err)
 		})
 	}
 }

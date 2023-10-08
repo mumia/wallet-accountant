@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 	"walletaccountant/account"
@@ -12,6 +13,7 @@ import (
 
 func TestQueryMediator_Account(t *testing.T) {
 	asserts := assert.New(t)
+	requires := require.New(t)
 
 	expectedAccountId := account.Id(uuid.New())
 	expectedAccountEntity := account.Entity{
@@ -42,7 +44,7 @@ func TestQueryMediator_Account(t *testing.T) {
 
 	ctx := gin.Context{}
 	actualAccount, err := queryMediator.Account(&ctx, &expectedAccountId)
-	asserts.NoError(err)
+	requires.Nil(err)
 
 	asserts.Equal(&expectedAccountEntity, actualAccount)
 
@@ -51,6 +53,7 @@ func TestQueryMediator_Account(t *testing.T) {
 
 func TestQueryMediator_Accounts(t *testing.T) {
 	asserts := assert.New(t)
+	requires := require.New(t)
 
 	expectedAccountId1 := account.Id(uuid.New())
 	expectedAccountEntity1 := account.Entity{
@@ -100,7 +103,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 
 	ctx := gin.Context{}
 	actualAccounts, err := queryMediator.Accounts(&ctx)
-	asserts.NoError(err)
+	requires.Nil(err)
 
 	asserts.Equal(2, len(actualAccounts))
 	asserts.Equal(&expectedAccountEntity1, actualAccounts[0])

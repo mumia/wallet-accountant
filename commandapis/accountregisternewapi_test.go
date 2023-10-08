@@ -60,7 +60,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 		RegisterNewAccountFn: func(
 			ctx *gin.Context,
 			transferObject account.RegisterNewAccountTransferObject,
-		) (*account.Id, error) {
+		) (*account.Id, *definitions.WalletAccountantError) {
 			registerCalled++
 
 			switch registerCalled {
@@ -69,7 +69,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 				return &expectedAccountId, nil
 			case 2:
-				return nil, errors.New("an error")
+				return nil, account.GenericError(errors.New("an error"), nil)
 			}
 
 			t.Log("should not be called more than twice")
@@ -109,7 +109,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
 		asserts.Equal(
-			"{\"error\":\"{\\\"code\\\":999,\\\"reason\\\":\\\"invalid character 'i' looking for beginning of object key string\\\",\\\"context\\\":null}\"}",
+			"{\"error\":\"invalid character 'i' looking for beginning of object key string\",\"code\":999,\"context\":null}",
 			w.Body.String(),
 		)
 	})
@@ -124,7 +124,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
 		asserts.Equal(
-			"{\"error\":\"an error\"}",
+			"{\"error\":\"an error\",\"code\":999,\"context\":null}",
 			w.Body.String(),
 		)
 	})

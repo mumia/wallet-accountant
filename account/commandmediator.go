@@ -4,14 +4,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/looplab/eventhorizon"
 	"go.mongodb.org/mongo-driver/mongo"
+	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 )
 
 var _ CommandMediatorer = &CommandMediator{}
 
 type CommandMediatorer interface {
-	RegisterNewAccount(ctx *gin.Context, transferObject RegisterNewAccountTransferObject) (*Id, error)
-	StartNextMonth(ctx *gin.Context, accountId *Id) error
+	RegisterNewAccount(
+		ctx *gin.Context,
+		transferObject RegisterNewAccountTransferObject,
+	) (*Id, *definitions.WalletAccountantError)
+	StartNextMonth(ctx *gin.Context, accountId *Id) *definitions.WalletAccountantError
 }
 
 type CommandMediator struct {
@@ -31,16 +35,16 @@ func NewCommandMediator(
 func (mediator CommandMediator) RegisterNewAccount(
 	ctx *gin.Context,
 	transferObject RegisterNewAccountTransferObject,
-) (*Id, error) {
+) (*Id, *definitions.WalletAccountantError) {
 	existingAccount, err := mediator.repository.GetByName(ctx, transferObject.Name)
 	if err != nil {
-		if err, ok := err.(ErrorAccountEntityNotFound); !ok {
-			return nil, err
+		if err != nil && err != mongo.ErrNoDocuments {
+			return nil, GenericError(err, nil)
 		}
 	}
 
 	if existingAccount != nil {
-		return nil, NameAlreadyExistsError(ErrorContext{"existingAccountId": existingAccount.AccountId})
+		return nil, NameAlreadyExistsError(definitions.ErrorContext{"existingAccountId": existingAccount.AccountId})
 	}
 
 	command, err := eventhorizon.CreateCommand(RegisterNewAccountCommand)
@@ -51,7 +55,7 @@ func (mediator CommandMediator) RegisterNewAccount(
 	registerNewAccountCommand, ok := command.(*RegisterNewAccount)
 	if !ok {
 		return nil, InvalidRegisterCommandError(
-			ErrorContext{"Expected": RegisterNewAccountCommand, "Found": command.CommandType()},
+			definitions.ErrorContext{"Expected": RegisterNewAccountCommand, "Found": command.CommandType()},
 		)
 	}
 
@@ -75,25 +79,25 @@ func (mediator CommandMediator) RegisterNewAccount(
 func (mediator CommandMediator) StartNextMonth(
 	ctx *gin.Context,
 	accountId *Id,
-) error {
+) *definitions.WalletAccountantError {
 	existingAccount, err := mediator.repository.GetByAccountId(ctx, accountId)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return GenericError(err, nil)
 	}
 
 	if existingAccount == nil {
-		return InexistentAccountError(ErrorContext{"AccountId": accountId})
+		return InexistentAccountError(definitions.ErrorContext{"AccountId": accountId})
 	}
 
 	command, err := eventhorizon.CreateCommand(StartNextMonthCommand)
 	if err != nil {
-		return GenericError(err, ErrorContext{"accountId": existingAccount.AccountId.String()})
+		return GenericError(err, definitions.ErrorContext{"accountId": existingAccount.AccountId.String()})
 	}
 
 	startNextMonthCommand, ok := command.(*StartNextMonth)
 	if !ok {
 		return InvalidRegisterCommandError(
-			ErrorContext{"Expected": StartNextMonthCommand, "Found": command.CommandType()},
+			definitions.ErrorContext{"Expected": StartNextMonthCommand, "Found": command.CommandType()},
 		)
 	}
 
@@ -101,7 +105,7 @@ func (mediator CommandMediator) StartNextMonth(
 
 	err = mediator.commandHandler.HandleCommand(ctx, startNextMonthCommand)
 	if err != nil {
-		return GenericError(err, ErrorContext{"accountId": existingAccount.AccountId.String()})
+		return GenericError(err, definitions.ErrorContext{"accountId": existingAccount.AccountId.String()})
 	}
 
 	return nil

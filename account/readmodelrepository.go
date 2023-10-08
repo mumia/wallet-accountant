@@ -5,17 +5,10 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"walletaccountant/definitions"
 	"walletaccountant/mongodb"
 )
 
-const ErrorAccountEntityNotFoundMessage = "account not found"
-
-const ErrorCodeAccountEntityNotFound = "account_not_found"
-
 var _ ReadModeler = &ReadModelRepository{}
-
-type ErrorAccountEntityNotFound = definitions.WalletAccountantError
 
 type ReadModelWriter interface {
 	Create(ctx context.Context, account Entity) error
@@ -35,18 +28,6 @@ type ReadModelReader interface {
 type ReadModeler interface {
 	ReadModelWriter
 	ReadModelReader
-}
-
-func errorAccountNotFound(
-	sourceError error,
-	contextFields definitions.WalletAccountantErrorContext,
-) ErrorAccountEntityNotFound {
-	return ErrorAccountEntityNotFound{
-		SourceError:   sourceError,
-		Message:       ErrorAccountEntityNotFoundMessage,
-		Code:          ErrorCodeAccountEntityNotFound,
-		ContextFields: contextFields,
-	}
 }
 
 type ReadModelRepository struct {
@@ -112,10 +93,6 @@ func (repository *ReadModelRepository) GetByAccountId(ctx context.Context, accou
 
 	err := repository.collection().FindOne(ctx, bson.M{"_id": accountId}).Decode(&entity)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, errorAccountNotFound(err, definitions.WalletAccountantErrorContext{"_id": accountId})
-		}
-
 		return nil, err
 	}
 
@@ -127,10 +104,6 @@ func (repository *ReadModelRepository) GetByName(ctx context.Context, name strin
 
 	err := repository.collection().FindOne(ctx, bson.M{"name": name}).Decode(&entity)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, errorAccountNotFound(err, definitions.WalletAccountantErrorContext{"account_name": name})
-		}
-
 		return nil, err
 	}
 

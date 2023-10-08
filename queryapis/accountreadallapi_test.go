@@ -34,14 +34,14 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 
 	accountsCalled := 0
 	mediator := account.QueryMediatorMock{
-		AccountsFn: func(ctx *gin.Context) ([]*account.Entity, error) {
+		AccountsFn: func(ctx *gin.Context) ([]*account.Entity, *definitions.WalletAccountantError) {
 			accountsCalled++
 
 			switch accountsCalled {
 			case 1:
 				return []*account.Entity{&accountEntity1, &accountEntity2}, nil
 			case 2:
-				return nil, errors.New("an error")
+				return nil, account.GenericError(errors.New("an error"), nil)
 			}
 
 			t.Log("should not be called more than twice")
@@ -81,7 +81,7 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		asserts.Equal("{\"error\":\"an error\"}", w.Body.String())
+		asserts.Equal("{\"error\":\"an error\",\"code\":999,\"context\":null}", w.Body.String())
 	})
 
 	asserts.Equal(2, accountsCalled)

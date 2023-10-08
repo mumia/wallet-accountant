@@ -1,68 +1,51 @@
 package account
 
-import "encoding/json"
-
-type ErrorCode int
-type ErrorReason string
-type ErrorContext map[string]any
+import (
+	"walletaccountant/definitions"
+)
 
 const (
-	NameAlreadyExistsCode ErrorCode = iota + 100
+	NameAlreadyExistsCode definitions.ErrorCode = iota + 100
 	InvalidRegisterCommandCode
 	InexistentAccountCode
 
-	GenericCode ErrorCode = 999
+	GenericCode definitions.ErrorCode = 999
 )
 
 const (
-	NameAlreadyExists      ErrorReason = "Account name already exists"
-	InvalidRegisterCommand ErrorReason = "Invalid register command"
-	InexistentAccount      ErrorReason = "Account does not exist"
+	NameAlreadyExists      definitions.ErrorReason = "Account name already exists"
+	InvalidRegisterCommand definitions.ErrorReason = "Invalid register command"
+	InexistentAccount      definitions.ErrorReason = "Account does not exist"
 )
 
-type ErrorResponse struct {
-	Code    ErrorCode    `json:"code"`
-	Reason  ErrorReason  `json:"reason"`
-	Context ErrorContext `json:"context"`
-}
-
-func (error ErrorResponse) Error() string {
-	response, err := json.Marshal(error)
-	if err != nil {
-		panic(err)
-	}
-
-	return string(response)
-}
-
-func NameAlreadyExistsError(context ErrorContext) error {
-	return ErrorResponse{
+func NameAlreadyExistsError(context definitions.ErrorContext) *definitions.WalletAccountantError {
+	return &definitions.WalletAccountantError{
 		Code:    NameAlreadyExistsCode,
 		Reason:  NameAlreadyExists,
 		Context: context,
 	}
 }
 
-func InvalidRegisterCommandError(context ErrorContext) error {
-	return ErrorResponse{
+func InvalidRegisterCommandError(context definitions.ErrorContext) *definitions.WalletAccountantError {
+	return &definitions.WalletAccountantError{
 		Code:    InvalidRegisterCommandCode,
 		Reason:  InvalidRegisterCommand,
 		Context: context,
 	}
 }
 
-func InexistentAccountError(context ErrorContext) error {
-	return ErrorResponse{
+func InexistentAccountError(context definitions.ErrorContext) *definitions.WalletAccountantError {
+	return &definitions.WalletAccountantError{
 		Code:    InexistentAccountCode,
 		Reason:  InexistentAccount,
 		Context: context,
 	}
 }
 
-func GenericError(reason error, context ErrorContext) error {
-	return ErrorResponse{
+func GenericError(reason error, context definitions.ErrorContext) *definitions.WalletAccountantError {
+	return &definitions.WalletAccountantError{
 		Code:    GenericCode,
-		Reason:  ErrorReason(reason.Error()),
+		Reason:  definitions.ErrorReason(reason.Error()),
 		Context: context,
 	}
 }

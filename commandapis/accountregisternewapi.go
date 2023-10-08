@@ -29,9 +29,7 @@ func (api *RegisterNewAccountApi) Handle(ctx *gin.Context) {
 	if err := ctx.ShouldBind(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))
 
-		err := account.GenericError(err, nil)
-
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, account.GenericError(err, nil))
 
 		return
 	}
@@ -40,7 +38,7 @@ func (api *RegisterNewAccountApi) Handle(ctx *gin.Context) {
 	if err != nil {
 		api.log.Error("Failed to register new account", zap.Error(err))
 
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, err)
 
 		return
 	}

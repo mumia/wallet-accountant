@@ -34,7 +34,7 @@ func (api *ReadAccountsApi) Handle(ctx *gin.Context) {
 	if err := ctx.ShouldBindUri(&request); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))
 
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, account.GenericError(err, nil))
 
 		return
 	}
@@ -45,11 +45,11 @@ func (api *ReadAccountsApi) Handle(ctx *gin.Context) {
 		api.log.Error("Failed to get account", zap.Error(err), zap.Any("request", request))
 
 		status := http.StatusInternalServerError
-		if _, ok := err.(account.ErrorAccountEntityNotFound); ok {
+		if err.Code == account.InexistentAccountCode {
 			status = http.StatusNotFound
 		}
 
-		ctx.JSON(status, gin.H{"error": err.Error()})
+		ctx.JSON(status, err)
 
 		return
 	}
