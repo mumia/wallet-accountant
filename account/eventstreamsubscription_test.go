@@ -7,31 +7,23 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/looplab/eventhorizon"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
-	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
 	"walletaccountant/account"
-	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
-	"walletaccountant/projector"
+	"walletaccountant/subscription"
 )
-
-var projectionStream = fmt.Sprintf("$ce-%s", account.AggregateType)
-var subscriptionGroup = fmt.Sprintf("subscription-group-%s", account.AggregateType)
 
 func TestSubscribeEventStream(t *testing.T) {
 	asserts := assert.New(t)
 	ctx := context.Background()
 
-	lifecycle := fxtest.NewLifecycle(t)
-
 	eventhorizon.RegisterEventData(
 		account.NewAccountRegistered,
 		func() eventhorizon.EventData { return &account.NewAccountRegisteredData{} },
 	)
+	defer eventhorizon.UnregisterEventData(account.NewAccountRegistered)
 
 	var newAccountRegisteredEvent = &esdb.PersistentSubscriptionEvent{
 		EventAppeared: &esdb.EventAppeared{
@@ -58,73 +50,38 @@ func TestSubscribeEventStream(t *testing.T) {
 	}
 
 	var subscriptionReceiveChannel = make(chan bool)
-	var subscriptionCreateCalled = false
 	var subscriptionReceiveCalled = 0
-	var subscriptionEventAck = false
-	var subscriptionEventNack = false
-	client := &eventstoredb.ClientMock{
-		SubscribeToPersistentSubscriptionFn: func(
-			ctx context.Context,
-			streamName string,
-			groupName string,
-			options esdb.SubscribeToPersistentSubscriptionOptions,
-		) (eventstoredb.PersistentSubscriptioner, error) {
-			return &eventstoredb.PersistentSubscriptionMock{
-				RecvFn: func() *esdb.PersistentSubscriptionEvent {
-					var event *esdb.PersistentSubscriptionEvent
+	persistentSubscriptionMock := &eventstoredb.PersistentSubscriptionMock{
+		RecvFn: func() *esdb.PersistentSubscriptionEvent {
+			var event *esdb.PersistentSubscriptionEvent
 
-					switch subscriptionReceiveCalled {
-					case 0:
-						event = newAccountRegisteredEvent
+			switch subscriptionReceiveCalled {
+			case 0:
+				event = newAccountRegisteredEvent
 
-					case 1:
-						event = newAccountRegisteredEvent
+			case 1:
+				event = newAccountRegisteredEvent
 
-					case 2:
-						event = &esdb.PersistentSubscriptionEvent{
-							SubscriptionDropped: &esdb.SubscriptionDropped{
-								Error: fmt.Errorf("subscription has been dropped"),
-							},
-						}
+			case 2:
+				event = &esdb.PersistentSubscriptionEvent{
+					SubscriptionDropped: &esdb.SubscriptionDropped{
+						Error: fmt.Errorf("subscription has been dropped"),
+					},
+				}
 
-					default:
-						subscriptionReceiveChannel <- true
+			default:
+				subscriptionReceiveChannel <- true
 
-						event = &esdb.PersistentSubscriptionEvent{
-							SubscriptionDropped: &esdb.SubscriptionDropped{
-								Error: fmt.Errorf("subscription has been dropped"),
-							},
-						}
-					}
+				event = &esdb.PersistentSubscriptionEvent{
+					SubscriptionDropped: &esdb.SubscriptionDropped{
+						Error: fmt.Errorf("subscription has been dropped"),
+					},
+				}
+			}
 
-					subscriptionReceiveCalled++
+			subscriptionReceiveCalled++
 
-					return event
-				},
-				AckFn: func(messages ...*esdb.ResolvedEvent) error {
-					subscriptionEventAck = true
-
-					return nil
-				},
-				NackFn: func(reason string, action esdb.NackAction, messages ...*esdb.ResolvedEvent) error {
-					subscriptionEventNack = true
-
-					return nil
-				},
-			}, nil
-		},
-
-		CreatePersistentSubscriptionFn: func(
-			ctx context.Context,
-			streamName string,
-			groupName string,
-			options esdb.PersistentStreamSubscriptionOptions,
-		) error {
-			subscriptionCreateCalled = true
-			asserts.Equal(projectionStream, streamName)
-			asserts.Equal(subscriptionGroup, groupName)
-
-			return nil
+			return event
 		},
 	}
 
@@ -145,50 +102,16 @@ func TestSubscribeEventStream(t *testing.T) {
 			return nil
 		},
 	}
-	projectionConfig := account.NewProjectionConfig(eventHandler)
-	eventMatcherHandlerRegistry, err := projector.NewEventMatcherHandlerRegistry(
-		[]definitions.EventMatcherHandleProvider{projectionConfig},
+
+	subscription.SubscribeEventStreamTestHelper(
+		ctx,
+		t,
+		account.AggregateType,
+		persistentSubscriptionMock,
+		eventHandler,
+		subscriptionReceiveChannel,
 	)
-	asserts.NoError(err)
 
-	var startCalled = false
-	var stopCalled = false
-	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error { startCalled = true; return nil },
-		OnStop:  func(context.Context) error { stopCalled = true; return nil },
-	})
-
-	err = account.SubscribeEventStream(
-		client,
-		eventMatcherHandlerRegistry,
-		zaptest.NewLogger(t),
-		lifecycle,
-	)
-	asserts.NoError(err)
-
-	asserts.NoError(lifecycle.Start(ctx))
-	asserts.True(startCalled, "lifecycle start was never called")
-
-	keepRunning := true
-	for {
-		select {
-		case <-subscriptionReceiveChannel:
-			keepRunning = false
-		case <-ctx.Done():
-			keepRunning = false
-		case <-time.After(1 * time.Second):
-			keepRunning = false
-		}
-
-		if !keepRunning {
-			break
-		}
-	}
-
-	asserts.NoError(lifecycle.Stop(ctx))
-	asserts.True(stopCalled, "lifecycle stop was never called")
-
-	asserts.True(subscriptionCreateCalled, "CreatePersistentSubscription was never called")
 	expectedSubscriptionReceiveCalled := 4
 	asserts.Equal(
 		expectedSubscriptionReceiveCalled,
@@ -204,6 +127,4 @@ func TestSubscribeEventStream(t *testing.T) {
 			expectedNewAccountRegisteredEventHandled,
 		),
 	)
-	asserts.True(subscriptionEventAck, "Subscription::Ack was never called")
-	asserts.True(subscriptionEventNack, "Subscription::Nack was never called")
 }
