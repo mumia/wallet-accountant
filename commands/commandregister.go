@@ -1,31 +1,47 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"github.com/looplab/eventhorizon"
+	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/commandhandler/aggregate"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
+	"walletaccountant/eventstoredb"
 )
 
-func RegisterCommands(commands []func() eventhorizon.Command) {
-	for _, command := range commands {
-		eventhorizon.RegisterCommand(command)
-	}
+type CommandAndType struct {
+	Command     eventhorizon.Command
+	CommandType eventhorizon.CommandType
 }
 
 func RegisterCommandTypes(
-	aggregateStore eventhorizon.AggregateStore,
-	commandBus *bus.CommandHandler,
+	eventStoreFactory eventstoredb.EventStoreCreator,
+	commandHandlerBus eventhorizon.CommandHandler,
 	aggregateType eventhorizon.AggregateType,
-	commandTypes []eventhorizon.CommandType,
+	commandAndTypes []CommandAndType,
 ) error {
+	busCommandHandler, ok := commandHandlerBus.(*bus.CommandHandler)
+	if !ok {
+		return errors.New("command handle is not of type bus.CommandHandler")
+	}
+
+	eventStore := eventStoreFactory.CreateEventStore(aggregateType)
+	aggregateStore, err := events.NewAggregateStore(eventStore)
+	if err != nil {
+		return err
+	}
+
 	commandHandler, err := aggregate.NewCommandHandler(aggregateType, aggregateStore)
 	if err != nil {
 		return fmt.Errorf("could not create command handler. AggregateType: %s Error: %w", aggregateType, err)
 	}
 
-	for _, commandType := range commandTypes {
-		if err := commandBus.SetHandler(commandHandler, commandType); err != nil {
+	for _, commandAndType := range commandAndTypes {
+		command := commandAndType.Command
+		eventhorizon.RegisterCommand(func() eventhorizon.Command { return command })
+
+		if err := busCommandHandler.SetHandler(commandHandler, commandAndType.CommandType); err != nil {
 			return fmt.Errorf("could not set command handler. AggregateType: %s Error: %w", aggregateType, err)
 		}
 	}

@@ -1,10 +1,7 @@
 package account
 
 import (
-	"errors"
 	"github.com/looplab/eventhorizon"
-	"github.com/looplab/eventhorizon/aggregatestore/events"
-	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"github.com/looplab/eventhorizon/uuid"
 	"time"
 	"walletaccountant/commands"
@@ -24,32 +21,19 @@ func RegisterCommandHandler(
 	eventStoreFactory eventstoredb.EventStoreCreator,
 	commandHandler eventhorizon.CommandHandler,
 ) error {
-	busCommandHandler, ok := commandHandler.(*bus.CommandHandler)
-	if !ok {
-		return errors.New("command handler is not a bus command handler")
-	}
-
-	commands.RegisterCommands(
-		[]func() eventhorizon.Command{
-			func() eventhorizon.Command { return &RegisterNewAccount{} },
-			func() eventhorizon.Command { return &StartNextMonth{} },
-		},
-	)
-
-	eventStore := eventStoreFactory.CreateEventStore(AggregateType)
-
-	aggregateStore, err := events.NewAggregateStore(eventStore)
-	if err != nil {
-		return err
-	}
-
 	return commands.RegisterCommandTypes(
-		aggregateStore,
-		busCommandHandler,
+		eventStoreFactory,
+		commandHandler,
 		AggregateType,
-		[]eventhorizon.CommandType{
-			RegisterNewAccountCommand,
-			StartNextMonthCommand,
+		[]commands.CommandAndType{
+			{
+				Command:     &RegisterNewAccount{},
+				CommandType: RegisterNewAccountCommand,
+			},
+			{
+				Command:     &StartNextMonth{},
+				CommandType: StartNextMonthCommand,
+			},
 		},
 	)
 }

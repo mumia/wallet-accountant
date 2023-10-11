@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
-	"walletaccountant/commands"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 )
@@ -26,12 +25,14 @@ var currency = Currency(USD)
 var notes = "my account notes"
 
 func setupCommandMediatorTest() {
-	commands.RegisterCommands(
-		[]func() eventhorizon.Command{
-			func() eventhorizon.Command { return &RegisterNewAccount{} },
-			func() eventhorizon.Command { return &StartNextMonth{} },
-		},
-	)
+	commands := []func() eventhorizon.Command{
+		func() eventhorizon.Command { return &RegisterNewAccount{} },
+		func() eventhorizon.Command { return &StartNextMonth{} },
+	}
+
+	for _, command := range commands {
+		eventhorizon.RegisterCommand(command)
+	}
 }
 
 func tearDownCommandMediatorTest() {
