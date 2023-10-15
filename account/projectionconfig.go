@@ -11,7 +11,7 @@ type ProjectionConfig struct {
 	projection eventhorizon.EventHandler
 }
 
-func NewProjectionConfig(projection eventhorizon.EventHandler) *ProjectionConfig {
+func NewProjectionConfig(projection ReadModelProjection) *ProjectionConfig {
 	return &ProjectionConfig{projection: projection}
 }
 

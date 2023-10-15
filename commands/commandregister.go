@@ -26,7 +26,7 @@ func RegisterCommandTypes(
 		return errors.New("command handle is not of type bus.CommandHandler")
 	}
 
-	eventStore := eventStoreFactory.CreateEventStore(aggregateType)
+	eventStore := eventStoreFactory.CreateEventStore(aggregateType, 100)
 	aggregateStore, err := events.NewAggregateStore(eventStore)
 	if err != nil {
 		return err

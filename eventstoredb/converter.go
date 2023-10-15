@@ -4,9 +4,25 @@ import (
 	"encoding/json"
 	"github.com/EventStore/EventStore-Client-Go/v3/esdb"
 	"github.com/looplab/eventhorizon"
+	"github.com/looplab/eventhorizon/uuid"
 )
 
 func CreateEvent(esdbEvent *esdb.ResolvedEvent) (eventhorizon.Event, error) {
+	return createEvent(esdbEvent)
+}
+
+func CreateEventForAggregate(
+	esdbEvent *esdb.ResolvedEvent,
+	aggregateType eventhorizon.AggregateType,
+	aggregateId uuid.UUID,
+) (eventhorizon.Event, error) {
+	return createEvent(
+		esdbEvent,
+		eventhorizon.ForAggregate(aggregateType, aggregateId, int(esdbEvent.Event.EventNumber)+1),
+	)
+}
+
+func createEvent(esdbEvent *esdb.ResolvedEvent, eventOptions ...eventhorizon.EventOption) (eventhorizon.Event, error) {
 	eventType := eventhorizon.EventType(esdbEvent.Event.EventType)
 	eventData, err := eventhorizon.CreateEventData(eventType)
 	if err != nil {
@@ -21,5 +37,6 @@ func CreateEvent(esdbEvent *esdb.ResolvedEvent) (eventhorizon.Event, error) {
 		eventType,
 		eventData,
 		esdbEvent.Event.CreatedDate,
+		eventOptions...,
 	), nil
 }

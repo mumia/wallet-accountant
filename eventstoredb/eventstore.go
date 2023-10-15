@@ -9,6 +9,7 @@ import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/uuid"
 	"io"
+	"strings"
 )
 
 var _ eventhorizon.EventStore = &EventStore{}
@@ -17,6 +18,7 @@ type EventStore struct {
 	client        EventStorerer
 	contentType   esdb.ContentType
 	aggregateType eventhorizon.AggregateType
+	batchSize     uint64
 }
 
 func (e EventStore) Save(ctx context.Context, events []eventhorizon.Event, originalVersion int) error {
@@ -47,9 +49,9 @@ func (e EventStore) Save(ctx context.Context, events []eventhorizon.Event, origi
 
 	var streamOptions esdb.AppendToStreamOptions
 	version := uint64(originalVersion)
-	if version > 1 {
-		streamOptions.ExpectedRevision = esdb.StreamRevision{Value: version}
-	} else if version == 1 {
+	if version > 0 {
+		streamOptions.ExpectedRevision = esdb.StreamRevision{Value: version - 1}
+	} else {
 		streamOptions.ExpectedRevision = esdb.NoStream{}
 	}
 
@@ -75,28 +77,53 @@ func (e EventStore) Load(ctx context.Context, uuid uuid.UUID) ([]eventhorizon.Ev
 	return e.LoadFrom(ctx, uuid, 1)
 }
 
+// LoadFrom although EventStoreDb uses a 0-based event version, version needs to be a 1-based integer
+// because event horizon forces a 1-based version
 func (e EventStore) LoadFrom(ctx context.Context, id uuid.UUID, version int) ([]eventhorizon.Event, error) {
 	streamID := e.fullStreamName(id)
 
-	from := esdb.StreamRevision{Value: uint64(version)}
-	stream, err := e.client.ReadStream(ctx, streamID, esdb.ReadStreamOptions{From: from}, ^uint64(0))
-	if err != nil {
-		if err, ok := esdb.FromError(err); !ok {
-			if err.Code() == esdb.ErrorCodeResourceNotFound {
-				if version == 1 {
-					return []eventhorizon.Event{}, nil
-				}
+	version = version - 1
 
-				return nil, fmt.Errorf("event stream not found. Stream: %s", streamID)
+	var events []eventhorizon.Event
+	for {
+		from := esdb.StreamRevision{Value: uint64(version)}
+		stream, err := e.client.ReadStream(ctx, streamID, esdb.ReadStreamOptions{From: from}, ^e.batchSize)
+		if err != nil {
+			if err, ok := esdb.FromError(err); !ok {
+				if err.Code() == esdb.ErrorCodeResourceNotFound {
+					if version == 1 {
+						return []eventhorizon.Event{}, nil
+					}
+
+					return nil, fmt.Errorf("event stream not found. Stream: %s", streamID)
+				}
 			}
+
+			return nil, err
+		} else if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
-		return nil, err
-	} else if ctx.Err() != nil {
-		return nil, ctx.Err()
+		eventsInStream, eventCountInStream, lastVersion, err := e.convertStreamToEventList(
+			stream,
+			e.aggregateType,
+			id,
+			version,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, eventsInStream...)
+
+		if uint64(eventCountInStream) < e.batchSize {
+			break
+		}
+
+		version = lastVersion
 	}
 
-	return e.convertStreamToEventList(stream, version)
+	return events, nil
 }
 
 func (e EventStore) Close() error {
@@ -107,9 +134,17 @@ func (e EventStore) fullStreamName(id uuid.UUID) string {
 	return fmt.Sprintf("%s-%s", e.aggregateType, id)
 }
 
-func (e EventStore) convertStreamToEventList(stream *esdb.ReadStream, version int) ([]eventhorizon.Event, error) {
+func (e EventStore) convertStreamToEventList(
+	stream *esdb.ReadStream,
+	aggregateType eventhorizon.AggregateType,
+	aggregateId uuid.UUID,
+	version int,
+) ([]eventhorizon.Event, int, int, error) {
 	var events []eventhorizon.Event
 	errorIsEOF := false
+
+	eventsInStream := 0
+	lastVersion := 0
 	for !errorIsEOF {
 		esdbEvent, err := stream.Recv()
 
@@ -120,21 +155,29 @@ func (e EventStore) convertStreamToEventList(stream *esdb.ReadStream, version in
 
 		if err != nil {
 			if err, ok := esdb.FromError(err); !ok {
-				if err.Code() == esdb.ErrorCodeResourceNotFound && version == 1 {
-					return []eventhorizon.Event{}, nil
+				if err.Code() == esdb.ErrorCodeResourceNotFound && version == 0 {
+					return []eventhorizon.Event{}, 0, 0, nil
 				}
 			}
 
-			return nil, err
+			return nil, 0, 0, err
 		}
 
-		event, err := CreateEvent(esdbEvent)
+		eventsInStream++
+
+		if strings.HasPrefix(esdbEvent.OriginalEvent().EventType, "$") {
+			continue
+		}
+
+		event, err := CreateEventForAggregate(esdbEvent, aggregateType, aggregateId)
 		if err != nil {
-			return nil, err
+			return nil, 0, 0, err
 		}
 
 		events = append(events, event)
+
+		lastVersion = event.Version()
 	}
 
-	return events, nil
+	return events, eventsInStream, lastVersion, nil
 }
