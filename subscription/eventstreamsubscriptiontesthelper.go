@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
-	"walletaccountant/account"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/projector"
@@ -23,7 +22,7 @@ func SubscribeEventStreamTestHelper(
 	t *testing.T,
 	aggregateType eventhorizon.AggregateType,
 	subscriptionMock *eventstoredb.PersistentSubscriptionMock,
-	projection eventhorizon.EventHandler,
+	projectionConfig definitions.EventMatcherHandleProvider,
 	subscriptionFinishedChannel chan bool,
 ) {
 	asserts := assert.New(t)
@@ -100,7 +99,6 @@ func SubscribeEventStreamTestHelper(
 		},
 	}
 
-	projectionConfig := account.NewProjectionConfig(projection)
 	eventMatcherHandlerRegistry, err := projector.NewEventMatcherHandlerRegistry(
 		[]definitions.EventMatcherHandleProvider{projectionConfig},
 	)
@@ -113,7 +111,8 @@ func SubscribeEventStreamTestHelper(
 		OnStop:  func(context.Context) error { stopCalled = true; return nil },
 	})
 
-	err = account.SubscribeEventStream(
+	err = SubscribeEventStream(
+		aggregateType,
 		client,
 		eventMatcherHandlerRegistry,
 		zaptest.NewLogger(t),
