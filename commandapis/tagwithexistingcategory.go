@@ -9,22 +9,25 @@ import (
 	"walletaccountant/tagcategory"
 )
 
-var _ definitions.Route = &NewTagApi{}
+var _ definitions.Route = &NewTagWithExistingCategoryApi{}
 
-type NewTagApi struct {
+type NewTagWithExistingCategoryApi struct {
 	mediator tagcategory.CommandMediatorer
 	log      *zap.Logger
 }
 
-func NewNewTagApi(mediator tagcategory.CommandMediatorer, log *zap.Logger) *NewTagApi {
-	return &NewTagApi{mediator: mediator, log: log}
+func NewNewTagWithExistingCategoryApi(
+	mediator tagcategory.CommandMediatorer,
+	log *zap.Logger,
+) *NewTagWithExistingCategoryApi {
+	return &NewTagWithExistingCategoryApi{mediator: mediator, log: log}
 }
 
-func (api *NewTagApi) Configuration() (string, string) {
+func (api *NewTagWithExistingCategoryApi) Configuration() (string, string) {
 	return http.MethodPost, "/tag"
 }
 
-func (api *NewTagApi) Handle(ctx *gin.Context) {
+func (api *NewTagWithExistingCategoryApi) Handle(ctx *gin.Context) {
 	var transferObject tagcategory.AddNewTagToExistingCategoryTransferObject
 
 	if err := ctx.ShouldBind(&transferObject); err != nil {

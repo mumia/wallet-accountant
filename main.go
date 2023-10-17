@@ -28,7 +28,7 @@ func main() {
 			// Command routes
 			definitions.AsRoute(commandapis.NewRegisterNewAccountApi),
 			definitions.AsRoute(commandapis.NewNewTagAndCategoryApi),
-			definitions.AsRoute(commandapis.NewNewTagApi),
+			definitions.AsRoute(commandapis.NewNewTagWithExistingCategoryApi),
 
 			// Query routes
 			definitions.AsRoute(queryapis.NewReadAllAccountsApi),
