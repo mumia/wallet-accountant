@@ -1,4 +1,4 @@
-package account
+package tagcategory
 
 import (
 	"go.uber.org/fx"

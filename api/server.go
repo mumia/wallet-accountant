@@ -98,7 +98,9 @@ func addCorsConfig(router *gin.Engine) {
 func addRouteDefinitions(router *gin.Engine, routes []definitions.Route, logger *zap.Logger) {
 	for _, route := range routes {
 		method, pattern := route.Configuration()
-		router.Handle(method, pattern, route.Handle)
+		//TODO new version of Golang will not require this forced copy
+		handle := route.Handle
+		router.Handle(method, pattern, handle)
 
 		logger.Debug("new route added", zap.String("method", method), zap.String("pattern", pattern))
 	}

@@ -1,4 +1,4 @@
-package account
+package tagcategory
 
 import (
 	"github.com/looplab/eventhorizon"
@@ -17,8 +17,8 @@ func NewProjectionConfig(projection ReadModelProjection) *ProjectionConfig {
 
 func (p ProjectionConfig) Matcher() eventhorizon.MatchEvents {
 	return eventhorizon.MatchEvents{
-		NewAccountRegistered,
-		NextMonthStarted,
+		NewTagAddedToNewCategory,
+		NewTagAddedToExistingCategory,
 	}
 }
 

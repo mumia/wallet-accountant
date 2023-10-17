@@ -8,7 +8,7 @@ import (
 var _ EventStoreCreator = &EventStoreFactory{}
 
 type EventStoreCreator interface {
-	CreateEventStore(aggregateType eventhorizon.AggregateType) eventhorizon.EventStore
+	CreateEventStore(aggregateType eventhorizon.AggregateType, batchSize uint64) eventhorizon.EventStore
 }
 
 type EventStoreFactory struct {
@@ -19,10 +19,14 @@ func NewEventStoreFactory(client EventStorerer) (*EventStoreFactory, error) {
 	return &EventStoreFactory{client: client}, nil
 }
 
-func (factory *EventStoreFactory) CreateEventStore(aggregateType eventhorizon.AggregateType) eventhorizon.EventStore {
+func (factory *EventStoreFactory) CreateEventStore(
+	aggregateType eventhorizon.AggregateType,
+	batchSize uint64,
+) eventhorizon.EventStore {
 	return &EventStore{
 		client:        factory.client,
 		contentType:   esdb.ContentTypeJson,
 		aggregateType: aggregateType,
+		batchSize:     batchSize,
 	}
 }

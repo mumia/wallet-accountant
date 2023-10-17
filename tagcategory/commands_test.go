@@ -1,19 +1,20 @@
-package account_test
+package tagcategory_test
 
 import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
-	"walletaccountant/account"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
+	"walletaccountant/tagcategory"
 )
 
 func setupRegisterCommandHandlerTest() map[eventhorizon.CommandType]eventhorizon.Command {
 	return map[eventhorizon.CommandType]eventhorizon.Command{
-		account.RegisterNewAccountCommand: &account.RegisterNewAccount{},
-		account.StartNextMonthCommand:     &account.StartNextMonth{},
+		tagcategory.AddNewTagToNewCategoryCommand:      &tagcategory.AddNewTagToNewCategory{},
+		tagcategory.AddNewTagToExistingCategoryCommand: &tagcategory.AddNewTagToExistingCategory{},
 	}
 }
 
@@ -28,11 +29,12 @@ func TestRegisterCommandHandler(t *testing.T) {
 	defer tearDownRegisterCommandHandlerTest(availableCommands)
 
 	asserts := assert.New(t)
+	requires := require.New(t)
 
 	t.Run("successfully registers all available commands", func(t *testing.T) {
 		eventStoreFactory := &eventstoredb.EventStoreFactoryMock{
 			CreateEventStoreFn: func(aggregateType eventhorizon.AggregateType, batchSize uint64) eventhorizon.EventStore {
-				asserts.Equal(account.AggregateType, aggregateType)
+				asserts.Equal(tagcategory.AggregateType, aggregateType)
 
 				return &eventstoredb.EventStoreMock{}
 			},
@@ -40,8 +42,8 @@ func TestRegisterCommandHandler(t *testing.T) {
 
 		commandHandler := bus.NewCommandHandler()
 
-		err := account.RegisterCommandHandler(eventStoreFactory, commandHandler)
-		asserts.NoError(err)
+		err := tagcategory.RegisterCommandHandler(eventStoreFactory, commandHandler)
+		requires.NoError(err)
 
 		registeredCommands := eventhorizon.RegisteredCommands()
 		asserts.Len(registeredCommands, 2)
@@ -52,14 +54,14 @@ func TestRegisterCommandHandler(t *testing.T) {
 			command := registeredCommands[expectedCommandType]()
 			asserts.IsTypef(expectedCommand, command, string(expectedCommandType)+" type mismatch")
 			asserts.Equal(expectedCommandType, command.CommandType())
-			asserts.Equal(account.AggregateType, command.AggregateType())
+			asserts.Equal(tagcategory.AggregateType, command.AggregateType())
 		}
 	})
 
 	t.Run("fails to register all available commands, because of wrong command handler type", func(t *testing.T) {
 		eventStoreFactory := &eventstoredb.EventStoreFactoryMock{
 			CreateEventStoreFn: func(aggregateType eventhorizon.AggregateType, batchSize uint64) eventhorizon.EventStore {
-				asserts.Equal(account.AggregateType, aggregateType)
+				asserts.Equal(tagcategory.AggregateType, aggregateType)
 
 				return &eventstoredb.EventStoreMock{}
 			},
@@ -67,7 +69,7 @@ func TestRegisterCommandHandler(t *testing.T) {
 
 		commandHandler := &mocks.CommandHandlerMock{}
 
-		err := account.RegisterCommandHandler(eventStoreFactory, commandHandler)
+		err := tagcategory.RegisterCommandHandler(eventStoreFactory, commandHandler)
 		asserts.Error(err)
 	})
 }

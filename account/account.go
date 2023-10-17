@@ -12,7 +12,7 @@ import (
 	"walletaccountant/definitions"
 )
 
-var _ eventhorizon.Aggregate = &Account{}
+var _ events.VersionedAggregate = &Account{}
 
 const AggregateType eventhorizon.AggregateType = "account"
 

@@ -7,6 +7,11 @@ import (
 )
 
 var _ eventhorizon.EventHandler = &Projection{}
+var _ ReadModelProjection = &Projection{}
+
+type ReadModelProjection interface {
+	eventhorizon.EventHandler
+}
 
 type Projection struct {
 	repository ReadModeler
