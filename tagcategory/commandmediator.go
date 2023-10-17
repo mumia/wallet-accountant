@@ -14,12 +14,12 @@ type CommandMediatorer interface {
 	AddNewTagToNewCategory(
 		ctx *gin.Context,
 		transferObject AddNewTagToNewCategoryTransferObject,
-	) (*Id, *CategoryId, *definitions.WalletAccountantError)
+	) (*TagId, *Id, *definitions.WalletAccountantError)
 
 	AddNewTagToExistingCategory(
 		ctx *gin.Context,
 		transferObject AddNewTagToExistingCategoryTransferObject,
-	) (*Id, *definitions.WalletAccountantError)
+	) (*TagId, *definitions.WalletAccountantError)
 }
 
 type CommandMediator struct {
@@ -43,7 +43,7 @@ func NewCommandMediator(
 func (mediator CommandMediator) AddNewTagToNewCategory(
 	ctx *gin.Context,
 	transferObject AddNewTagToNewCategoryTransferObject,
-) (*Id, *CategoryId, *definitions.WalletAccountantError) {
+) (*TagId, *Id, *definitions.WalletAccountantError) {
 	responseErr := mediator.tagCategoryNameExists(ctx, transferObject.CategoryName)
 	if responseErr != nil {
 		return nil, nil, responseErr
@@ -64,11 +64,11 @@ func (mediator CommandMediator) AddNewTagToNewCategory(
 		return nil, nil, InvalidCommandError(AddNewTagToNewCategoryCommand, command.CommandType())
 	}
 
-	addNewTagToNewCategoryCommand.TagCategoryId = CategoryId(mediator.idCreator.New())
+	addNewTagToNewCategoryCommand.TagCategoryId = Id(mediator.idCreator.New())
 	addNewTagToNewCategoryCommand.Name = transferObject.CategoryName
 	addNewTagToNewCategoryCommand.Notes = transferObject.CategoryNotes
 	addNewTagToNewCategoryCommand.Tag = NewTag{
-		TagId: Id(mediator.idCreator.New()),
+		TagId: TagId(mediator.idCreator.New()),
 		Name:  transferObject.TagName,
 		Notes: transferObject.TagNotes,
 	}
@@ -84,9 +84,9 @@ func (mediator CommandMediator) AddNewTagToNewCategory(
 func (mediator CommandMediator) AddNewTagToExistingCategory(
 	ctx *gin.Context,
 	transferObject AddNewTagToExistingCategoryTransferObject,
-) (*Id, *definitions.WalletAccountantError) {
+) (*TagId, *definitions.WalletAccountantError) {
 	tagCategoryIdUUID, err := uuid.Parse(transferObject.TagCategoryId)
-	tagCategoryId := CategoryId(tagCategoryIdUUID)
+	tagCategoryId := Id(tagCategoryIdUUID)
 
 	responseErr := mediator.tagCategoryIdExists(ctx, &tagCategoryId)
 	if responseErr != nil {
@@ -108,7 +108,7 @@ func (mediator CommandMediator) AddNewTagToExistingCategory(
 		return nil, InvalidCommandError(AddNewTagToExistingCategoryCommand, command.CommandType())
 	}
 
-	addNewTagToExistingCategoryCommand.TagId = Id(mediator.idCreator.New())
+	addNewTagToExistingCategoryCommand.TagId = TagId(mediator.idCreator.New())
 	addNewTagToExistingCategoryCommand.TagCategoryId = tagCategoryId
 	addNewTagToExistingCategoryCommand.Name = transferObject.TagName
 	addNewTagToExistingCategoryCommand.Notes = transferObject.TagNotes
@@ -139,7 +139,7 @@ func (mediator CommandMediator) tagCategoryNameExists(
 
 func (mediator CommandMediator) tagCategoryIdExists(
 	ctx *gin.Context,
-	categoryId *CategoryId,
+	categoryId *Id,
 ) *definitions.WalletAccountantError {
 	tagCategoryExists, err := mediator.repository.CategoryExistsById(ctx, categoryId)
 	if err != nil {

@@ -27,7 +27,7 @@ func TestTag_HandleCommand_AddNewTagToNewCategoryCommand(t *testing.T) {
 
 	asserts := assert.New(t)
 	requires := require.New(t)
-	tagId := Id(uuid.New())
+	tagId := TagId(uuid.New())
 	tagCategoryId := uuid.New()
 
 	// for register
@@ -73,9 +73,9 @@ func TestAccount_HandleCommand_AddNewTagToExistingCategory(t *testing.T) {
 	}
 
 	tagCategoryId := uuid.New()
-	tagId1 := Id(uuid.New())
-	tagId2 := Id(uuid.New())
-	tagId3 := Id(uuid.New())
+	tagId1 := TagId(uuid.New())
+	tagId2 := TagId(uuid.New())
+	tagId3 := TagId(uuid.New())
 	tag1 := createTag(&tagId1, "1")
 	tag2 := createTag(&tagId2, "2")
 	tag3 := createTag(&tagId3, "3")
@@ -175,7 +175,7 @@ func TestAccount_HandleCommand_AddNewTagToExistingCategory(t *testing.T) {
 //	})
 //}
 
-func createTagCategory(tagCategoryId *CategoryId) *TagCategory {
+func createTagCategory(tagCategoryId *Id) *TagCategory {
 	return &TagCategory{
 		AggregateBase: events.NewAggregateBase(AggregateType, uuid.UUID(*tagCategoryId)),
 		name:          "TagCategory name",
@@ -184,7 +184,7 @@ func createTagCategory(tagCategoryId *CategoryId) *TagCategory {
 	}
 }
 
-func createTag(tagId *Id, suffix string) *Tag {
+func createTag(tagId *TagId, suffix string) *Tag {
 	return &Tag{
 		tagId: tagId,
 		name:  "Tag name " + suffix,
@@ -205,7 +205,7 @@ func createAddNewTagToNewCategoryCommand(tagCategory *TagCategory, tag *Tag) eve
 	}
 }
 
-func createAddNewTagToExistingCategoryCommand(tagCategoryId *CategoryId, tag *Tag) eventhorizon.Command {
+func createAddNewTagToExistingCategoryCommand(tagCategoryId *Id, tag *Tag) eventhorizon.Command {
 	return &AddNewTagToExistingCategory{
 		TagCategoryId: *tagCategoryId,
 		TagId:         *tag.tagId,

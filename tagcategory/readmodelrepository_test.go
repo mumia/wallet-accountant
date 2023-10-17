@@ -12,24 +12,25 @@ import (
 	"walletaccountant/tagcategory"
 )
 
-var tagCategoryIdBson1, _ = bson.Marshal(expectedTagCategoryId)
-var tagIdBson1, _ = bson.Marshal(expectedTagId)
-var tagCategoryBson1 = bson.D{
-	{"_id", tagCategoryIdBson1},
-	{"name", tagCategoryName},
-	{"notes", tagCategoryNotes},
-	{"tags",
-		bson.A{
-			bson.D{
-				{"_id", tagIdBson1},
-				{"name", tagName},
-				{"notes", tagNotes},
-			},
-		},
-	},
-}
+//var tagCategoryIdBson1, _ = bson.Marshal(expectedTagCategoryId)
+//var tagIdBson1, _ = bson.Marshal(expectedTagId)
 
-//var expectedAccountId2 = account.Id(uuid.New())
+//var tagCategoryBson1 = bson.D{
+//	{"_id", tagCategoryIdBson1},
+//	{"name", tagCategoryName},
+//	{"notes", tagCategoryNotes},
+//	{"tags",
+//		bson.A{
+//			bson.D{
+//				{"_id", tagIdBson1},
+//				{"name", tagName},
+//				{"notes", tagNotes},
+//			},
+//		},
+//	},
+//}
+
+//var expectedAccountId2 = account.TagId(uuid.New())
 //var expectedAccountEntity2 = account.Entity{
 //	AccountId:           &expectedAccountId1,
 //	BankName:            "another bank name",

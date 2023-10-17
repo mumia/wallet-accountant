@@ -11,13 +11,13 @@ var _ ReadModeler = &ReadModelRepository{}
 
 type ReadModelWriter interface {
 	AddNewTagAndCategory(ctx context.Context, newTagAndCategory *CategoryEntity) error
-	AddNewTagToCategory(ctx context.Context, categoryId *CategoryId, newTag *Entity) error
+	AddNewTagToCategory(ctx context.Context, categoryId *Id, newTag *Entity) error
 }
 
 type ReadModelReader interface {
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	GetAll(ctx context.Context) ([]*CategoryEntity, error)
-	CategoryExistsById(ctx context.Context, id *CategoryId) (bool, error)
+	CategoryExistsById(ctx context.Context, id *Id) (bool, error)
 	CategoryExistsByName(ctx context.Context, name string) (bool, error)
 }
 
@@ -48,7 +48,7 @@ func (repository *ReadModelRepository) AddNewTagAndCategory(
 
 func (repository *ReadModelRepository) AddNewTagToCategory(
 	ctx context.Context,
-	categoryId *CategoryId,
+	categoryId *Id,
 	newTag *Entity,
 ) error {
 	_, err := repository.collection().UpdateOne(
@@ -101,7 +101,7 @@ func (repository *ReadModelRepository) GetAll(ctx context.Context) ([]*CategoryE
 	return entities, nil
 }
 
-func (repository *ReadModelRepository) CategoryExistsById(ctx context.Context, id *CategoryId) (bool, error) {
+func (repository *ReadModelRepository) CategoryExistsById(ctx context.Context, id *Id) (bool, error) {
 	err := repository.collection().FindOne(ctx, bson.M{"_id": id}).Err()
 	if err != nil {
 		if err == mongo.ErrNoDocuments {

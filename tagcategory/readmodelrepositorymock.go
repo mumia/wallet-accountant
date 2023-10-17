@@ -8,10 +8,10 @@ var _ ReadModeler = &ReadModelRepositoryMock{}
 
 type ReadModelRepositoryMock struct {
 	AddNewTagAndCategoryFn func(ctx context.Context, newTagAndCategory *CategoryEntity) error
-	AddNewTagToCategoryFn  func(ctx context.Context, categoryId *CategoryId, newTag *Entity) error
+	AddNewTagToCategoryFn  func(ctx context.Context, categoryId *Id, newTag *Entity) error
 	ExistsByNameFn         func(ctx context.Context, name string) (bool, error)
 	GetAllFn               func(ctx context.Context) ([]*CategoryEntity, error)
-	CategoryExistsByIdFn   func(ctx context.Context, id *CategoryId) (bool, error)
+	CategoryExistsByIdFn   func(ctx context.Context, id *Id) (bool, error)
 	CategoryExistsByNameFn func(ctx context.Context, name string) (bool, error)
 }
 
@@ -23,7 +23,7 @@ func (mock *ReadModelRepositoryMock) AddNewTagAndCategory(ctx context.Context, n
 	return nil
 }
 
-func (mock *ReadModelRepositoryMock) AddNewTagToCategory(ctx context.Context, categoryId *CategoryId, newTag *Entity) error {
+func (mock *ReadModelRepositoryMock) AddNewTagToCategory(ctx context.Context, categoryId *Id, newTag *Entity) error {
 	if mock != nil && mock.AddNewTagToCategoryFn != nil {
 		return mock.AddNewTagToCategoryFn(ctx, categoryId, newTag)
 	}
@@ -47,7 +47,7 @@ func (mock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*CategoryEnt
 	return nil, nil
 }
 
-func (mock *ReadModelRepositoryMock) CategoryExistsById(ctx context.Context, id *CategoryId) (bool, error) {
+func (mock *ReadModelRepositoryMock) CategoryExistsById(ctx context.Context, id *Id) (bool, error) {
 	if mock != nil && mock.CategoryExistsByIdFn != nil {
 		return mock.CategoryExistsByIdFn(ctx, id)
 	}

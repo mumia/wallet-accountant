@@ -11,12 +11,12 @@ import (
 	"walletaccountant/definitions"
 )
 
-var _ eventhorizon.Aggregate = &TagCategory{}
+var _ events.VersionedAggregate = &TagCategory{}
 
 const AggregateType eventhorizon.AggregateType = "tagcategory"
 
 type Id = uuid.UUID
-type CategoryId = uuid.UUID
+type TagId = uuid.UUID
 
 type TagCategory struct {
 	*events.AggregateBase
@@ -28,7 +28,7 @@ type TagCategory struct {
 }
 
 type Tag struct {
-	tagId *Id
+	tagId *TagId
 	name  string
 	notes string
 }
@@ -116,8 +116,8 @@ func (category *TagCategory) ApplyEvent(ctx context.Context, event eventhorizon.
 	return nil
 }
 
-func (category *TagCategory) CategoryId() *CategoryId {
-	categoryId := CategoryId(category.EntityID())
+func (category *TagCategory) CategoryId() *Id {
+	categoryId := Id(category.EntityID())
 
 	return &categoryId
 }
@@ -134,7 +134,7 @@ func (category *TagCategory) Tags() []*Tag {
 	return category.tags
 }
 
-func (tag *Tag) TagId() *Id {
+func (tag *Tag) TagId() *TagId {
 	return tag.tagId
 }
 

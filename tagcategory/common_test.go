@@ -7,11 +7,11 @@ import (
 
 var newTagCategoryId = uuid.New()
 var newTagId = uuid.New()
-var expectedTagCategoryId = tagcategory.CategoryId(newTagCategoryId)
-var tagCategoryId2 = tagcategory.CategoryId(newTagCategoryId)
-var expectedTagId = tagcategory.Id(newTagId)
-var tagId2 = tagcategory.Id(newTagId)
-var tagId3 = tagcategory.Id(newTagId)
+var expectedTagCategoryId = tagcategory.Id(newTagCategoryId)
+var tagCategoryId2 = tagcategory.Id(newTagCategoryId)
+var expectedTagId = tagcategory.TagId(newTagId)
+var tagId2 = tagcategory.TagId(newTagId)
+var tagId3 = tagcategory.TagId(newTagId)
 var tagCategoryName = "tag category name"
 var tagCategoryNotes = "tag category notes"
 var tagName = "tag name"

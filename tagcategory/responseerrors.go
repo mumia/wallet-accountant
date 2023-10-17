@@ -32,7 +32,7 @@ func CategoryNameAlreadyExistsError(categoryName string) *definitions.WalletAcco
 	}
 }
 
-func NonexistentCategoryError(categoryId *CategoryId) *definitions.WalletAccountantError {
+func NonexistentCategoryError(categoryId *Id) *definitions.WalletAccountantError {
 	return &definitions.WalletAccountantError{
 		Code:    NonexistentCategoryErrorCode,
 		Reason:  NonexistentCategory,

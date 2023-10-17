@@ -82,7 +82,7 @@ func TestProjection_HandleEvent_NewTagAddedToExistingCategory(t *testing.T) {
 
 	updateCallCount := 0
 	repository := &tagcategory.ReadModelRepositoryMock{
-		AddNewTagToCategoryFn: func(ctx context.Context, categoryId *tagcategory.CategoryId, newTag *tagcategory.Entity) error {
+		AddNewTagToCategoryFn: func(ctx context.Context, categoryId *tagcategory.Id, newTag *tagcategory.Entity) error {
 			updateCallCount++
 
 			asserts.Equal(&expectedTagCategoryId, categoryId)
