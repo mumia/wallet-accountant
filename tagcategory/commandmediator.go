@@ -56,12 +56,12 @@ func (mediator CommandMediator) AddNewTagToNewCategory(
 
 	command, err := eventhorizon.CreateCommand(AddNewTagToNewCategoryCommand)
 	if err != nil {
-		return nil, nil, GenericError(err, nil)
+		return nil, nil, definitions.GenericError(err, nil)
 	}
 
 	addNewTagToNewCategoryCommand, ok := command.(*AddNewTagToNewCategory)
 	if !ok {
-		return nil, nil, InvalidCommandError(AddNewTagToNewCategoryCommand, command.CommandType())
+		return nil, nil, definitions.InvalidCommandError(AddNewTagToNewCategoryCommand, command.CommandType())
 	}
 
 	addNewTagToNewCategoryCommand.TagCategoryId = Id(mediator.idCreator.New())
@@ -75,7 +75,7 @@ func (mediator CommandMediator) AddNewTagToNewCategory(
 
 	err = mediator.commandHandler.HandleCommand(ctx, addNewTagToNewCategoryCommand)
 	if err != nil {
-		return nil, nil, GenericError(err, nil)
+		return nil, nil, definitions.GenericError(err, nil)
 	}
 
 	return &addNewTagToNewCategoryCommand.Tag.TagId, &addNewTagToNewCategoryCommand.TagCategoryId, nil
@@ -100,12 +100,12 @@ func (mediator CommandMediator) AddNewTagToExistingCategory(
 
 	command, err := eventhorizon.CreateCommand(AddNewTagToExistingCategoryCommand)
 	if err != nil {
-		return nil, GenericError(err, nil)
+		return nil, definitions.GenericError(err, nil)
 	}
 
 	addNewTagToExistingCategoryCommand, ok := command.(*AddNewTagToExistingCategory)
 	if !ok {
-		return nil, InvalidCommandError(AddNewTagToExistingCategoryCommand, command.CommandType())
+		return nil, definitions.InvalidCommandError(AddNewTagToExistingCategoryCommand, command.CommandType())
 	}
 
 	addNewTagToExistingCategoryCommand.TagId = TagId(mediator.idCreator.New())
@@ -115,7 +115,7 @@ func (mediator CommandMediator) AddNewTagToExistingCategory(
 
 	err = mediator.commandHandler.HandleCommand(ctx, addNewTagToExistingCategoryCommand)
 	if err != nil {
-		return nil, GenericError(err, nil)
+		return nil, definitions.GenericError(err, nil)
 	}
 
 	return &addNewTagToExistingCategoryCommand.TagId, nil
@@ -127,7 +127,7 @@ func (mediator CommandMediator) tagCategoryNameExists(
 ) *definitions.WalletAccountantError {
 	tagCategoryExists, err := mediator.repository.CategoryExistsByName(ctx, categoryName)
 	if err != nil {
-		return GenericError(err, nil)
+		return definitions.GenericError(err, nil)
 	}
 
 	if tagCategoryExists {
@@ -143,7 +143,7 @@ func (mediator CommandMediator) tagCategoryIdExists(
 ) *definitions.WalletAccountantError {
 	tagCategoryExists, err := mediator.repository.CategoryExistsById(ctx, categoryId)
 	if err != nil {
-		return GenericError(err, nil)
+		return definitions.GenericError(err, nil)
 	}
 
 	if !tagCategoryExists {
@@ -159,7 +159,7 @@ func (mediator CommandMediator) tagNameExists(
 ) *definitions.WalletAccountantError {
 	tagExists, err := mediator.repository.ExistsByName(ctx, tagName)
 	if err != nil {
-		return GenericError(err, nil)
+		return definitions.GenericError(err, nil)
 	}
 
 	if tagExists {

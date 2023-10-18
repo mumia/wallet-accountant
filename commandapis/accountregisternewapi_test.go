@@ -69,7 +69,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 				return &expectedAccountId, nil
 			case 2:
-				return nil, account.GenericError(errors.New("an error"), nil)
+				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
 
 			t.Log("should not be called more than twice")
@@ -108,9 +108,11 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
-		asserts.Equal(
-			"{\"error\":\"invalid character 'i' looking for beginning of object key string\",\"code\":999,\"context\":null}",
-			w.Body.String(),
+		assertGenericErrorFromResponse(
+			w.Body.Bytes(),
+			"invalid character 'i' looking for beginning of object key string",
+			asserts,
+			requires,
 		)
 	})
 
@@ -123,9 +125,11 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		asserts.Equal(
-			"{\"error\":\"an error\",\"code\":999,\"context\":null}",
-			w.Body.String(),
+		assertGenericErrorFromResponse(
+			w.Body.Bytes(),
+			"an error",
+			asserts,
+			requires,
 		)
 	})
 

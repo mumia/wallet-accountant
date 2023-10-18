@@ -23,7 +23,7 @@ func NewQueryMediator(repository ReadModeler) *QueryMediator {
 func (mediator QueryMediator) Account(ctx *gin.Context, accountId *Id) (*Entity, *definitions.WalletAccountantError) {
 	entity, err := mediator.repository.GetByAccountId(ctx, accountId)
 	if err != nil {
-		return nil, GenericError(err, nil)
+		return nil, definitions.GenericError(err, nil)
 	}
 
 	return entity, nil
@@ -32,7 +32,7 @@ func (mediator QueryMediator) Account(ctx *gin.Context, accountId *Id) (*Entity,
 func (mediator QueryMediator) Accounts(ctx *gin.Context) ([]*Entity, *definitions.WalletAccountantError) {
 	entities, err := mediator.repository.GetAll(ctx)
 	if err != nil {
-		return nil, GenericError(err, nil)
+		return nil, definitions.GenericError(err, nil)
 	}
 
 	return entities, nil
