@@ -1,4 +1,4 @@
-package queryapis
+package dd
 
 import (
 	"github.com/gin-gonic/gin"

@@ -1,4 +1,4 @@
-package commandapis
+package dd
 
 import (
 	"github.com/gin-gonic/gin"
