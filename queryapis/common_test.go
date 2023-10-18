@@ -1,6 +1,7 @@
 package queryapis_test
 
 import (
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,8 @@ import (
 	"net/http/httptest"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/definitions"
+	"walletaccountant/tagcategory"
 )
 
 var accountId1 = account.Id(uuid.New())
@@ -44,6 +47,44 @@ var accountEntity2 = account.Entity{
 	},
 }
 
+var tagCategoryId1 = tagcategory.Id(uuid.New())
+var tagCategoryId2 = tagcategory.Id(uuid.New())
+var tagId1 = tagcategory.TagId(uuid.New())
+var tagId2 = tagcategory.TagId(uuid.New())
+var tagId3 = tagcategory.TagId(uuid.New())
+
+var tag1 = tagcategory.Entity{
+	TagId: &tagId1,
+	Name:  "tag 1 name",
+	Notes: "tag 1 notes",
+}
+
+var tag2 = tagcategory.Entity{
+	TagId: &tagId2,
+	Name:  "tag 2 name",
+	Notes: "tag 2 notes",
+}
+
+var tag3 = tagcategory.Entity{
+	TagId: &tagId3,
+	Name:  "tag 3 name",
+	Notes: "tag 3 notes",
+}
+
+var tagCategoryEntity1 = tagcategory.CategoryEntity{
+	TagCategoryId: &tagCategoryId1,
+	Name:          "tag category 1 name",
+	Notes:         "tag category 1 notes",
+	Tags:          []*tagcategory.Entity{&tag2, &tag1},
+}
+
+var tagCategoryEntity2 = tagcategory.CategoryEntity{
+	TagCategoryId: &tagCategoryId2,
+	Name:          "tag category 2 name",
+	Notes:         "tag category 2 notes",
+	Tags:          []*tagcategory.Entity{&tag3},
+}
+
 func executeAndAssertResult(
 	asserts *assert.Assertions,
 	requires *require.Assertions,
@@ -53,6 +94,7 @@ func executeAndAssertResult(
 	body io.Reader,
 	expectedStatus int,
 	expectedResponseBody string,
+	isGenericError bool,
 ) {
 	w := httptest.NewRecorder()
 	request, err := http.NewRequest(method, url, body)
@@ -61,5 +103,36 @@ func executeAndAssertResult(
 	router.ServeHTTP(w, request)
 
 	asserts.Equal(expectedStatus, w.Code)
-	asserts.Equal(expectedResponseBody, w.Body.String())
+
+	if !isGenericError {
+		asserts.Equal(expectedResponseBody, w.Body.String())
+	} else {
+		assertGenericErrorFromResponse(
+			w.Body.Bytes(),
+			expectedResponseBody,
+			asserts,
+			requires,
+		)
+	}
+}
+
+func assertGenericErrorFromResponse(
+	responseBody []byte,
+	expectedReason string,
+	asserts *assert.Assertions,
+	requires *require.Assertions,
+) {
+	var genericError definitions.WalletAccountantError
+
+	err := json.Unmarshal(responseBody, &genericError)
+	requires.NoError(err)
+
+	asserts.Equal(
+		definitions.ErrorReason(expectedReason),
+		genericError.Reason,
+	)
+	asserts.Equal(
+		definitions.GenericCode,
+		genericError.Code,
+	)
 }

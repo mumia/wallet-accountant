@@ -22,7 +22,7 @@ func NewQueryMediator(repository ReadModeler) *QueryMediator {
 func (mediator QueryMediator) Tags(ctx *gin.Context) ([]*CategoryEntity, *definitions.WalletAccountantError) {
 	entities, err := mediator.repository.GetAll(ctx)
 	if err != nil {
-		return nil, GenericError(err, nil)
+		return nil, definitions.GenericError(err, nil)
 	}
 
 	return entities, nil

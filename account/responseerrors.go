@@ -6,46 +6,29 @@ import (
 
 const (
 	NameAlreadyExistsCode definitions.ErrorCode = iota + 100
-	InvalidRegisterCommandCode
-	InexistentAccountCode
-
-	GenericCode definitions.ErrorCode = 999
+	NonExistentAccountCode
 )
 
 const (
-	NameAlreadyExists      definitions.ErrorReason = "Account name already exists"
-	InvalidRegisterCommand definitions.ErrorReason = "Invalid register command"
-	InexistentAccount      definitions.ErrorReason = "Account does not exist"
+	NameAlreadyExists  definitions.ErrorReason = "Account name already exists"
+	NonExistentAccount definitions.ErrorReason = "Account does not exist"
 )
 
-func NameAlreadyExistsError(context definitions.ErrorContext) *definitions.WalletAccountantError {
+func NameAlreadyExistsError(existingAccountId string, existingAccountName string) *definitions.WalletAccountantError {
 	return &definitions.WalletAccountantError{
-		Code:    NameAlreadyExistsCode,
-		Reason:  NameAlreadyExists,
-		Context: context,
+		Code:   NameAlreadyExistsCode,
+		Reason: NameAlreadyExists,
+		Context: definitions.ErrorContext{
+			"existingAccountId":   existingAccountId,
+			"existingAccountName": existingAccountName,
+		},
 	}
 }
 
-func InvalidRegisterCommandError(context definitions.ErrorContext) *definitions.WalletAccountantError {
+func NonExistentAccountError(accountId string) *definitions.WalletAccountantError {
 	return &definitions.WalletAccountantError{
-		Code:    InvalidRegisterCommandCode,
-		Reason:  InvalidRegisterCommand,
-		Context: context,
-	}
-}
-
-func InexistentAccountError(context definitions.ErrorContext) *definitions.WalletAccountantError {
-	return &definitions.WalletAccountantError{
-		Code:    InexistentAccountCode,
-		Reason:  InexistentAccount,
-		Context: context,
-	}
-}
-
-func GenericError(reason error, context definitions.ErrorContext) *definitions.WalletAccountantError {
-	return &definitions.WalletAccountantError{
-		Code:    GenericCode,
-		Reason:  definitions.ErrorReason(reason.Error()),
-		Context: context,
+		Code:    NonExistentAccountCode,
+		Reason:  NonExistentAccount,
+		Context: definitions.ErrorContext{"AccountId": accountId},
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 var _ definitions.Route = &ReadAccountsApi{}
 
-type request struct {
+type accountRequest struct {
 	AccountId string `uri:"accountId"  binding:"required,uuid"`
 }
 
@@ -29,12 +29,12 @@ func (api *ReadAccountsApi) Configuration() (string, string) {
 }
 
 func (api *ReadAccountsApi) Handle(ctx *gin.Context) {
-	var request request
+	var request accountRequest
 
 	if err := ctx.ShouldBindUri(&request); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))
 
-		ctx.JSON(http.StatusBadRequest, account.GenericError(err, nil))
+		ctx.JSON(http.StatusBadRequest, definitions.GenericError(err, nil))
 
 		return
 	}
@@ -45,7 +45,7 @@ func (api *ReadAccountsApi) Handle(ctx *gin.Context) {
 		api.log.Error("Failed to get account", zap.Error(err), zap.Any("request", request))
 
 		status := http.StatusInternalServerError
-		if err.Code == account.InexistentAccountCode {
+		if err.Code == account.NonExistentAccountCode {
 			status = http.StatusNotFound
 		}
 

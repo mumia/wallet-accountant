@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
-	"walletaccountant/account"
 	"walletaccountant/definitions"
 	"walletaccountant/tagcategory"
 )
@@ -33,7 +32,7 @@ func (api *NewTagWithExistingCategoryApi) Handle(ctx *gin.Context) {
 	if err := ctx.ShouldBind(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))
 
-		ctx.JSON(http.StatusBadRequest, account.GenericError(err, nil))
+		ctx.JSON(http.StatusBadRequest, definitions.GenericError(err, nil))
 
 		return
 	}

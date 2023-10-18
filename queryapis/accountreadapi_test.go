@@ -43,10 +43,10 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 				return &accountEntity1, nil
 
 			case 2:
-				return nil, account.GenericError(errors.New("an error"), nil)
+				return nil, definitions.GenericError(errors.New("an error"), nil)
 
 			case 3:
-				return nil, account.InexistentAccountError(definitions.ErrorContext{})
+				return nil, account.NonExistentAccountError(accountId.String())
 			}
 
 			t.Log("should not be called more than twice")
@@ -77,6 +77,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 			nil,
 			http.StatusOK,
 			string(expectedAccountResponse),
+			false,
 		)
 	})
 
@@ -89,7 +90,8 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 			"/account/invaldid-uuid",
 			nil,
 			http.StatusBadRequest,
-			"{\"error\":\"Key: 'request.AccountId' Error:Field validation for 'AccountId' failed on the 'uuid' tag\",\"code\":999,\"context\":null}",
+			"Key: 'accountRequest.AccountId' Error:Field validation for 'AccountId' failed on the 'uuid' tag",
+			true,
 		)
 	})
 
@@ -102,7 +104,8 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 			"/account/"+accountId1.String(),
 			nil,
 			http.StatusInternalServerError,
-			"{\"error\":\"an error\",\"code\":999,\"context\":null}",
+			"an error",
+			true,
 		)
 	})
 
@@ -115,7 +118,8 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 			"/account/"+accountId1.String(),
 			nil,
 			http.StatusNotFound,
-			"{\"error\":\"Account does not exist\",\"code\":102,\"context\":{}}",
+			"{\"error\":\"Account does not exist\",\"code\":101,\"context\":{\"AccountId\":\""+accountId1.String()+"\"}}",
+			false,
 		)
 	})
 

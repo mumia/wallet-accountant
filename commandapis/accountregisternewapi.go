@@ -29,7 +29,7 @@ func (api *RegisterNewAccountApi) Handle(ctx *gin.Context) {
 	if err := ctx.ShouldBind(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))
 
-		ctx.JSON(http.StatusBadRequest, account.GenericError(err, nil))
+		ctx.JSON(http.StatusBadRequest, definitions.GenericError(err, nil))
 
 		return
 	}

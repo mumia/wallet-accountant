@@ -13,18 +13,18 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"walletaccountant/account"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 	"walletaccountant/queryapis"
+	"walletaccountant/tagcategory"
 )
 
-func TestReadAllAccountsApi_Handle(t *testing.T) {
+func TestReadAllTagsApi_Handle(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 	ctx := context.Background()
 
-	err := os.Setenv("PORT", "59596")
+	err := os.Setenv("PORT", "59600")
 	requires.NoError(err)
 	err = os.Setenv("FRONTEND_URL", "http://localhost")
 	requires.NoError(err)
@@ -32,14 +32,14 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	lifecycle := fxtest.NewLifecycle(t)
 
-	accountsCalled := 0
-	mediator := account.QueryMediatorMock{
-		AccountsFn: func(ctx *gin.Context) ([]*account.Entity, *definitions.WalletAccountantError) {
-			accountsCalled++
+	tagsCalled := 0
+	mediator := tagcategory.QueryMediatorMock{
+		TagsFn: func(ctx *gin.Context) ([]*tagcategory.CategoryEntity, *definitions.WalletAccountantError) {
+			tagsCalled++
 
-			switch accountsCalled {
+			switch tagsCalled {
 			case 1:
-				return []*account.Entity{&accountEntity1, &accountEntity2}, nil
+				return []*tagcategory.CategoryEntity{&tagCategoryEntity1, &tagCategoryEntity2}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -52,30 +52,32 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis.NewReadAllAccountsApi(&mediator, logger)},
+		[]definitions.Route{queryapis.NewReadAllTagsApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
 	)
 	requires.NoError(lifecycle.Start(ctx))
 
-	t.Run("successfully gets all accounts", func(t *testing.T) {
+	t.Run("successfully gets all tags", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("GET", "/accounts", nil)
+		request, err := http.NewRequest("GET", "/tags", nil)
 		requires.NoError(err)
 
 		router.ServeHTTP(w, request)
 
-		expectedAccountsResponse, err := json.Marshal([]account.Entity{accountEntity1, accountEntity2})
+		expectedTagsResponse, err := json.Marshal(
+			[]tagcategory.CategoryEntity{tagCategoryEntity1, tagCategoryEntity2},
+		)
 		requires.NoError(err)
 
 		asserts.Equal(http.StatusOK, w.Code)
-		asserts.Equal(string(expectedAccountsResponse), w.Body.String())
+		asserts.Equal(string(expectedTagsResponse), w.Body.String())
 	})
 
-	t.Run("fails to get all accounts", func(t *testing.T) {
+	t.Run("fails to get all tags", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("GET", "/accounts", nil)
+		request, err := http.NewRequest("GET", "/tags", nil)
 		requires.NoError(err)
 
 		router.ServeHTTP(w, request)
@@ -89,5 +91,5 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 		)
 	})
 
-	asserts.Equal(2, accountsCalled)
+	asserts.Equal(2, tagsCalled)
 }
