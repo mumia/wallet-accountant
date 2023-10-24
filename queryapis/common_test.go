@@ -12,6 +12,7 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/definitions"
+	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
 )
 
@@ -83,6 +84,29 @@ var tagCategoryEntity2 = tagcategory.CategoryEntity{
 	Name:          "tag category 2 name",
 	Notes:         "tag category 2 notes",
 	Tags:          []*tagcategory.Entity{&tag3},
+}
+
+var movementTypeId1 = movementtype.Id(uuid.New())
+var movementTypeId2 = movementtype.Id(uuid.New())
+
+var movementTypeEntity1 = movementtype.Entity{
+	MovementTypeId:  &movementTypeId1,
+	Type:            movementtype.Credit,
+	AccountId:       &accountId1,
+	SourceAccountId: nil,
+	Description:     "movement type description",
+	Notes:           "movement type notes",
+	Tags:            []*tagcategory.TagId{&tagId1},
+}
+
+var movementTypeWithSourceAccountEntity1 = movementtype.Entity{
+	MovementTypeId:  &movementTypeId2,
+	Type:            movementtype.Debit,
+	AccountId:       &accountId2,
+	SourceAccountId: &accountId1,
+	Description:     "movement type with source account description",
+	Notes:           "movement type with source account notes",
+	Tags:            []*tagcategory.TagId{&tagId3, &tagId2},
 }
 
 func executeAndAssertResult(

@@ -15,6 +15,7 @@ type ReadModelWriter interface {
 }
 
 type ReadModelReader interface {
+	ExistsById(ctx context.Context, tagId *TagId) (bool, error)
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	GetAll(ctx context.Context) ([]*CategoryEntity, error)
 	CategoryExistsById(ctx context.Context, id *Id) (bool, error)
@@ -61,6 +62,19 @@ func (repository *ReadModelRepository) AddNewTagToCategory(
 	}
 
 	return nil
+}
+
+func (repository *ReadModelRepository) ExistsById(ctx context.Context, tagId *TagId) (bool, error) {
+	err := repository.collection().FindOne(ctx, bson.M{"tags._id": tagId}).Err()
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			err = nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (repository *ReadModelRepository) ExistsByName(ctx context.Context, name string) (bool, error) {

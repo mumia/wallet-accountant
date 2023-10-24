@@ -13,7 +13,7 @@ import (
 
 var _ events.VersionedAggregate = &TagCategory{}
 
-const AggregateType eventhorizon.AggregateType = "tagcategory"
+const AggregateType eventhorizon.AggregateType = "tagCategory"
 
 type Id = uuid.UUID
 type TagId = uuid.UUID

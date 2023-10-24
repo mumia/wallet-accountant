@@ -2,6 +2,7 @@ package account_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/EventStore/EventStore-Client-Go/v3/esdb"
 	"github.com/gofrs/uuid"
@@ -96,7 +97,7 @@ func TestSubscribeEventStream(t *testing.T) {
 			}
 
 			if newAccountRegisteredEventHandled > 1 {
-				return fmt.Errorf("should return error")
+				return errors.New("should return error")
 			}
 
 			return nil

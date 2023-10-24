@@ -1,4 +1,4 @@
-package tagcategory_test
+package movementtype_test
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"time"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
+	"walletaccountant/movementtype"
 	"walletaccountant/subscription"
-	"walletaccountant/tagcategory"
 )
 
 func TestSubscribeEventStream(t *testing.T) {
@@ -21,47 +21,18 @@ func TestSubscribeEventStream(t *testing.T) {
 	ctx := context.Background()
 
 	eventhorizon.RegisterEventData(
-		tagcategory.NewTagAddedToNewCategory,
-		func() eventhorizon.EventData { return &tagcategory.NewTagAddedToNewCategoryData{} },
+		movementtype.NewMovementTypeRegistered,
+		func() eventhorizon.EventData { return &movementtype.NewMovementTypeRegisteredData{} },
 	)
-	eventhorizon.RegisterEventData(
-		tagcategory.NewTagAddedToExistingCategory,
-		func() eventhorizon.EventData { return &tagcategory.NewTagAddedToExistingCategoryData{} },
-	)
-	defer eventhorizon.UnregisterEventData(tagcategory.NewTagAddedToNewCategory)
-	defer eventhorizon.UnregisterEventData(tagcategory.NewTagAddedToExistingCategory)
+	defer eventhorizon.UnregisterEventData(movementtype.NewMovementTypeRegistered)
 
-	var newTagAddedToNewCategory = &esdb.PersistentSubscriptionEvent{
+	var newMovementTypeRegistered = &esdb.PersistentSubscriptionEvent{
 		EventAppeared: &esdb.EventAppeared{
 			Event: &esdb.ResolvedEvent{
 				Link: nil,
 				Event: &esdb.RecordedEvent{
 					EventID:        uuid.UUID{},
-					EventType:      tagcategory.NewTagAddedToNewCategory.String(),
-					ContentType:    "",
-					StreamID:       "",
-					EventNumber:    0,
-					Position:       esdb.Position{},
-					CreatedDate:    time.Now(),
-					Data:           []byte("{}"),
-					SystemMetadata: nil,
-					UserMetadata:   nil,
-				},
-				Commit: nil,
-			},
-			RetryCount: 0,
-		},
-		SubscriptionDropped: nil,
-		CheckPointReached:   nil,
-	}
-
-	var newTagAddedToExistingCategory = &esdb.PersistentSubscriptionEvent{
-		EventAppeared: &esdb.EventAppeared{
-			Event: &esdb.ResolvedEvent{
-				Link: nil,
-				Event: &esdb.RecordedEvent{
-					EventID:        uuid.UUID{},
-					EventType:      tagcategory.NewTagAddedToExistingCategory.String(),
+					EventType:      movementtype.NewMovementTypeRegistered.String(),
 					ContentType:    "",
 					StreamID:       "",
 					EventNumber:    0,
@@ -87,10 +58,10 @@ func TestSubscribeEventStream(t *testing.T) {
 
 			switch subscriptionReceiveCalled {
 			case 0:
-				event = newTagAddedToNewCategory
+				event = newMovementTypeRegistered
 
 			case 1:
-				event = newTagAddedToExistingCategory
+				event = newMovementTypeRegistered
 
 			case 2:
 				event = &esdb.PersistentSubscriptionEvent{
@@ -115,20 +86,17 @@ func TestSubscribeEventStream(t *testing.T) {
 		},
 	}
 
-	newTagAddedToNewCategoryEventHandled := 0
-	newTagAddedToExistingCategoryEventHandled := 0
+	newMovementTypeRegisteredEventHandled := 0
 	eventHandler := &mocks.EventHandlerMock{
 		HandlerTypeFn: func() eventhorizon.EventHandlerType {
-			return eventhorizon.EventHandlerType(tagcategory.AggregateType)
+			return eventhorizon.EventHandlerType(movementtype.AggregateType)
 		},
 		HandleEventFn: func(ctx context.Context, event eventhorizon.Event) error {
-			if event.EventType() == tagcategory.NewTagAddedToNewCategory {
-				newTagAddedToNewCategoryEventHandled++
-			} else if event.EventType() == tagcategory.NewTagAddedToExistingCategory {
-				newTagAddedToExistingCategoryEventHandled++
+			if event.EventType() == movementtype.NewMovementTypeRegistered {
+				newMovementTypeRegisteredEventHandled++
 			}
 
-			if newTagAddedToExistingCategoryEventHandled > 0 {
+			if newMovementTypeRegisteredEventHandled > 1 {
 				return errors.New("an error")
 			}
 
@@ -139,9 +107,9 @@ func TestSubscribeEventStream(t *testing.T) {
 	subscription.SubscribeEventStreamTestHelper(
 		ctx,
 		t,
-		tagcategory.AggregateType,
+		movementtype.AggregateType,
 		persistentSubscriptionMock,
-		tagcategory.NewProjectionConfig(eventHandler),
+		movementtype.NewProjectionConfig(eventHandler),
 		subscriptionReceiveChannel,
 	)
 
@@ -151,23 +119,13 @@ func TestSubscribeEventStream(t *testing.T) {
 		subscriptionReceiveCalled,
 		fmt.Sprintf("Subscription::Recv was expected to be called %d times", expectedSubscriptionReceiveCalled),
 	)
-	expectedNewTagAddedToNewCategoryEventHandled := 1
+	expectedNewMovementTypeRegisteredEventHandledEventHandled := 2
 	asserts.Equal(
-		expectedNewTagAddedToNewCategoryEventHandled,
-		newTagAddedToExistingCategoryEventHandled,
+		expectedNewMovementTypeRegisteredEventHandledEventHandled,
+		newMovementTypeRegisteredEventHandled,
 		fmt.Sprintf(
 			"New tag in new category add event was not handled %d times",
-			expectedNewTagAddedToNewCategoryEventHandled,
-		),
-	)
-
-	expectedNewTagAddedToExistingCategoryEventHandled := 1
-	asserts.Equal(
-		expectedNewTagAddedToExistingCategoryEventHandled,
-		newTagAddedToExistingCategoryEventHandled,
-		fmt.Sprintf(
-			"New tag in existing category add event was not handled %d times",
-			expectedNewTagAddedToExistingCategoryEventHandled,
+			expectedNewMovementTypeRegisteredEventHandledEventHandled,
 		),
 	)
 }
