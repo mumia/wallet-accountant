@@ -2,8 +2,12 @@ package eventstoredb
 
 import (
 	"context"
+	"fmt"
 	"github.com/EventStore/EventStore-Client-Go/v3/esdb"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"os"
+	"strings"
 )
 
 const connectionStringName = "EVENTSTORE_CONNETION_STRING"
@@ -55,10 +59,36 @@ type Client struct {
 	client *esdb.Client
 }
 
-func NewClient() (*Client, error) {
+func NewClient(log *zap.Logger) (*Client, error) {
 	configuration, err := esdb.ParseConnectionString(os.Getenv(connectionStringName))
 	if err != nil {
 		return nil, err
+	}
+
+	configuration.Logger = func(level esdb.LogLevel, format string, args ...interface{}) {
+		logMessage := fmt.Sprintf(format, args...)
+
+		var logLevel zapcore.Level
+		switch level {
+		case esdb.LogDebug:
+			logLevel = zapcore.DebugLevel
+
+		case esdb.LogInfo:
+			logLevel = zapcore.InfoLevel
+
+		case esdb.LogWarn:
+			logLevel = zapcore.WarnLevel
+
+		case esdb.LogError:
+			logLevel = zapcore.ErrorLevel
+
+			// Used for the event subscription group creation error message
+			if strings.Contains(logMessage, "code = AlreadyExists") {
+				logLevel = zapcore.InfoLevel
+			}
+		}
+
+		log.Log(logLevel, logMessage)
 	}
 
 	client, err := esdb.NewClient(configuration)

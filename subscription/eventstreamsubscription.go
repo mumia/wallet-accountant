@@ -193,13 +193,6 @@ func (ess EventStreamSubscription) subscribe(
 
 	for {
 		event := subscription.Recv()
-		ess.logger.Debug(
-			fmt.Sprintf(
-				"persistent subscription got new event. Stream: %s Group: %s",
-				ess.projectionStream,
-				ess.subscriptionGroup,
-			),
-		)
 
 		select {
 		case <-subscriptionCtx.Done():
@@ -219,6 +212,15 @@ func (ess EventStreamSubscription) subscribe(
 		if event.EventAppeared == nil {
 			continue
 		}
+
+		ess.logger.Debug(
+			fmt.Sprintf(
+				"persistent subscription got new event. Event: %s Stream: %s Group: %s",
+				event.EventAppeared.Event.Event.EventType,
+				ess.projectionStream,
+				ess.subscriptionGroup,
+			),
+		)
 
 		esdbPersistentSubscription, ok := subscription.(eventstoredb.PersistentSubscriptioner)
 		if !ok {
@@ -256,7 +258,13 @@ func (ess EventStreamSubscription) subscribe(
 		if err != nil {
 			ess.nackRetry(
 				subscription,
-				fmt.Errorf("failed to create event. Error: %w", err).Error(),
+				fmt.Errorf(
+					"failed to create event. Error: %w Event: %s Stream: %s Group: %s",
+					err,
+					event.EventAppeared.Event.Event.EventType,
+					ess.projectionStream,
+					ess.subscriptionGroup,
+				).Error(),
 				event.EventAppeared.Event,
 			)
 
@@ -273,7 +281,13 @@ func (ess EventStreamSubscription) subscribe(
 		if err != nil {
 			ess.nackRetry(
 				subscription,
-				fmt.Errorf("failed to handle event. Error: %w", err).Error(),
+				fmt.Errorf(
+					"failed to handle event. Error: %w Event: %s Stream: %s Group: %s",
+					err,
+					event.EventAppeared.Event.Event.EventType,
+					ess.projectionStream,
+					ess.subscriptionGroup,
+				).Error(),
 				event.EventAppeared.Event,
 			)
 

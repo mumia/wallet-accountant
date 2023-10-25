@@ -8,8 +8,11 @@ import (
 	"walletaccountant/definitions"
 )
 
+var tagId1 = uuid.New()
+var tagId2 = uuid.New()
+
 var expectedTagCategoryId = uuid.New()
-var expectedTagId = uuid.New()
+var expectedTagId = tagId1
 
 func assertGenericErrorFromResponse(
 	responseBody []byte,
