@@ -44,7 +44,7 @@ func (projection Projection) handleNewAccountRegistered(ctx context.Context, eve
 	}
 
 	account := Entity{
-		AccountId:           eventData.AccountID,
+		AccountId:           eventData.AccountId,
 		BankName:            eventData.BankName,
 		Name:                eventData.Name,
 		AccountType:         eventData.AccountType,

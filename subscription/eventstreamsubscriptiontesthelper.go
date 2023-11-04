@@ -13,23 +13,31 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/definitions"
+	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
-	"walletaccountant/projector"
 )
 
 func SubscribeEventStreamTestHelper(
 	ctx context.Context,
 	t *testing.T,
 	aggregateType eventhorizon.AggregateType,
+	handlerType eventhorizon.EventHandlerType,
+	isProjection bool,
 	subscriptionMock *eventstoredb.PersistentSubscriptionMock,
-	projectionConfig definitions.EventMatcherHandleProvider,
+	projectionConfig definitions.ProjectionProvider,
 	subscriptionFinishedChannel chan bool,
 ) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
+	var subscriptionName string
+	if isProjection {
+		subscriptionName = projectionsGroupName
+	} else {
+		subscriptionName = sagasGroupName
+	}
 	projectionStream := fmt.Sprintf("$ce-%s", aggregateType)
-	subscriptionGroup := fmt.Sprintf("subscription-group-%s", aggregateType)
+	subscriptionGroup := fmt.Sprintf("subscription-group-%s", subscriptionName)
 
 	lifecycle := fxtest.NewLifecycle(t)
 
@@ -99,8 +107,8 @@ func SubscribeEventStreamTestHelper(
 		},
 	}
 
-	eventMatcherHandlerRegistry, err := projector.NewEventMatcherHandlerRegistry(
-		[]definitions.EventMatcherHandleProvider{projectionConfig},
+	eventMatcherHandlerRegistry, err := eventhandler.NewProjectionRegistry(
+		[]definitions.ProjectionProvider{projectionConfig},
 	)
 	requires.NoError(err)
 
@@ -111,13 +119,25 @@ func SubscribeEventStreamTestHelper(
 		OnStop:  func(context.Context) error { stopCalled = true; return nil },
 	})
 
-	err = SubscribeEventStream(
-		aggregateType,
-		client,
-		eventMatcherHandlerRegistry,
-		zaptest.NewLogger(t),
-		lifecycle,
-	)
+	if isProjection {
+		err = SubscribeEventStreamForProjection(
+			aggregateType,
+			handlerType,
+			client,
+			eventMatcherHandlerRegistry,
+			zaptest.NewLogger(t),
+			lifecycle,
+		)
+	} else {
+		err = SubscribeEventStreamForSaga(
+			aggregateType,
+			handlerType,
+			client,
+			eventMatcherHandlerRegistry,
+			zaptest.NewLogger(t),
+			lifecycle,
+		)
+	}
 	requires.NoError(err)
 
 	requires.NoError(lifecycle.Start(ctx))

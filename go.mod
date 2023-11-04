@@ -6,8 +6,11 @@ require (
 	github.com/EventStore/EventStore-Client-Go/v3 v3.1.0
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.9.1
+	github.com/gofrs/uuid v3.3.0+incompatible
+	github.com/google/uuid v1.3.0
 	github.com/looplab/eventhorizon v0.16.0
 	github.com/stretchr/testify v1.8.3
+	github.com/zeebo/xxh3 v1.0.2
 	go.mongodb.org/mongo-driver v1.12.1
 	go.uber.org/fx v1.20.0
 	go.uber.org/zap v1.23.0
@@ -24,12 +27,9 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.14.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
-	github.com/gofrs/uuid v3.3.0+incompatible // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kisielk/godepgraph v0.0.0-20221115040737-2d0831789458 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect

@@ -28,7 +28,7 @@ var movementTypeEntity1 = movementtype.Entity{
 	AccountId:       &accountId1,
 	SourceAccountId: nil,
 	Description:     description,
-	Notes:           notes,
+	Notes:           &notes,
 	Tags:            []*tagcategory.TagId{&tagId1},
 }
 
@@ -38,6 +38,6 @@ var movementTypeEntityWithSourceAccount = movementtype.Entity{
 	AccountId:       &accountId2,
 	SourceAccountId: &sourceAccountId,
 	Description:     description2,
-	Notes:           notes2,
+	Notes:           &notes2,
 	Tags:            []*tagcategory.TagId{&tagId2, &tagId1},
 }

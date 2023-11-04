@@ -139,7 +139,7 @@ func createRegisterNewMovementTypeCommand(withSourceAccount bool) eventhorizon.C
 		AccountId:       *accountId,
 		SourceAccountId: sourceAccountId,
 		Description:     description,
-		Notes:           notes,
+		Notes:           &notes,
 		TagIds:          tagIds,
 	}
 }
@@ -160,13 +160,13 @@ func createRegisterNewAccountEvent(withSourceAccount bool, createdAt time.Time) 
 
 	return eventhorizon.NewEvent(
 		NewMovementTypeRegistered,
-		NewMovementTypeRegisteredData{
+		&NewMovementTypeRegisteredData{
 			MovementTypeId:  movementTypeId,
 			Type:            setupMovementType(withSourceAccount),
 			AccountId:       accountId,
 			SourceAccountId: sourceAccountId,
 			Description:     description,
-			Notes:           notes,
+			Notes:           &notes,
 			TagIds:          tagIds,
 		},
 		createdAt,

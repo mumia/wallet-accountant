@@ -38,7 +38,7 @@ type RegisterNewMovementType struct {
 	AccountId       account.Id           `json:"accountId"`
 	SourceAccountId *account.Id          `json:"sourceAccountId" eh:"optional"`
 	Description     string               `json:"description"`
-	Notes           string               `json:"notes"`
+	Notes           *string              `json:"notes" eh:"optional"`
 	TagIds          []*tagcategory.TagId `json:"tagIds"`
 }
 
