@@ -11,12 +11,13 @@ import (
 	"net/http/httptest"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountmonth"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
 )
 
-var accountId1 = account.Id(uuid.New())
+var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
 var accountEntity1 = account.Entity{
 	AccountId:           &accountId1,
 	BankName:            "a bank name",
@@ -89,13 +90,16 @@ var tagCategoryEntity2 = tagcategory.CategoryEntity{
 var movementTypeId1 = movementtype.Id(uuid.New())
 var movementTypeId2 = movementtype.Id(uuid.New())
 
+var note1 = "movement type notes"
+var note2 = "movement type with source account notes"
+
 var movementTypeEntity1 = movementtype.Entity{
 	MovementTypeId:  &movementTypeId1,
 	Type:            movementtype.Credit,
 	AccountId:       &accountId1,
 	SourceAccountId: nil,
 	Description:     "movement type description",
-	Notes:           "movement type notes",
+	Notes:           &note1,
 	Tags:            []*tagcategory.TagId{&tagId1},
 }
 
@@ -105,8 +109,25 @@ var movementTypeWithSourceAccountEntity1 = movementtype.Entity{
 	AccountId:       &accountId2,
 	SourceAccountId: &accountId1,
 	Description:     "movement type with source account description",
-	Notes:           "movement type with source account notes",
+	Notes:           &note2,
 	Tags:            []*tagcategory.TagId{&tagId3, &tagId2},
+}
+
+var month = time.January
+var year = uint(2023)
+var accountMonthUUIDString = "46e18992-7977-9f44-4fee-b192d8c5a746"
+var accountMonthId = accountmonth.Id(uuid.MustParse(accountMonthUUIDString))
+
+var accountMonthEntity1 = accountmonth.Entity{
+	AccountMonthId: &accountMonthId,
+	AccountId:      &accountId1,
+	ActiveMonth: &accountmonth.EntityActiveMonth{
+		Month: month,
+		Year:  year,
+	},
+	Movements:  []*accountmonth.EntityMovement{},
+	Balance:    1000.45,
+	MonthEnded: false,
 }
 
 func executeAndAssertResult(
