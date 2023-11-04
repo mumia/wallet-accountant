@@ -20,7 +20,6 @@ import (
 	"walletaccountant/movementtype"
 )
 
-var accountId1 = uuid.New()
 var accountId2 = uuid.New()
 
 var movementTypeBody = `{
@@ -43,12 +42,15 @@ var movementTypeWithSourceAccountBody = `{
 var expectedMovementTypeId1 = uuid.New()
 var expectedMovementTypeId2 = uuid.New()
 
+var notes1 = "mov type notes"
+var notes2 = "mov type notes with source"
+
 var expectedMovementTypeTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
 	Type:            "credit",
 	AccountId:       accountId1.String(),
 	SourceAccountId: nil,
 	Description:     "mov type desc",
-	Notes:           "mov type notes",
+	Notes:           &notes1,
 	TagIds:          []string{tagId1.String(), tagId2.String()},
 }
 
@@ -58,7 +60,7 @@ var expectedMovementTypeWithSourceTransferObject = movementtype.RegisterNewMovem
 	AccountId:       accountId2.String(),
 	SourceAccountId: &sourceAccountIdString,
 	Description:     "mov type desc with source",
-	Notes:           "mov type notes with source",
+	Notes:           &notes2,
 	TagIds:          []string{tagId2.String()},
 }
 

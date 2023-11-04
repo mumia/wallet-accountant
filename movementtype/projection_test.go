@@ -21,13 +21,14 @@ func TestProjection_HandleEvent(t *testing.T) {
 	accountId := account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
 	sourceAccountId := account.Id(uuid.MustParse("f4081021-adf4-4b04-a6e5-4ad0028b96f9"))
 	var tagId1 = tagcategory.TagId(uuid.MustParse("07a7ccde-b19c-412a-a054-bc09ac529357"))
+	var notes1 = "my movement type notes"
 	newMovementTypeRegisteredData := movementtype.NewMovementTypeRegisteredData{
 		MovementTypeId:  &movementTypeId,
 		Type:            movementtype.Credit,
 		AccountId:       &accountId,
 		SourceAccountId: &sourceAccountId,
 		Description:     "movement type description",
-		Notes:           "my movement type notes",
+		Notes:           &notes1,
 		TagIds:          []*tagcategory.TagId{&tagId1},
 	}
 

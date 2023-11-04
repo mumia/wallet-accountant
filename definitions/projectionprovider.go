@@ -5,15 +5,15 @@ import (
 	"go.uber.org/fx"
 )
 
-type EventMatcherHandleProvider interface {
+type ProjectionProvider interface {
 	Matcher() eventhorizon.MatchEvents
 	Handler() eventhorizon.EventHandler
 }
 
-func AsEventMatcherHandleProvider(f any) any {
+func AsProjectionProvider(f any) any {
 	return fx.Annotate(
 		f,
-		fx.As(new(EventMatcherHandleProvider)),
-		fx.ResultTags(`group:"eventMatcherHandleProviders"`),
+		fx.As(new(ProjectionProvider)),
+		fx.ResultTags(`group:"projectionProviders"`),
 	)
 }

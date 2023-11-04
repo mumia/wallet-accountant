@@ -62,7 +62,8 @@ func (r RegisterNewAccount) CommandType() eventhorizon.CommandType {
 }
 
 type StartNextMonth struct {
-	AccountId Id `json:"account_id"`
+	AccountId Id      `json:"account_id"`
+	Balance   float64 `json:"balance"`
 }
 
 func (s StartNextMonth) AggregateID() uuid.UUID {

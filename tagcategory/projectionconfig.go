@@ -5,7 +5,7 @@ import (
 	"walletaccountant/definitions"
 )
 
-var _ definitions.EventMatcherHandleProvider = &ProjectionConfig{}
+var _ definitions.ProjectionProvider = &ProjectionConfig{}
 
 type ProjectionConfig struct {
 	projection eventhorizon.EventHandler

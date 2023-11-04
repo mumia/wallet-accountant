@@ -131,7 +131,7 @@ func assertCreate1(command bson.Raw, asserts *assert.Assertions) {
 	assertBinaryId(command.Lookup("_id"), movementTypeId1.String(), asserts)
 	asserts.Equal(string(movementtype.Credit), command.Lookup("type").StringValue())
 	assertBinaryId(command.Lookup("account_id"), accountId1.String(), asserts)
-	asserts.Equal("null", string(command.Lookup("source_account_id").String()))
+	asserts.True(command.Lookup("source_account_id").IsZero())
 	asserts.Equal(description, command.Lookup("description").StringValue())
 	asserts.Equal(notes, command.Lookup("notes").StringValue())
 	assertTag1(command.Lookup("tags"), 0, asserts)

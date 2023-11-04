@@ -44,7 +44,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		AccountId:       accountId1.String(),
 		SourceAccountId: nil,
 		Description:     description,
-		Notes:           notes,
+		Notes:           &notes,
 		TagIds:          []string{tagId1.String()},
 	}
 	accountId1String := accountId1.String()
@@ -53,7 +53,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		AccountId:       accountId1.String(),
 		SourceAccountId: &accountId1String,
 		Description:     description,
-		Notes:           notes,
+		Notes:           &notes,
 		TagIds:          []string{tagId1.String()},
 	}
 
@@ -63,7 +63,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		AccountId:       accountId1,
 		SourceAccountId: nil,
 		Description:     description,
-		Notes:           notes,
+		Notes:           &notes,
 		TagIds:          []*tagcategory.TagId{&tagId1},
 	}
 
