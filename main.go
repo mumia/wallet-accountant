@@ -19,6 +19,7 @@ import (
 	"walletaccountant/queryapis"
 	"walletaccountant/saga"
 	"walletaccountant/tagcategory"
+	"walletaccountant/websocket"
 )
 
 func main() {
@@ -117,6 +118,17 @@ func main() {
 			// Mongo DB
 			mongodb.NewMongoClient,
 		),
+
+		fx.Provide(
+			// Websocket
+			websocket.NewWebsocketUpgrader,
+			fx.Annotate(
+				websocket.NewModelUpdater,
+				fx.As(new(definitions.Route)),
+				fx.ResultTags(`group:"routes"`),
+			),
+		),
+
 		// Start api server
 		fx.Invoke(func(engine *gin.Engine) { /* Nothing to do here */ }),
 

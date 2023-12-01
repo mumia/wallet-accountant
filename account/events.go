@@ -42,7 +42,7 @@ type NewAccountRegisteredData struct {
 	StartingBalance     float64    `json:"starting_balance"`
 	StartingBalanceDate time.Time  `json:"starting_balance_date"`
 	Currency            Currency   `json:"currency"`
-	Notes               string     `json:"notes"`
+	Notes               *string    `json:"notes"`
 	ActiveMonth         time.Month `json:"active_month"`
 	ActiveYear          uint       `json:"active_year"`
 }

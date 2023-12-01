@@ -34,7 +34,7 @@ func NewProjectionRegistry(providers []definitions.ProjectionProvider) (*Project
 	return registry, nil
 }
 
-func (registry ProjectionRegistry) AddHandler(
+func (registry *ProjectionRegistry) AddHandler(
 	matcher eventhorizon.EventMatcher,
 	handler eventhorizon.EventHandler,
 ) error {
@@ -59,7 +59,7 @@ func (registry ProjectionRegistry) AddHandler(
 	return nil
 }
 
-func (registry ProjectionRegistry) GetHandler(
+func (registry *ProjectionRegistry) GetHandler(
 	handlerType eventhorizon.EventHandlerType,
 ) (eventhorizon.EventMatcher, eventhorizon.EventHandler, error) {
 	registry.handlersMutex.Lock()
@@ -71,4 +71,8 @@ func (registry ProjectionRegistry) GetHandler(
 	}
 
 	return matcherHandler.EventMatcher, matcherHandler.EventHandler, nil
+}
+
+func (registry *ProjectionRegistry) GetHandlers() map[eventhorizon.EventHandlerType]*matcherHandler {
+	return registry.handlersByType
 }

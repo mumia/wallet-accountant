@@ -18,6 +18,7 @@ import (
 )
 
 var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
+var notes1 = "a set of notes"
 var accountEntity1 = account.Entity{
 	AccountId:           &accountId1,
 	BankName:            "a bank name",
@@ -26,7 +27,7 @@ var accountEntity1 = account.Entity{
 	StartingBalance:     5069,
 	StartingBalanceDate: time.Now(),
 	Currency:            account.EUR,
-	Notes:               "a set of notes",
+	Notes:               &notes1,
 	ActiveMonth: account.EntityActiveMonth{
 		Month: time.August,
 		Year:  2023,
@@ -34,6 +35,7 @@ var accountEntity1 = account.Entity{
 }
 
 var accountId2 = account.Id(uuid.New())
+var notes2 = "another set of notes"
 var accountEntity2 = account.Entity{
 	AccountId:           &accountId2,
 	BankName:            "another bank name",
@@ -42,7 +44,7 @@ var accountEntity2 = account.Entity{
 	StartingBalance:     6069,
 	StartingBalanceDate: time.Now().Add(1 * time.Minute),
 	Currency:            account.USD,
-	Notes:               "another set of notes",
+	Notes:               &notes2,
 	ActiveMonth: account.EntityActiveMonth{
 		Month: time.April,
 		Year:  2022,

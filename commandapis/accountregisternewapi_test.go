@@ -21,7 +21,7 @@ import (
 	"walletaccountant/definitions"
 )
 
-var accountBody = `{
+var accountBody1 = `{
 	"bankName": "a bank name",
 	"name": "the bank account",
 	"accountType": 1,
@@ -31,15 +31,56 @@ var accountBody = `{
 	"notes": "some notes of the account"
 }`
 
+var accountBody2 = `{
+	"bankName": "a bank name",
+	"name": "the bank account",
+	"accountType": 1,
+	"startingBalance": 10069.5,
+	"startingBalanceDate": "2018-08-26T00:00:00Z",
+	"currency": "USD",
+	"notes": ""
+}`
+
+var accountBody3 = `{
+	"bankName": "a bank name",
+	"name": "the bank account",
+	"accountType": 1,
+	"startingBalance": 10069.5,
+	"startingBalanceDate": "2018-08-26T00:00:00Z",
+	"currency": "USD"
+}`
+
 var expectedAccountId = uuid.New()
-var expectedTransferObject = account.RegisterNewAccountTransferObject{
+var notes1 = "some notes of the account"
+var expectedTransferObject1 = account.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
 	AccountType:         1,
 	StartingBalance:     10069.5,
 	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
 	Currency:            "USD",
-	Notes:               "some notes of the account",
+	Notes:               &notes1,
+}
+
+var notes2 = ""
+var expectedTransferObject2 = account.RegisterNewAccountTransferObject{
+	BankName:            "a bank name",
+	Name:                "the bank account",
+	AccountType:         1,
+	StartingBalance:     10069.5,
+	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
+	Currency:            "USD",
+	Notes:               &notes2,
+}
+
+var expectedTransferObject3 = account.RegisterNewAccountTransferObject{
+	BankName:            "a bank name",
+	Name:                "the bank account",
+	AccountType:         1,
+	StartingBalance:     10069.5,
+	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
+	Currency:            "USD",
+	Notes:               nil,
 }
 
 func TestRegisterNewAccountApi_Handle(t *testing.T) {
@@ -65,10 +106,18 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 			switch registerCalled {
 			case 1:
-				asserts.Equal(expectedTransferObject, transferObject)
+				asserts.Equal(expectedTransferObject1, transferObject)
 
 				return &expectedAccountId, nil
 			case 2:
+				asserts.Equal(expectedTransferObject2, transferObject)
+
+				return &expectedAccountId, nil
+			case 3:
+				asserts.Equal(expectedTransferObject3, transferObject)
+
+				return &expectedAccountId, nil
+			case 4:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
 
@@ -89,7 +138,31 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 	t.Run("sucssessful account registration", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/account", strings.NewReader(accountBody))
+		request, err := http.NewRequest("POST", "/account", strings.NewReader(accountBody1))
+		requires.NoError(err)
+
+		request.Header.Add("Content-Type", "application/json")
+		router.ServeHTTP(w, request)
+
+		asserts.Equal(http.StatusCreated, w.Code)
+		asserts.Equal("{\"accountId\":\""+expectedAccountId.String()+"\"}", w.Body.String())
+	})
+
+	t.Run("sucssessful account registration with empty notes", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		request, err := http.NewRequest("POST", "/account", strings.NewReader(accountBody2))
+		requires.NoError(err)
+
+		request.Header.Add("Content-Type", "application/json")
+		router.ServeHTTP(w, request)
+
+		asserts.Equal(http.StatusCreated, w.Code)
+		asserts.Equal("{\"accountId\":\""+expectedAccountId.String()+"\"}", w.Body.String())
+	})
+
+	t.Run("sucssessful account registration with no notes field", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		request, err := http.NewRequest("POST", "/account", strings.NewReader(accountBody3))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
@@ -118,7 +191,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 
 	t.Run("fails to register account, because of mediator error", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/account", strings.NewReader(accountBody))
+		request, err := http.NewRequest("POST", "/account", strings.NewReader(accountBody1))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
@@ -133,5 +206,5 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 		)
 	})
 
-	asserts.Equal(2, registerCalled)
+	asserts.Equal(4, registerCalled)
 }

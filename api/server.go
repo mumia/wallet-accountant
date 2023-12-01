@@ -11,11 +11,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 	"walletaccountant/definitions"
 )
 
-const frontendUrlName = "FRONTEND_URL"
+const frontendUrlsName = "FRONTEND_URLS"
 
 func NewServer(
 	routes []definitions.Route,
@@ -29,7 +30,7 @@ func NewServer(
 
 	router := gin.Default()
 
-	addCorsConfig(router)
+	addCorsConfig(router, logger)
 	addRouteDefinitions(router, routes, logger)
 
 	server := &http.Server{Addr: resolveAddress(logger), Handler: router}
@@ -79,14 +80,18 @@ func resolveAddress(logger *zap.Logger) string {
 
 }
 
-func addCorsConfig(router *gin.Engine) {
+func addCorsConfig(router *gin.Engine, logger *zap.Logger) {
 	//config := cors.DefaultConfig()
 
+	hosts := strings.Split(os.Getenv(frontendUrlsName), "|")
+
+	logger.Debug("CORS configured allowed hosts", zap.Strings("hosts", hosts))
+
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{os.Getenv(frontendUrlName)},
+		AllowOrigins:     hosts,
 		AllowMethods:     []string{"POST", "GET", "PUT", "PATCH"},
-		AllowHeaders:     []string{"Origin"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowHeaders:     []string{"Origin", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		//AllowOriginFunc: func(origin string) bool {
 		//	return origin == "https://github.com"

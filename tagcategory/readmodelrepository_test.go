@@ -70,7 +70,6 @@ func TestReadModelRepository_AddNewTagAndCategory(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successful add tag to new category", func(mt *mtest.T) {
 		readModelRepository := tagcategory.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
@@ -108,7 +107,6 @@ func TestReadModelRepository_AddNewTagToCategory(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successful add tag to existing category", func(mt *mtest.T) {
 		readModelRepository := tagcategory.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})

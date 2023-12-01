@@ -16,6 +16,8 @@ type RegisterNewAccountApi struct {
 }
 
 func NewRegisterNewAccountApi(mediator account.CommandMediatorer, log *zap.Logger) *RegisterNewAccountApi {
+	log.With(zap.String("struct", "RegisterNewAccountApi"))
+
 	return &RegisterNewAccountApi{mediator: mediator, log: log}
 }
 

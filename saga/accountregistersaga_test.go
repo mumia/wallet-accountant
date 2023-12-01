@@ -29,6 +29,7 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
+	notes := "my account notes"
 	newAccountRegisteredData := account.NewAccountRegisteredData{
 		AccountId:           &accountId1,
 		BankName:            "bank name",
@@ -37,7 +38,7 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 		StartingBalance:     2069.96,
 		StartingBalanceDate: date,
 		Currency:            account.USD,
-		Notes:               "my account notes",
+		Notes:               &notes,
 		ActiveMonth:         month,
 		ActiveYear:          year,
 	}

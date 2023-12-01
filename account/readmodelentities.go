@@ -12,11 +12,11 @@ type Entity struct {
 	StartingBalance     float64           `json:"startingBalance" bson:"starting_balance"`
 	StartingBalanceDate time.Time         `json:"startingBalanceDate" bson:"starting_balance_date"`
 	Currency            Currency          `json:"currency" bson:"currency"`
-	Notes               string            `json:"notes,omitempty" bson:"notes,omitempty"`
+	Notes               *string           `json:"notes,omitempty" bson:"notes,omitempty"`
 	ActiveMonth         EntityActiveMonth `json:"activeMonth" bson:"active_month"`
 }
 
 type EntityActiveMonth struct {
-	Month time.Month `bson:"month"`
-	Year  uint       `bson:"year"`
+	Month time.Month `json:"month" bson:"month"`
+	Year  uint       `json:"year" bson:"year"`
 }

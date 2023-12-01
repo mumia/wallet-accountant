@@ -84,6 +84,7 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 		},
 	}
 
+	notes := "my account notes"
 	sagaSubject, err := saga.NewAccountMonthEndedSaga(
 		&eventstoredb.EventStoreFactoryMock{
 			CreateEventStoreFn: func(aggregateType eventhorizon.AggregateType, batchSize uint64) eventhorizon.EventStore {
@@ -100,7 +101,7 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 									StartingBalance:     2069,
 									StartingBalanceDate: time.Now(),
 									Currency:            account.USD,
-									Notes:               "my account notes",
+									Notes:               &notes,
 									ActiveMonth:         month,
 									ActiveYear:          year,
 								},

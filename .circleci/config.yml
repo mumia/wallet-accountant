@@ -28,6 +28,7 @@ jobs:
       - run:
           name: Run tests
           command: |
+            export FRONTEND_URLS=http://localhost
             mkdir -p /tmp/test-reports
             gotestsum --junitfile /tmp/test-reports/unit-tests.xml
       - store_test_results:
