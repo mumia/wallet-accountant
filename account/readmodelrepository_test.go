@@ -19,6 +19,7 @@ var expectedActiveMonth = account.EntityActiveMonth{
 	Month: time.August,
 	Year:  2023,
 }
+var notes1 = "a set of notes"
 var expectedAccountEntity1 = account.Entity{
 	AccountId:           &expectedAccountId1,
 	BankName:            "a bank name",
@@ -27,7 +28,7 @@ var expectedAccountEntity1 = account.Entity{
 	StartingBalance:     5069,
 	StartingBalanceDate: time.Now(),
 	Currency:            account.EUR,
-	Notes:               "a set of notes",
+	Notes:               &notes1,
 	ActiveMonth:         expectedActiveMonth,
 }
 
@@ -51,6 +52,7 @@ var accountBson1 = bson.D{
 }
 
 var expectedAccountId2 = account.Id(uuid.New())
+var notes2 = "another set of notes"
 var expectedAccountEntity2 = account.Entity{
 	AccountId:           &expectedAccountId1,
 	BankName:            "another bank name",
@@ -59,7 +61,7 @@ var expectedAccountEntity2 = account.Entity{
 	StartingBalance:     6069,
 	StartingBalanceDate: time.Now().Add(1 * time.Minute),
 	Currency:            account.USD,
-	Notes:               "another set of notes",
+	Notes:               &notes2,
 	ActiveMonth: account.EntityActiveMonth{
 		Month: time.April,
 		Year:  2022,
@@ -90,7 +92,6 @@ func TestReadModelRepository_Create(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successful create", func(mt *mtest.T) {
 		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
@@ -130,7 +131,6 @@ func TestReadModelRepository_UpdateActiveMonth(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successful update active month", func(mt *mtest.T) {
 		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
@@ -170,7 +170,6 @@ func TestReadModelRepository_GetAll(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("successfully get all accounts", func(t *mtest.T) {
 		t.Skip("runtime error: invalid memory address or nil pointer dereference on AddMockResponses")
@@ -217,7 +216,6 @@ func TestReadModelRepository_GetByAccountId(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("successfully get all accounts", func(t *mtest.T) {
 		t.Skip("runtime error: invalid memory address or nil pointer dereference on AddMockResponses")
@@ -231,7 +229,6 @@ func TestReadModelRepository_GetByAccountId(t *testing.T) {
 
 		asserts.Equal(expectedAccountEntity1, actualAccountEntity)
 	})
-
 }
 
 func TestReadModelRepository_GetByName(t *testing.T) {
@@ -280,7 +277,7 @@ func assertCreate(update bson.Raw, asserts *assert.Assertions) {
 		time.UnixMilli(update.Lookup("starting_balance_date").DateTime()).Format("2006-02-01"),
 	)
 	asserts.Equal(expectedAccountEntity1.Currency, account.Currency(update.Lookup("currency").StringValue()))
-	asserts.Equal(expectedAccountEntity1.Notes, update.Lookup("notes").StringValue())
+	asserts.Equal(*expectedAccountEntity1.Notes, update.Lookup("notes").StringValue())
 	assertActiveMonth(update.Lookup("active_month"), asserts)
 }
 

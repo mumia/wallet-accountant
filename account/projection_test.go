@@ -5,6 +5,7 @@ import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
 	"walletaccountant/account"
@@ -14,6 +15,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 	asserts := assert.New(t)
 
 	accountId := account.Id(uuid.New())
+	notes := "my account notes"
 	newAccountRegisteredData := account.NewAccountRegisteredData{
 		AccountID:           &accountId,
 		BankName:            "bank name",
@@ -22,7 +24,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		StartingBalance:     2069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.USD,
-		Notes:               "my account notes",
+		Notes:               &notes,
 		ActiveMonth:         time.December,
 		ActiveYear:          2022,
 	}
@@ -74,9 +76,9 @@ func TestProjection_HandleEvent(t *testing.T) {
 			return nil
 		},
 	}
+	logger := zaptest.NewLogger(t)
 
-	projector, err := account.NewProjection(repository)
-	asserts.NoError(err)
+	projector := account.NewProjection(repository, logger)
 
 	newAccountRegisteredEvent := eventhorizon.NewEvent(
 		account.NewAccountRegistered,
@@ -85,7 +87,27 @@ func TestProjection_HandleEvent(t *testing.T) {
 		eventhorizon.ForAggregate(account.AggregateType, accountId, 1),
 	)
 
-	err = projector.HandleEvent(context.Background(), newAccountRegisteredEvent)
+	ctx, cancelCtx := context.WithCancel(context.Background())
+
+	type eventCountStruct struct {
+		count int
+	}
+
+	eventCount := &eventCountStruct{0}
+	go func(eventCount *eventCountStruct) {
+		keepRunning := true
+		for keepRunning {
+			select {
+			case <-ctx.Done():
+				keepRunning = false
+
+			case <-projector.UpdateChannel():
+				eventCount.count++
+			}
+		}
+	}(eventCount)
+
+	err := projector.HandleEvent(context.Background(), newAccountRegisteredEvent)
 	asserts.NoError(err)
 
 	nextMonthStartedEvent := eventhorizon.NewEvent(
@@ -98,6 +120,11 @@ func TestProjection_HandleEvent(t *testing.T) {
 	err = projector.HandleEvent(context.Background(), nextMonthStartedEvent)
 	asserts.NoError(err)
 
+	// Wait for all update channel messages to be processed
+	time.Sleep(50 * time.Millisecond)
+	cancelCtx()
+
 	asserts.Equal(1, createCallCount)
 	asserts.Equal(1, updateActiveMonthCallCount)
+	asserts.Equal(2, eventCount.count)
 }

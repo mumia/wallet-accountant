@@ -18,7 +18,6 @@ func TestReadModelRepository_Create(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successfully register new movement type", func(mt *mtest.T) {
 		readModelRepository := movementtype.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})

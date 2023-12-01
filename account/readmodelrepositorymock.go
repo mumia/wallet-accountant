@@ -45,6 +45,9 @@ func (repoMock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*Entity,
 	accountId1 := Id(uuid.MustParse("83528ee4-3f0f-43ea-a383-e3846c00fa38"))
 	accountId2 := Id(uuid.MustParse("83528ee4-3f0f-43ea-a383-e3846c00fa40"))
 
+	notes := "my some notes"
+	notes1 := "my another notes"
+
 	return []*Entity{
 		repoMock.entity(
 			&accountId1,
@@ -54,7 +57,7 @@ func (repoMock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*Entity,
 			1069,
 			time.Date(2023, 9, 10, 0, 0, 0, 0, time.UTC),
 			EUR,
-			"my some notes",
+			&notes,
 			ActiveMonth{
 				month: 9,
 				year:  2023,
@@ -68,7 +71,7 @@ func (repoMock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*Entity,
 			1169,
 			time.Date(2022, 8, 10, 0, 0, 0, 0, time.UTC),
 			USD,
-			"my another notes",
+			&notes1,
 			ActiveMonth{
 				month: 8,
 				year:  2023,
@@ -82,6 +85,7 @@ func (repoMock *ReadModelRepositoryMock) GetByAccountId(ctx context.Context, acc
 		return repoMock.GetByAccountIdFn(ctx, accountId)
 	}
 
+	notes := "my notes"
 	return repoMock.entity(
 		accountId,
 		"bank name",
@@ -90,7 +94,7 @@ func (repoMock *ReadModelRepositoryMock) GetByAccountId(ctx context.Context, acc
 		1069,
 		time.Date(2023, 9, 10, 0, 0, 0, 0, time.UTC),
 		EUR,
-		"my notes",
+		&notes,
 		ActiveMonth{
 			month: 9,
 			year:  2023,
@@ -114,7 +118,7 @@ func (repoMock *ReadModelRepositoryMock) entity(
 	startingBalance float64,
 	startingBalanceDate time.Time,
 	currency Currency,
-	notes string,
+	notes *string,
 	activeMonth ActiveMonth,
 ) *Entity {
 	return &Entity{

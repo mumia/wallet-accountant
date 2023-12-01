@@ -3,10 +3,13 @@ package account
 import (
 	"context"
 	"github.com/looplab/eventhorizon"
+	"go.uber.org/zap"
 	"walletaccountant/definitions"
+	"walletaccountant/websocket"
 )
 
 var _ eventhorizon.EventHandler = &Projection{}
+var _ websocket.ModelUpdateNotifier = &Projection{}
 var _ ReadModelProjection = &Projection{}
 
 type ReadModelProjection interface {
@@ -14,30 +17,49 @@ type ReadModelProjection interface {
 }
 
 type Projection struct {
-	repository ReadModeler
+	repository    ReadModeler
+	updateChannel chan websocket.ModelUpdated
+	log           *zap.Logger
 }
 
-func NewProjection(repository ReadModeler) (*Projection, error) {
-	return &Projection{repository: repository}, nil
+func NewProjection(repository ReadModeler, log *zap.Logger) *Projection {
+	return &Projection{
+		repository:    repository,
+		updateChannel: make(chan websocket.ModelUpdated),
+		log:           log,
+	}
 }
 
-func (projection Projection) HandlerType() eventhorizon.EventHandlerType {
+func (projection *Projection) HandlerType() eventhorizon.EventHandlerType {
 	return eventhorizon.EventHandlerType(AggregateType.String())
 }
 
-func (projection Projection) HandleEvent(ctx context.Context, event eventhorizon.Event) error {
+func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizon.Event) error {
+	var err error
 	switch event.EventType() {
 	case NewAccountRegistered:
-		return projection.handleNewAccountRegistered(ctx, event)
+		err = projection.handleNewAccountRegistered(ctx, event)
 
 	case NextMonthStarted:
-		return projection.handleNextMonthStarted(ctx, event)
+		err = projection.handleNextMonthStarted(ctx, event)
 	}
 
-	return nil
+	if err == nil {
+		projection.updateChannel <- websocket.ModelUpdated{Event: event.EventType()}
+	}
+
+	return err
 }
 
-func (projection Projection) handleNewAccountRegistered(ctx context.Context, event eventhorizon.Event) error {
+func (projection *Projection) UpdatedAggregate() eventhorizon.AggregateType {
+	return AggregateType
+}
+
+func (projection *Projection) UpdateChannel() chan websocket.ModelUpdated {
+	return projection.updateChannel
+}
+
+func (projection *Projection) handleNewAccountRegistered(ctx context.Context, event eventhorizon.Event) error {
 	eventData, ok := event.Data().(*NewAccountRegisteredData)
 	if !ok {
 		return definitions.EventDataTypeError(NewAccountRegistered, event.EventType())
@@ -61,7 +83,7 @@ func (projection Projection) handleNewAccountRegistered(ctx context.Context, eve
 	return projection.repository.Create(ctx, account)
 }
 
-func (projection Projection) handleNextMonthStarted(ctx context.Context, event eventhorizon.Event) error {
+func (projection *Projection) handleNextMonthStarted(ctx context.Context, event eventhorizon.Event) error {
 	eventData, ok := event.Data().(*NextMonthStartedData)
 	if !ok {
 		return definitions.EventDataTypeError(NextMonthStarted, event.EventType())

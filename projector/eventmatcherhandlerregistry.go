@@ -35,7 +35,7 @@ func NewEventMatcherHandlerRegistry(
 	return registry, nil
 }
 
-func (projector EventMatcherHandlerRegistry) AddHandler(
+func (projector *EventMatcherHandlerRegistry) AddHandler(
 	ctx context.Context,
 	matcher eventhorizon.EventMatcher,
 	handler eventhorizon.EventHandler,
@@ -61,7 +61,7 @@ func (projector EventMatcherHandlerRegistry) AddHandler(
 	return nil
 }
 
-func (projector EventMatcherHandlerRegistry) GetHandler(
+func (projector *EventMatcherHandlerRegistry) GetHandler(
 	handlerType eventhorizon.EventHandlerType,
 ) (eventhorizon.EventMatcher, eventhorizon.EventHandler, error) {
 	projector.handlersMutex.Lock()
@@ -73,4 +73,8 @@ func (projector EventMatcherHandlerRegistry) GetHandler(
 	}
 
 	return matcherHandler.EventMatcher, matcherHandler.EventHandler, nil
+}
+
+func (projector *EventMatcherHandlerRegistry) GetHandlers() map[eventhorizon.EventHandlerType]*matcherHandler {
+	return projector.handlersByType
 }

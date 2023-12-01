@@ -54,7 +54,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 		StartingBalance:     startingBalance,
 		StartingBalanceDate: startingBalanceDate,
 		Currency:            string(currency),
-		Notes:               notes,
+		Notes:               &notes,
 	}
 
 	t.Run("correctly handles register new account", func(t *testing.T) {
@@ -66,7 +66,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 			StartingBalance:     startingBalance,
 			StartingBalanceDate: startingBalanceDate,
 			Currency:            currency,
-			Notes:               notes,
+			Notes:               &notes,
 		}
 
 		commandHandler := &mocks.CommandHandlerMock{
@@ -121,7 +121,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 						StartingBalance:     startingBalance,
 						StartingBalanceDate: startingBalanceDate,
 						Currency:            currency,
-						Notes:               notes,
+						Notes:               &notes,
 						ActiveMonth:         EntityActiveMonth{},
 					}, nil
 				},
@@ -201,7 +201,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 					StartingBalance:     startingBalance,
 					StartingBalanceDate: startingBalanceDate,
 					Currency:            currency,
-					Notes:               notes,
+					Notes:               &notes,
 					ActiveMonth:         EntityActiveMonth{},
 				}, nil
 			},
@@ -264,7 +264,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 						StartingBalance:     startingBalance,
 						StartingBalanceDate: startingBalanceDate,
 						Currency:            currency,
-						Notes:               notes,
+						Notes:               &notes,
 						ActiveMonth:         EntityActiveMonth{},
 					}, nil
 				},

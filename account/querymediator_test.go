@@ -16,6 +16,7 @@ func TestQueryMediator_Account(t *testing.T) {
 	requires := require.New(t)
 
 	expectedAccountId := account.Id(uuid.New())
+	notes := "some notes"
 	expectedAccountEntity := account.Entity{
 		AccountId:           &expectedAccountId,
 		BankName:            "bank name",
@@ -24,7 +25,7 @@ func TestQueryMediator_Account(t *testing.T) {
 		StartingBalance:     3069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
-		Notes:               "some notes",
+		Notes:               &notes,
 		ActiveMonth: account.EntityActiveMonth{
 			Month: time.March,
 			Year:  2023,
@@ -56,6 +57,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 	requires := require.New(t)
 
 	expectedAccountId1 := account.Id(uuid.New())
+	notes1 := "some notes"
 	expectedAccountEntity1 := account.Entity{
 		AccountId:           &expectedAccountId1,
 		BankName:            "bank name",
@@ -64,7 +66,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 		StartingBalance:     3069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
-		Notes:               "some notes",
+		Notes:               &notes1,
 		ActiveMonth: account.EntityActiveMonth{
 			Month: time.March,
 			Year:  2023,
@@ -72,6 +74,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 	}
 
 	expectedAccountId2 := account.Id(uuid.New())
+	notes2 := "some notes 2"
 	expectedAccountEntity2 := account.Entity{
 		AccountId:           &expectedAccountId2,
 		BankName:            "bank name2",
@@ -80,7 +83,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 		StartingBalance:     4069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.USD,
-		Notes:               "some notes 2",
+		Notes:               &notes2,
 		ActiveMonth: account.EntityActiveMonth{
 			Month: time.April,
 			Year:  2022,

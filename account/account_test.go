@@ -214,7 +214,6 @@ func createAccountData(accountId uuid.UUID, activeMonth *ActiveMonth) Account {
 		startingBalance:     1069,
 		startingBalanceDate: startBalanceDate,
 		currency:            USD,
-		notes:               "My notes on my account",
 		activeMonth: ActiveMonth{
 			month: activeMonth.Month(),
 			year:  activeMonth.Year(),
@@ -231,7 +230,6 @@ func createRegisterNewAccountCommand(accountData Account) eventhorizon.Command {
 		StartingBalance:     accountData.StartingBalance(),
 		StartingBalanceDate: accountData.StartingBalanceDate(),
 		Currency:            accountData.Currency(),
-		Notes:               accountData.Notes(),
 	}
 }
 
@@ -251,7 +249,6 @@ func createRegisterNewAccountEvent(accountData Account, createdAt time.Time) eve
 			StartingBalance:     accountData.StartingBalance(),
 			StartingBalanceDate: accountData.StartingBalanceDate(),
 			Currency:            accountData.Currency(),
-			Notes:               accountData.Notes(),
 			ActiveMonth:         accountData.StartingBalanceDate().Month(),
 			ActiveYear:          uint(accountData.StartingBalanceDate().Year()),
 		},
@@ -289,7 +286,6 @@ func assetAccountValues(
 	asserts.Equal(expectedAccountData.AccountType(), account.AccountType())
 	asserts.Equal(expectedAccountData.StartingBalance(), account.StartingBalance())
 	asserts.Equal(expectedAccountData.StartingBalanceDate(), account.StartingBalanceDate())
-	asserts.Equal(expectedAccountData.Notes(), account.Notes())
 	asserts.Equal(expectedActiveMonth.Month(), account.ActiveMonth().Month())
 	asserts.Equal(expectedActiveMonth.Year(), account.ActiveMonth().Year())
 }

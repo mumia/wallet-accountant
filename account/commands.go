@@ -46,7 +46,7 @@ type RegisterNewAccount struct {
 	StartingBalance     float64   `json:"starting_balance"`
 	StartingBalanceDate time.Time `json:"starting_balance_date"`
 	Currency            Currency  `json:"currency"`
-	Notes               string    `json:"notes"`
+	Notes               *string   `json:"notes" eh:"optional"`
 }
 
 func (r RegisterNewAccount) AggregateID() uuid.UUID {

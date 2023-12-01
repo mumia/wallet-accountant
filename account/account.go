@@ -47,7 +47,6 @@ type Account struct {
 	startingBalance     float64
 	startingBalanceDate time.Time
 	currency            Currency
-	notes               string
 	activeMonth         ActiveMonth
 }
 
@@ -122,7 +121,6 @@ func (account *Account) ApplyEvent(ctx context.Context, event eventhorizon.Event
 		account.startingBalance = eventData.StartingBalance
 		account.startingBalanceDate = eventData.StartingBalanceDate
 		account.currency = eventData.Currency
-		account.notes = eventData.Notes
 		account.activeMonth = ActiveMonth{
 			month: eventData.ActiveMonth,
 			year:  eventData.ActiveYear,
@@ -165,10 +163,6 @@ func (account *Account) StartingBalanceDate() time.Time {
 
 func (account *Account) Currency() Currency {
 	return account.currency
-}
-
-func (account *Account) Notes() string {
-	return account.notes
 }
 
 func (account *Account) ActiveMonth() ActiveMonth {
