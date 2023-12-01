@@ -22,7 +22,6 @@ func TestReadModelRepository_StartMonth(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successful start account month", func(mt *mtest.T) {
 		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
@@ -74,7 +73,6 @@ func TestReadModelRepository_EndMonth(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successful end account month", func(mt *mtest.T) {
 		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
@@ -112,7 +110,6 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 	requires := require.New(t)
 
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-	defer mt.Close()
 
 	mt.Run("test successful register account movement, debit", func(mt *mtest.T) {
 		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})

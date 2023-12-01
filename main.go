@@ -14,6 +14,7 @@ import (
 	"walletaccountant/definitions"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
+	"walletaccountant/mongodb"
 	"walletaccountant/movementtype"
 	"walletaccountant/queryapis"
 	"walletaccountant/saga"

@@ -42,15 +42,15 @@ var movementTypeWithSourceAccountBody = `{
 var expectedMovementTypeId1 = uuid.New()
 var expectedMovementTypeId2 = uuid.New()
 
-var notes1 = "mov type notes"
-var notes2 = "mov type notes with source"
+var movNotes1 = "mov type notes"
+var movNotes2 = "mov type notes with source"
 
 var expectedMovementTypeTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
 	Type:            "credit",
 	AccountId:       accountId1.String(),
 	SourceAccountId: nil,
 	Description:     "mov type desc",
-	Notes:           &notes1,
+	Notes:           &movNotes1,
 	TagIds:          []string{tagId1.String(), tagId2.String()},
 }
 
@@ -60,7 +60,7 @@ var expectedMovementTypeWithSourceTransferObject = movementtype.RegisterNewMovem
 	AccountId:       accountId2.String(),
 	SourceAccountId: &sourceAccountIdString,
 	Description:     "mov type desc with source",
-	Notes:           &notes2,
+	Notes:           &movNotes2,
 	TagIds:          []string{tagId2.String()},
 }
 

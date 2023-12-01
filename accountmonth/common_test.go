@@ -55,7 +55,7 @@ var accountEntity = account.Entity{
 	StartingBalance:     0,
 	StartingBalanceDate: time.Time{},
 	Currency:            "",
-	Notes:               "",
+	Notes:               nil,
 	ActiveMonth: account.EntityActiveMonth{
 		Month: month,
 		Year:  year,
@@ -70,7 +70,7 @@ var accountEntity2 = account.Entity{
 	StartingBalance:     0,
 	StartingBalanceDate: time.Time{},
 	Currency:            "",
-	Notes:               "",
+	Notes:               nil,
 	ActiveMonth: account.EntityActiveMonth{
 		Month: month2,
 		Year:  year,

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"sync"
 	"walletaccountant/definitions"
-	"walletaccountant/projector"
+	"walletaccountant/eventhandler"
 )
 
 var _ definitions.Route = &ModelUpdater{}
@@ -41,7 +41,7 @@ type ModelUpdater struct {
 }
 
 func NewModelUpdater(
-	projectorRegistry *projector.EventMatcherHandlerRegistry,
+	projectorRegistry *eventhandler.ProjectionRegistry,
 	upgrader *websocket.Upgrader,
 	log *zap.Logger,
 ) *ModelUpdater {
