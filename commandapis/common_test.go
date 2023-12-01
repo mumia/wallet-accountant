@@ -5,9 +5,14 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"walletaccountant/account"
 	"walletaccountant/definitions"
+	"walletaccountant/movementtype"
 )
 
+var movementTypeId1 = movementtype.Id(uuid.MustParse("72a196bc-d9b1-4c57-a916-3eabf1bf167b"))
+var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
+var accountMonthId1 = account.Id(uuid.MustParse("2313be27-50f6-9a11-3f38-d7715ec16903"))
 var tagId1 = uuid.New()
 var tagId2 = uuid.New()
 
@@ -20,17 +25,26 @@ func assertGenericErrorFromResponse(
 	asserts *assert.Assertions,
 	requires *require.Assertions,
 ) {
-	var genericError definitions.WalletAccountantError
+	assertErrorFromResponse(responseBody, expectedReason, definitions.GenericCode, nil, asserts, requires)
+}
 
-	err := json.Unmarshal(responseBody, &genericError)
+func assertErrorFromResponse(
+	responseBody []byte,
+	expectedReason string,
+	expectedErrorCode definitions.ErrorCode,
+	expectedErrorContext *definitions.ErrorContext,
+	asserts *assert.Assertions,
+	requires *require.Assertions,
+) {
+	var walletAccountantError definitions.WalletAccountantError
+
+	err := json.Unmarshal(responseBody, &walletAccountantError)
 	requires.NoError(err)
 
-	asserts.Equal(
-		definitions.ErrorReason(expectedReason),
-		genericError.Reason,
-	)
-	asserts.Equal(
-		definitions.GenericCode,
-		genericError.Code,
-	)
+	asserts.Equal(definitions.ErrorReason(expectedReason), walletAccountantError.Reason)
+	asserts.Equal(expectedErrorCode, walletAccountantError.Code)
+
+	if expectedErrorContext != nil {
+		asserts.Equal(*expectedErrorContext, walletAccountantError.Context)
+	}
 }

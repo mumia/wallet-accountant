@@ -5,6 +5,6 @@ type RegisterNewMovementTypeTransferObject struct {
 	AccountId       string   `json:"accountId" binding:"required,uuid"`
 	SourceAccountId *string  `json:"sourceAccountId"`
 	Description     string   `json:"description" binding:"required"`
-	Notes           string   `json:"notes"`
+	Notes           *string  `json:"notes"`
 	TagIds          []string `json:"tags" binding:"required"`
 }

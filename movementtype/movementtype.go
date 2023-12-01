@@ -34,7 +34,7 @@ type MovementType struct {
 	accountId       *account.Id
 	sourceAccountId *account.Id
 	description     string
-	notes           string
+	notes           *string
 	tagIds          []*tagcategory.TagId
 }
 
@@ -62,7 +62,7 @@ func (movementType *MovementType) HandleCommand(ctx context.Context, command eve
 
 		movementType.AppendEvent(
 			NewMovementTypeRegistered,
-			NewMovementTypeRegisteredData{
+			&NewMovementTypeRegisteredData{
 				MovementTypeId:  &command.MovementTypeId,
 				Type:            command.Type,
 				AccountId:       &command.AccountId,
@@ -84,7 +84,7 @@ func (movementType *MovementType) HandleCommand(ctx context.Context, command eve
 func (movementType *MovementType) ApplyEvent(ctx context.Context, event eventhorizon.Event) error {
 	switch event.EventType() {
 	case NewMovementTypeRegistered:
-		eventData, ok := event.Data().(NewMovementTypeRegisteredData)
+		eventData, ok := event.Data().(*NewMovementTypeRegisteredData)
 		if !ok {
 			return definitions.EventDataTypeError(NewMovementTypeRegistered, event.EventType())
 		}
@@ -122,7 +122,7 @@ func (movementType *MovementType) Description() string {
 	return movementType.description
 }
 
-func (movementType *MovementType) Notes() string {
+func (movementType *MovementType) Notes() *string {
 	return movementType.notes
 }
 

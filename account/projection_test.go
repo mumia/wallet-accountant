@@ -17,7 +17,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 	accountId := account.Id(uuid.New())
 	notes := "my account notes"
 	newAccountRegisteredData := account.NewAccountRegisteredData{
-		AccountID:           &accountId,
+		AccountId:           &accountId,
 		BankName:            "bank name",
 		Name:                "account name",
 		AccountType:         account.Checking,
@@ -30,7 +30,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 	}
 
 	expectedAccountEntity := account.Entity{
-		AccountId:           newAccountRegisteredData.AccountID,
+		AccountId:           newAccountRegisteredData.AccountId,
 		BankName:            newAccountRegisteredData.BankName,
 		Name:                newAccountRegisteredData.Name,
 		AccountType:         newAccountRegisteredData.AccountType,

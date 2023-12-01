@@ -1,14 +1,15 @@
-package projector
+package eventhandler
 
 import (
-	"context"
 	"fmt"
 	"github.com/looplab/eventhorizon"
 	"sync"
 	"walletaccountant/definitions"
 )
 
-type EventMatcherHandlerRegistry struct {
+var _ HandlerGetter = &ProjectionRegistry{}
+
+type ProjectionRegistry struct {
 	handlersMutex  *sync.RWMutex
 	handlersByType map[eventhorizon.EventHandlerType]*matcherHandler
 }
@@ -18,16 +19,14 @@ type matcherHandler struct {
 	eventhorizon.EventHandler
 }
 
-func NewEventMatcherHandlerRegistry(
-	providers []definitions.EventMatcherHandleProvider,
-) (*EventMatcherHandlerRegistry, error) {
-	registry := &EventMatcherHandlerRegistry{
+func NewProjectionRegistry(providers []definitions.ProjectionProvider) (*ProjectionRegistry, error) {
+	registry := &ProjectionRegistry{
 		handlersMutex:  &sync.RWMutex{},
 		handlersByType: make(map[eventhorizon.EventHandlerType]*matcherHandler),
 	}
 
 	for _, provider := range providers {
-		if err := registry.AddHandler(context.TODO(), provider.Matcher(), provider.Handler()); err != nil {
+		if err := registry.AddHandler(provider.Matcher(), provider.Handler()); err != nil {
 			return nil, err
 		}
 	}
@@ -35,8 +34,7 @@ func NewEventMatcherHandlerRegistry(
 	return registry, nil
 }
 
-func (projector *EventMatcherHandlerRegistry) AddHandler(
-	ctx context.Context,
+func (registry *ProjectionRegistry) AddHandler(
 	matcher eventhorizon.EventMatcher,
 	handler eventhorizon.EventHandler,
 ) error {
@@ -48,26 +46,26 @@ func (projector *EventMatcherHandlerRegistry) AddHandler(
 		return eventhorizon.ErrMissingHandler
 	}
 
-	projector.handlersMutex.Lock()
-	defer projector.handlersMutex.Unlock()
+	registry.handlersMutex.Lock()
+	defer registry.handlersMutex.Unlock()
 
-	if _, ok := projector.handlersByType[handler.HandlerType()]; ok {
+	if _, ok := registry.handlersByType[handler.HandlerType()]; ok {
 		return eventhorizon.ErrHandlerAlreadyAdded
 	}
 
 	matcherHandler := &matcherHandler{matcher, handler}
-	projector.handlersByType[handler.HandlerType()] = matcherHandler
+	registry.handlersByType[handler.HandlerType()] = matcherHandler
 
 	return nil
 }
 
-func (projector *EventMatcherHandlerRegistry) GetHandler(
+func (registry *ProjectionRegistry) GetHandler(
 	handlerType eventhorizon.EventHandlerType,
 ) (eventhorizon.EventMatcher, eventhorizon.EventHandler, error) {
-	projector.handlersMutex.Lock()
-	defer projector.handlersMutex.Unlock()
+	registry.handlersMutex.Lock()
+	defer registry.handlersMutex.Unlock()
 
-	matcherHandler, ok := projector.handlersByType[handlerType]
+	matcherHandler, ok := registry.handlersByType[handlerType]
 	if !ok {
 		return nil, nil, fmt.Errorf("no event matcher found. Event handler type: %s", handlerType)
 	}
@@ -75,6 +73,6 @@ func (projector *EventMatcherHandlerRegistry) GetHandler(
 	return matcherHandler.EventMatcher, matcherHandler.EventHandler, nil
 }
 
-func (projector *EventMatcherHandlerRegistry) GetHandlers() map[eventhorizon.EventHandlerType]*matcherHandler {
-	return projector.handlersByType
+func (registry *ProjectionRegistry) GetHandlers() map[eventhorizon.EventHandlerType]*matcherHandler {
+	return registry.handlersByType
 }

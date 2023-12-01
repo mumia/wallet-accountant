@@ -1,6 +1,7 @@
 package definitions
 
 import (
+	"fmt"
 	"github.com/looplab/eventhorizon"
 	"runtime"
 )
@@ -29,16 +30,18 @@ func GenericError(reason error, context ErrorContext) *WalletAccountantError {
 	}
 
 	skip := 1
+	var trace []string
 	for {
 		_, file, line, ok := runtime.Caller(skip)
 		if !ok {
 			break
 		}
 
-		context[file] = line
+		trace = append(trace, fmt.Sprintf("%s: %d", file, line))
 
 		skip++
 	}
+	context["trace"] = trace
 
 	return &WalletAccountantError{
 		Code:    GenericCode,

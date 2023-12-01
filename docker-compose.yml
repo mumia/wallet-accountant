@@ -72,6 +72,8 @@ services:
       ME_CONFIG_MONGODB_URL: mongodb://root:example@mongodb:27017/
     networks:
       wallet-accountant: ~
+    depends_on:
+      - mongodb
 
 networks:
   wallet-accountant: ~

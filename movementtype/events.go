@@ -35,6 +35,6 @@ type NewMovementTypeRegisteredData struct {
 	AccountId       *account.Id          `json:"account_id"`
 	SourceAccountId *account.Id          `json:"source_account_id"`
 	Description     string               `json:"description"`
-	Notes           string               `json:"notes"`
+	Notes           *string              `json:"notes"`
 	TagIds          []*tagcategory.TagId `json:"tag_ids"`
 }

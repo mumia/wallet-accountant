@@ -66,8 +66,8 @@ func (account *Account) HandleCommand(ctx context.Context, command eventhorizon.
 	case *RegisterNewAccount:
 		account.AppendEvent(
 			NewAccountRegistered,
-			NewAccountRegisteredData{
-				AccountID:           &command.AccountId,
+			&NewAccountRegisteredData{
+				AccountId:           &command.AccountId,
 				BankName:            command.BankName,
 				Name:                command.Name,
 				AccountType:         command.AccountType,
@@ -93,7 +93,9 @@ func (account *Account) HandleCommand(ctx context.Context, command eventhorizon.
 
 		account.AppendEvent(
 			NextMonthStarted,
-			NextMonthStartedData{
+			&NextMonthStartedData{
+				AccountId: &command.AccountId,
+				Balance:   command.Balance,
 				NextMonth: nextMonth,
 				NextYear:  nextYear,
 			},
@@ -110,7 +112,7 @@ func (account *Account) HandleCommand(ctx context.Context, command eventhorizon.
 func (account *Account) ApplyEvent(ctx context.Context, event eventhorizon.Event) error {
 	switch event.EventType() {
 	case NewAccountRegistered:
-		eventData, ok := event.Data().(NewAccountRegisteredData)
+		eventData, ok := event.Data().(*NewAccountRegisteredData)
 		if !ok {
 			return definitions.EventDataTypeError(NewAccountRegistered, event.EventType())
 		}
@@ -127,7 +129,7 @@ func (account *Account) ApplyEvent(ctx context.Context, event eventhorizon.Event
 		}
 
 	case NextMonthStarted:
-		eventData, ok := event.Data().(NextMonthStartedData)
+		eventData, ok := event.Data().(*NextMonthStartedData)
 		if !ok {
 			return definitions.EventDataTypeError(NextMonthStarted, event.EventType())
 		}
@@ -139,6 +141,12 @@ func (account *Account) ApplyEvent(ctx context.Context, event eventhorizon.Event
 	}
 
 	return nil
+}
+
+func (account *Account) AccountId() *Id {
+	accountId := Id(account.EntityID())
+
+	return &accountId
 }
 
 func (account *Account) BankName() string {

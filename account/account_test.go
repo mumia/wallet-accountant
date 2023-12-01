@@ -90,6 +90,7 @@ func TestAccount_HandleCommand_StartNextMonth(t *testing.T) {
 
 	startNextMonthSameYearEvent := createStartNextMonthEvent(
 		accountNextMonthSameYear.EntityID(),
+		1000,
 		nextMonthSameYearData,
 		instants[0].Instant,
 		2,
@@ -110,15 +111,16 @@ func TestAccount_HandleCommand_StartNextMonth(t *testing.T) {
 		{
 			testName:      "successfully start next month staying in same year",
 			account:       accountNextMonthSameYear,
-			command:       createStartNextMonthCommand(accountNextMonthSameYear.EntityID()),
+			command:       createStartNextMonthCommand(accountNextMonthSameYear.EntityID(), 1000),
 			expectedEvent: startNextMonthSameYearEvent,
 		},
 		{
 			testName: "successfully start next month changing to next year",
 			account:  accountNextMonthDifferentYear,
-			command:  createStartNextMonthCommand(accountNextMonthDifferentYear.EntityID()),
+			command:  createStartNextMonthCommand(accountNextMonthDifferentYear.EntityID(), 1000),
 			expectedEvent: createStartNextMonthEvent(
 				accountNextMonthDifferentYear.EntityID(),
+				1000,
 				nextMonthDifferentYearData,
 				instants[1].Instant,
 				3,
@@ -140,7 +142,7 @@ func TestAccount_HandleCommand_StartNextMonth(t *testing.T) {
 	t.Run("fails to start next month, because account not registered", func(t *testing.T) {
 		account := newAggregateFunc(accountId).(*Account)
 
-		command := createStartNextMonthCommand(account.EntityID())
+		command := createStartNextMonthCommand(account.EntityID(), 1000)
 
 		err := account.HandleCommand(context.Background(), command)
 		asserts.Error(err)
@@ -185,7 +187,7 @@ func TestAccount_ApplyEvent_StartNextMonth(t *testing.T) {
 		accountData := createAccountData(accountId, &nextMonth)
 
 		newAccountRegisteredEvent := createRegisterNewAccountEvent(accountData, time.Now())
-		startNextMonthEvent := createStartNextMonthEvent(accountId, nextMonth, time.Now(), 1)
+		startNextMonthEvent := createStartNextMonthEvent(accountId, 1000, nextMonth, time.Now(), 1)
 
 		err := account.ApplyEvent(context.Background(), newAccountRegisteredEvent)
 		asserts.NoError(err)
@@ -233,16 +235,16 @@ func createRegisterNewAccountCommand(accountData Account) eventhorizon.Command {
 	}
 }
 
-func createStartNextMonthCommand(accountId uuid.UUID) eventhorizon.Command {
-	return &StartNextMonth{AccountId: accountId}
+func createStartNextMonthCommand(accountId uuid.UUID, balance float64) eventhorizon.Command {
+	return &StartNextMonth{AccountId: accountId, Balance: balance}
 }
 
 func createRegisterNewAccountEvent(accountData Account, createdAt time.Time) eventhorizon.Event {
 	accountId := Id(accountData.EntityID())
 	return eventhorizon.NewEvent(
 		NewAccountRegistered,
-		NewAccountRegisteredData{
-			AccountID:           &accountId,
+		&NewAccountRegisteredData{
+			AccountId:           &accountId,
 			BankName:            accountData.BankName(),
 			Name:                accountData.Name(),
 			AccountType:         accountData.AccountType(),
@@ -259,13 +261,18 @@ func createRegisterNewAccountEvent(accountData Account, createdAt time.Time) eve
 
 func createStartNextMonthEvent(
 	aggregateId uuid.UUID,
+	balance float64,
 	activeMonth ActiveMonth,
 	createdAt time.Time,
 	version int,
 ) eventhorizon.Event {
+	accountId := Id(aggregateId)
+
 	return eventhorizon.NewEvent(
 		NextMonthStarted,
-		NextMonthStartedData{
+		&NextMonthStartedData{
+			AccountId: &accountId,
+			Balance:   balance,
 			NextMonth: activeMonth.Month(),
 			NextYear:  activeMonth.Year(),
 		},

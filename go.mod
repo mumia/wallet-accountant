@@ -11,6 +11,7 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/looplab/eventhorizon v0.16.0
 	github.com/stretchr/testify v1.8.4
+	github.com/zeebo/xxh3 v1.0.2
 	go.mongodb.org/mongo-driver v1.13.0
 	go.uber.org/fx v1.20.1
 	go.uber.org/zap v1.26.0

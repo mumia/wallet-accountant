@@ -9,8 +9,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"time"
+	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
-	"walletaccountant/projector"
+)
+
+const (
+	projectionsGroupName = "projections"
+	sagasGroupName       = "sagas"
 )
 
 var deadlineTimeout = 60 * time.Minute
@@ -20,26 +25,69 @@ type EventStreamSubscription struct {
 	eventMatcher                eventhorizon.EventMatcher
 	eventHandler                eventhorizon.EventHandler
 	aggregateType               eventhorizon.AggregateType
-	eventMatcherHandlerRegistry *projector.EventMatcherHandlerRegistry
+	eventMatcherHandlerRegistry *eventhandler.ProjectionRegistry
 	logger                      *zap.Logger
 	projectionStream            string
 	subscriptionGroup           string
 }
 
-func SubscribeEventStream(
+func SubscribeEventStreamForProjection(
 	aggregateType eventhorizon.AggregateType,
+	handlerType eventhorizon.EventHandlerType,
 	client eventstoredb.EventStorerer,
-	eventMatcherHandlerRegistry *projector.EventMatcherHandlerRegistry,
+	eventMatcherHandlerRegistry eventhandler.HandlerGetter,
 	logger *zap.Logger,
 	lifecycle fx.Lifecycle,
 ) error {
-	eventMatcher, eventHandler, err := eventMatcherHandlerRegistry.GetHandler(
-		eventhorizon.EventHandlerType(aggregateType),
+	return subscribeEventStream(
+		aggregateType,
+		handlerType,
+		projectionsGroupName,
+		client,
+		eventMatcherHandlerRegistry,
+		logger,
+		lifecycle,
 	)
+}
+
+func SubscribeEventStreamForSaga(
+	aggregateType eventhorizon.AggregateType,
+	handlerType eventhorizon.EventHandlerType,
+	client eventstoredb.EventStorerer,
+	eventMatcherHandlerRegistry eventhandler.HandlerGetter,
+	logger *zap.Logger,
+	lifecycle fx.Lifecycle,
+) error {
+	return subscribeEventStream(
+		aggregateType,
+		handlerType,
+		sagasGroupName,
+		client,
+		eventMatcherHandlerRegistry,
+		logger,
+		lifecycle,
+	)
+}
+
+func HandlerTypeForSaga(suffix string) eventhorizon.EventHandlerType {
+	return eventhorizon.EventHandlerType(fmt.Sprintf("saga_%s", suffix))
+}
+
+func subscribeEventStream(
+	aggregateType eventhorizon.AggregateType,
+	handlerType eventhorizon.EventHandlerType,
+	groupName string,
+	client eventstoredb.EventStorerer,
+	eventMatcherHandlerRegistry eventhandler.HandlerGetter,
+	logger *zap.Logger,
+	lifecycle fx.Lifecycle,
+) error {
+	eventMatcher, eventHandler, err := eventMatcherHandlerRegistry.GetHandler(handlerType)
 	if err != nil {
 		return fmt.Errorf(
-			"failed to match an event handler. EventHandlerType: %s Error: %w",
-			aggregateType,
+			"failed to match an event handler. EventHandlerType: %s Group: %s Error: %w",
+			handlerType,
+			groupName,
 			err,
 		)
 	}
@@ -51,7 +99,7 @@ func SubscribeEventStream(
 		aggregateType:     aggregateType,
 		logger:            logger,
 		projectionStream:  fmt.Sprintf("$ce-%s", aggregateType),
-		subscriptionGroup: fmt.Sprintf("subscription-group-%s", aggregateType),
+		subscriptionGroup: fmt.Sprintf("subscription-group-%s", groupName),
 	}
 
 	var subscriptionLifecycleCtx context.Context

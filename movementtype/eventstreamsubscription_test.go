@@ -108,6 +108,8 @@ func TestSubscribeEventStream(t *testing.T) {
 		ctx,
 		t,
 		movementtype.AggregateType,
+		eventhorizon.EventHandlerType(movementtype.AggregateType),
+		true,
 		persistentSubscriptionMock,
 		movementtype.NewProjectionConfig(eventHandler),
 		subscriptionReceiveChannel,
