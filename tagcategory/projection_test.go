@@ -17,21 +17,21 @@ func TestProjection_HandleEvent_NewTagAddedToNewCategory(t *testing.T) {
 	newTagAddedToNewCategoryData := tagcategory.NewTagAddedToNewCategoryData{
 		TagCategoryId:    &expectedTagCategoryId,
 		TagCategoryName:  tagCategoryName,
-		TagCategoryNotes: tagCategoryNotes,
+		TagCategoryNotes: &tagCategoryNotes,
 		TagId:            &expectedTagId,
 		TagName:          tagName,
-		TagNotes:         tagNotes,
+		TagNotes:         &tagNotes,
 	}
 
 	expectedTagCategoryEntity := tagcategory.CategoryEntity{
 		TagCategoryId: &expectedTagCategoryId,
 		Name:          tagCategoryName,
-		Notes:         tagCategoryNotes,
+		Notes:         &tagCategoryNotes,
 		Tags: []*tagcategory.Entity{
 			{
 				TagId: &expectedTagId,
 				Name:  tagName,
-				Notes: tagNotes,
+				Notes: &tagNotes,
 			},
 		},
 	}
@@ -71,13 +71,13 @@ func TestProjection_HandleEvent_NewTagAddedToExistingCategory(t *testing.T) {
 		TagCategoryId: &expectedTagCategoryId,
 		TagId:         &expectedTagId,
 		Name:          tagName,
-		Notes:         tagNotes,
+		Notes:         &tagNotes,
 	}
 
 	expectedTagEntity := tagcategory.Entity{
 		TagId: &expectedTagId,
 		Name:  tagName,
-		Notes: tagNotes,
+		Notes: &tagNotes,
 	}
 
 	updateCallCount := 0

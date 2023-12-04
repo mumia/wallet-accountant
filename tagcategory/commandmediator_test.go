@@ -17,11 +17,11 @@ import (
 var expectedCommand = &tagcategory.AddNewTagToNewCategory{
 	TagCategoryId: expectedTagCategoryId,
 	Name:          tagCategoryName,
-	Notes:         tagCategoryNotes,
+	Notes:         &tagCategoryNotes,
 	Tag: tagcategory.NewTag{
 		TagId: expectedTagId,
 		Name:  tagName,
-		Notes: tagNotes,
+		Notes: &tagNotes,
 	},
 }
 
@@ -50,9 +50,9 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 
 	transferObject := tagcategory.AddNewTagToNewCategoryTransferObject{
 		CategoryName:  tagCategoryName,
-		CategoryNotes: tagCategoryNotes,
+		CategoryNotes: &tagCategoryNotes,
 		TagName:       tagName,
-		TagNotes:      tagNotes,
+		TagNotes:      &tagNotes,
 	}
 
 	t.Run("correctly handles adds new tag to a new tag category", func(t *testing.T) {

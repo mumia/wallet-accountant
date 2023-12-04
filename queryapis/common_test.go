@@ -57,35 +57,42 @@ var tagId1 = tagcategory.TagId(uuid.New())
 var tagId2 = tagcategory.TagId(uuid.New())
 var tagId3 = tagcategory.TagId(uuid.New())
 
+var tagCategoryNotes1 = "tag category 1 notes"
+var tagCategoryNotes2 = "tag category 2 notes"
+
+var tagNotes1 = "tag 1 notes"
+var tagNotes2 = "tag 2 notes"
+var tagNotes3 = "tag 3 notes"
+
 var tag1 = tagcategory.Entity{
 	TagId: &tagId1,
 	Name:  "tag 1 name",
-	Notes: "tag 1 notes",
+	Notes: &tagNotes1,
 }
 
 var tag2 = tagcategory.Entity{
 	TagId: &tagId2,
 	Name:  "tag 2 name",
-	Notes: "tag 2 notes",
+	Notes: &tagNotes2,
 }
 
 var tag3 = tagcategory.Entity{
 	TagId: &tagId3,
 	Name:  "tag 3 name",
-	Notes: "tag 3 notes",
+	Notes: &tagNotes3,
 }
 
 var tagCategoryEntity1 = tagcategory.CategoryEntity{
 	TagCategoryId: &tagCategoryId1,
 	Name:          "tag category 1 name",
-	Notes:         "tag category 1 notes",
+	Notes:         &tagCategoryNotes1,
 	Tags:          []*tagcategory.Entity{&tag2, &tag1},
 }
 
 var tagCategoryEntity2 = tagcategory.CategoryEntity{
 	TagCategoryId: &tagCategoryId2,
 	Name:          "tag category 2 name",
-	Notes:         "tag category 2 notes",
+	Notes:         &tagCategoryNotes2,
 	Tags:          []*tagcategory.Entity{&tag3},
 }
 

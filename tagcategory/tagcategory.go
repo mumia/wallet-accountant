@@ -22,15 +22,13 @@ type TagCategory struct {
 	*events.AggregateBase
 	clock *clock.Clock
 
-	name  string
-	notes string
-	tags  []*Tag
+	name string
+	tags []*Tag
 }
 
 type Tag struct {
 	tagId *TagId
 	name  string
-	notes string
 }
 
 func (category *TagCategory) HandleCommand(ctx context.Context, command eventhorizon.Command) error {
@@ -88,12 +86,10 @@ func (category *TagCategory) ApplyEvent(ctx context.Context, event eventhorizon.
 		}
 
 		category.name = eventData.TagCategoryName
-		category.notes = eventData.TagCategoryNotes
 		category.tags = []*Tag{
 			{
 				tagId: eventData.TagId,
 				name:  eventData.TagName,
-				notes: eventData.TagNotes,
 			},
 		}
 
@@ -108,7 +104,6 @@ func (category *TagCategory) ApplyEvent(ctx context.Context, event eventhorizon.
 			&Tag{
 				tagId: eventData.TagId,
 				name:  eventData.Name,
-				notes: eventData.Notes,
 			},
 		)
 	}
@@ -126,10 +121,6 @@ func (category *TagCategory) Name() string {
 	return category.name
 }
 
-func (category *TagCategory) Notes() string {
-	return category.notes
-}
-
 func (category *TagCategory) Tags() []*Tag {
 	return category.tags
 }
@@ -140,8 +131,4 @@ func (tag *Tag) TagId() *TagId {
 
 func (tag *Tag) Name() string {
 	return tag.name
-}
-
-func (tag *Tag) Notes() string {
-	return tag.notes
 }
