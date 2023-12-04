@@ -26,10 +26,11 @@ var tagInCategoryBody = `{
     "tagNotes": "Tag notes"
 }`
 
+var expectedTagInCategoryNotes = "Tag notes"
 var expectedTagInCategoryTransferObject = tagcategory.AddNewTagToExistingCategoryTransferObject{
 	TagCategoryId: expectedTagCategoryId.String(),
 	TagName:       "Tag name",
-	TagNotes:      "Tag notes",
+	TagNotes:      &expectedTagInCategoryNotes,
 }
 
 func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {

@@ -36,16 +36,16 @@ func RegisterCommandHandler(
 }
 
 type AddNewTagToNewCategory struct {
-	TagCategoryId Id     `json:"tag_category_id"`
-	Name          string `json:"name"`
-	Notes         string `json:"notes"`
-	Tag           NewTag `json:"tag"`
+	TagCategoryId Id      `json:"tag_category_id"`
+	Name          string  `json:"name"`
+	Notes         *string `json:"notes" eh:"optional"`
+	Tag           NewTag  `json:"tag"`
 }
 
 type NewTag struct {
-	TagId TagId  `json:"tag_id"`
-	Name  string `json:"name"`
-	Notes string `json:"notes"`
+	TagId TagId   `json:"tag_id"`
+	Name  string  `json:"name"`
+	Notes *string `json:"notes" eh:"optional"`
 }
 
 func (r AddNewTagToNewCategory) AggregateID() uuid.UUID {
@@ -61,10 +61,10 @@ func (r AddNewTagToNewCategory) CommandType() eventhorizon.CommandType {
 }
 
 type AddNewTagToExistingCategory struct {
-	TagId         TagId  `json:"tag_id"`
-	TagCategoryId Id     `json:"tag_category_id"`
-	Name          string `json:"name"`
-	Notes         string `json:"notes"`
+	TagId         TagId   `json:"tag_id"`
+	TagCategoryId Id      `json:"tag_category_id"`
+	Name          string  `json:"name"`
+	Notes         *string `json:"notes" eh:"optional"`
 }
 
 func (r AddNewTagToExistingCategory) AggregateID() uuid.UUID {

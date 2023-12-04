@@ -84,6 +84,24 @@ func (m *ModelUpdater) Handle(ctx *gin.Context) {
 
 	m.log.Debug("new web socket connection")
 
+	//conn.SetCloseHandler(func(code int, text string) error {
+	//	m.log.Debug("close handler called", zap.Int("code", code), zap.String("text", text))
+	//
+	//	return conn.CloseHandler()(code, text)
+	//})
+	//
+	//conn.SetPingHandler(func(appData string) error {
+	//	m.log.Debug("ping handler called", zap.String("appData", appData))
+	//
+	//	return conn.PingHandler()(appData)
+	//})
+	//
+	//conn.SetPongHandler(func(appData string) error {
+	//	m.log.Debug("pong handler called", zap.String("appData", appData))
+	//
+	//	return conn.PongHandler()(appData)
+	//})
+
 	for aggregate, notifier := range m.notifiers {
 		go m.handleUpdateNotification(ctx, conn, aggregate, notifier)
 	}
@@ -102,6 +120,8 @@ func (m *ModelUpdater) handleUpdateNotification(
 		}
 	}(conn)
 
+	//go m.handleIncoming(conn)
+
 	keepRunning := true
 	for keepRunning {
 		select {
@@ -116,7 +136,7 @@ func (m *ModelUpdater) handleUpdateNotification(
 				},
 			)
 			if err != nil {
-				m.log.Debug(
+				m.log.Error(
 					"failed to marshal web socket message",
 					zap.String("aggregate", aggregate.String()),
 					zap.String("event", modelUpdated.Event.String()),
@@ -126,9 +146,15 @@ func (m *ModelUpdater) handleUpdateNotification(
 				break
 			}
 
+			m.log.Debug(
+				"notifying web socket",
+				zap.String("aggregate", aggregate.String()),
+				zap.String("event", modelUpdated.Event.String()),
+			)
+
 			err = conn.WriteMessage(websocket.TextMessage, bytes)
 			if err != nil {
-				m.log.Debug(
+				m.log.Warn(
 					"failed to notify web socket",
 					zap.String("aggregate", aggregate.String()),
 					zap.String("event", modelUpdated.Event.String()),
@@ -137,6 +163,49 @@ func (m *ModelUpdater) handleUpdateNotification(
 
 				keepRunning = false
 			}
+			//
+			//case <-time.After(5 * time.Second):
+			//	if aggregate.String() != "tagCategory" {
+			//		continue
+			//	}
+			//
+			//	bytes, _ := json.Marshal(
+			//		message{
+			//			Subject: aggregate.String(),
+			//			Event:   "dome",
+			//		},
+			//	)
+			//
+			//	m.log.Debug(
+			//		"notifying web socket",
+			//		zap.String("aggregate", aggregate.String()),
+			//	)
+			//	_ = conn.WriteMessage(websocket.TextMessage, bytes)
 		}
 	}
 }
+
+//func (m *ModelUpdater) handleIncoming(conn *websocket.Conn) {
+//	for {
+//		msgType, messageData, err := conn.ReadMessage()
+//		if err != nil {
+//			m.log.Error("incoming message error", zap.Error(err))
+//
+//			break
+//		}
+//
+//		m.log.Debug(
+//			"incoming message",
+//			zap.Int("type", msgType),
+//			zap.String("message", string(messageData)),
+//		)
+//
+//		switch msgType {
+//		case websocket.PingMessage:
+//			err := conn.PingHandler()("pong")
+//			if err != nil {
+//				m.log.Error("ping handler error", zap.Error(err))
+//			}
+//		}
+//	}
+//}

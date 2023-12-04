@@ -24,7 +24,7 @@ func (api *ReadAllTagsApi) Configuration() (string, string) {
 }
 
 func (api *ReadAllTagsApi) Handle(ctx *gin.Context) {
-	accounts, err := api.mediator.Tags(ctx)
+	tags, err := api.mediator.Tags(ctx)
 
 	if err != nil {
 		api.log.Error("Failed to query all tags", zap.Error(err))
@@ -34,5 +34,5 @@ func (api *ReadAllTagsApi) Handle(ctx *gin.Context) {
 		return
 	}
 
-	ctx.AsciiJSON(http.StatusOK, accounts)
+	ctx.AsciiJSON(http.StatusOK, tags)
 }

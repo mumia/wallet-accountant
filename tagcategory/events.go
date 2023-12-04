@@ -33,17 +33,17 @@ func (eventList *EventRegister) Registers() []definitions.EventDataRegister {
 }
 
 type NewTagAddedToNewCategoryData struct {
-	TagCategoryId    *Id    `json:"tag_category_id"`
-	TagCategoryName  string `json:"tag_category_name"`
-	TagCategoryNotes string `json:"tag_category_notes"`
-	TagId            *TagId `json:"tag_id"`
-	TagName          string `json:"tag_name"`
-	TagNotes         string `json:"tag_notes"`
+	TagCategoryId    *Id     `json:"tag_category_id"`
+	TagCategoryName  string  `json:"tag_category_name"`
+	TagCategoryNotes *string `json:"tag_category_notes"`
+	TagId            *TagId  `json:"tag_id"`
+	TagName          string  `json:"tag_name"`
+	TagNotes         *string `json:"tag_notes"`
 }
 
 type NewTagAddedToExistingCategoryData struct {
-	TagCategoryId *Id    `json:"tag_category_id"`
-	TagId         *TagId `json:"tag_id"`
-	Name          string `json:"name"`
-	Notes         string `json:"notes"`
+	TagCategoryId *Id     `json:"tag_category_id"`
+	TagId         *TagId  `json:"tag_id"`
+	Name          string  `json:"name"`
+	Notes         *string `json:"notes"`
 }
