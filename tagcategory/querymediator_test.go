@@ -27,7 +27,7 @@ func TestQueryMediator_Tags(t *testing.T) {
 	queryMediator := tagcategory.NewQueryMediator(&repositoryMock)
 
 	ctx := gin.Context{}
-	actualAccount, err := queryMediator.Tags(&ctx)
+	actualAccount, err := queryMediator.Tags(&ctx, tagcategory.FiltersTransferObject{})
 	requires.Nil(err)
 
 	asserts.Equal(expectedTagCategoryEntities, actualAccount)

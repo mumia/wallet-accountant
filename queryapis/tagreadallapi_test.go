@@ -34,7 +34,7 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 
 	tagsCalled := 0
 	mediator := tagcategory.QueryMediatorMock{
-		TagsFn: func(ctx *gin.Context) ([]*tagcategory.CategoryEntity, *definitions.WalletAccountantError) {
+		TagsFn: func(ctx *gin.Context, filters tagcategory.FiltersTransferObject) ([]*tagcategory.CategoryEntity, *definitions.WalletAccountantError) {
 			tagsCalled++
 
 			switch tagsCalled {

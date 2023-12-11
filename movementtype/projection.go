@@ -32,9 +32,14 @@ func (projection *Projection) HandlerType() eventhorizon.EventHandlerType {
 }
 
 func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizon.Event) error {
+	var err error
 	switch event.EventType() {
 	case NewMovementTypeRegistered:
-		return projection.handleNewMovementTypeRegistered(ctx, event)
+		err = projection.handleNewMovementTypeRegistered(ctx, event)
+	}
+
+	if err == nil {
+		projection.updateChannel <- websocket.ModelUpdated{Event: event.EventType()}
 	}
 
 	return nil
