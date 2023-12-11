@@ -20,7 +20,7 @@ func NewReadAllMovementTypesApi(mediator movementtype.QueryMediatorer, log *zap.
 }
 
 func (api *ReadAllMovementTypeApi) Configuration() (string, string) {
-	return http.MethodGet, "/movement-types"
+	return http.MethodGet, "/movement-type"
 }
 
 func (api *ReadAllMovementTypeApi) Handle(ctx *gin.Context) {

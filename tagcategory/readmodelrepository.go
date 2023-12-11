@@ -4,6 +4,7 @@ import (
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"walletaccountant/mongodb"
 )
 
@@ -18,6 +19,7 @@ type ReadModelReader interface {
 	ExistsById(ctx context.Context, tagId *TagId) (bool, error)
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	GetAll(ctx context.Context) ([]*CategoryEntity, error)
+	GetByTagIds(ctx context.Context, tagIds []TagId) ([]*CategoryEntity, error)
 	CategoryExistsById(ctx context.Context, id *Id) (bool, error)
 	CategoryExistsByName(ctx context.Context, name string) (bool, error)
 }
@@ -55,7 +57,7 @@ func (repository *ReadModelRepository) AddNewTagToCategory(
 	_, err := repository.collection().UpdateOne(
 		ctx,
 		bson.M{"_id": categoryId},
-		bson.M{"$push": bson.M{"tags": newTag}},
+		bson.M{"$addToSet": bson.M{"tags": newTag}},
 	)
 	if err != nil {
 		return err
@@ -92,6 +94,45 @@ func (repository *ReadModelRepository) ExistsByName(ctx context.Context, name st
 
 func (repository *ReadModelRepository) GetAll(ctx context.Context) ([]*CategoryEntity, error) {
 	cursor, err := repository.collection().Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+
+	var entities []*CategoryEntity
+
+	for cursor.Next(ctx) {
+		var entity *CategoryEntity
+
+		if err := cursor.Decode(&entity); err != nil {
+			return nil, err
+		}
+
+		entities = append(entities, entity)
+	}
+
+	if err := cursor.Close(ctx); err != nil {
+		return nil, err
+	}
+
+	return entities, nil
+}
+
+func (repository *ReadModelRepository) GetByTagIds(ctx context.Context, tagIds []TagId) ([]*CategoryEntity, error) {
+	findOptions := &options.FindOptions{}
+
+	if len(tagIds) > 0 {
+		findOptions.Projection = bson.M{
+			"name":  1,
+			"notes": 1,
+			"tags":  bson.M{"$elemMatch": bson.M{"_id": bson.M{"$in": tagIds}}},
+		}
+	}
+
+	cursor, err := repository.collection().Find(
+		ctx,
+		bson.M{"tags._id": bson.M{"$in": tagIds}},
+		findOptions,
+	)
 	if err != nil {
 		return nil, err
 	}

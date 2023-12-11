@@ -56,6 +56,26 @@ func TestProjection_HandleEvent(t *testing.T) {
 	projector, err := movementtype.NewProjection(repository)
 	requires.NoError(err)
 
+	ctx, cancelCtx := context.WithCancel(context.Background())
+
+	type eventCountStruct struct {
+		count int
+	}
+
+	eventCount := &eventCountStruct{0}
+	go func(eventCount *eventCountStruct) {
+		keepRunning := true
+		for keepRunning {
+			select {
+			case <-ctx.Done():
+				keepRunning = false
+
+			case <-projector.UpdateChannel():
+				eventCount.count++
+			}
+		}
+	}(eventCount)
+
 	newMovementTypeRegisteredEvent := eventhorizon.NewEvent(
 		movementtype.NewMovementTypeRegistered,
 		&newMovementTypeRegisteredData,
@@ -66,5 +86,10 @@ func TestProjection_HandleEvent(t *testing.T) {
 	err = projector.HandleEvent(context.Background(), newMovementTypeRegisteredEvent)
 	requires.NoError(err)
 
+	// Wait for all update channel messages to be processed
+	time.Sleep(50 * time.Millisecond)
+	cancelCtx()
+
 	asserts.Equal(1, createCallCount)
+	asserts.Equal(1, eventCount.count)
 }

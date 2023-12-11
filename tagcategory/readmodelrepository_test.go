@@ -230,7 +230,7 @@ func assertAddNewTagAndCategory(command bson.Raw, asserts *assert.Assertions) {
 }
 
 func assertAddNewTagToCategory(command bson.Raw, asserts *assert.Assertions) {
-	command = command.Lookup("$push").Document().Lookup("tags").Document()
+	command = command.Lookup("$addToSet").Document().Lookup("tags").Document()
 
 	assertBinaryId(command.Lookup("_id"), expectedTagId.String(), asserts)
 

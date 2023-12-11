@@ -12,3 +12,7 @@ type AddNewTagToExistingCategoryTransferObject struct {
 	TagName       string  `json:"tagName" binding:"required"`
 	TagNotes      *string `json:"tagNotes"`
 }
+
+type FiltersTransferObject struct {
+	Filters []string `form:"filters[]" binding:"dive,required,uuid"`
+}
