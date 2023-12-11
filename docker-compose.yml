@@ -9,7 +9,7 @@ services:
       - MONGO_CONNECTION_STRING=mongodb://root:example@mongodb:27017/wallet-accountant?authSource=admin
       - FRONTEND_URLS=http://wallet-accountant-ui:3000|http://localhost:3000
     ports:
-      - "8080:8080"
+      - "3080:8080"
       - "40000:40000"
     volumes:
       - "./:/app"

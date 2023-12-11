@@ -7,7 +7,7 @@ import (
 
 type Entity struct {
 	MovementTypeId  *Id                  `json:"movementTypeId" bson:"_id"`
-	Type            Type                 `json:"Type" bson:"type"`
+	Type            Type                 `json:"type" bson:"type"`
 	AccountId       *account.Id          `json:"accountId" bson:"account_id"`
 	SourceAccountId *account.Id          `json:"sourceAccountId" bson:"source_account_id,omitempty"`
 	Description     string               `json:"description" bson:"description"`

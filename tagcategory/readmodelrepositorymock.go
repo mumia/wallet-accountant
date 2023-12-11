@@ -12,6 +12,7 @@ type ReadModelRepositoryMock struct {
 	ExistsByIdFn           func(ctx context.Context, tagId *TagId) (bool, error)
 	ExistsByNameFn         func(ctx context.Context, name string) (bool, error)
 	GetAllFn               func(ctx context.Context) ([]*CategoryEntity, error)
+	GetByTagIdsFn          func(ctx context.Context, tagIds []TagId) ([]*CategoryEntity, error)
 	CategoryExistsByIdFn   func(ctx context.Context, id *Id) (bool, error)
 	CategoryExistsByNameFn func(ctx context.Context, name string) (bool, error)
 }
@@ -51,6 +52,14 @@ func (mock *ReadModelRepositoryMock) ExistsByName(ctx context.Context, name stri
 func (mock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*CategoryEntity, error) {
 	if mock != nil && mock.GetAllFn != nil {
 		return mock.GetAllFn(ctx)
+	}
+
+	return nil, nil
+}
+
+func (mock *ReadModelRepositoryMock) GetByTagIds(ctx context.Context, tagIds []TagId) ([]*CategoryEntity, error) {
+	if mock != nil && mock.GetByTagIdsFn != nil {
+		return mock.GetByTagIdsFn(ctx, tagIds)
 	}
 
 	return nil, nil

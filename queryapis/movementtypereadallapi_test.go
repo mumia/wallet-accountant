@@ -61,7 +61,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 
 	t.Run("successfully gets all movement types", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("GET", "/movement-types", nil)
+		request, err := http.NewRequest("GET", "/movement-type", nil)
 		requires.NoError(err)
 
 		router.ServeHTTP(w, request)
@@ -77,7 +77,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 
 	t.Run("fails to get all movement types", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("GET", "/movement-types", nil)
+		request, err := http.NewRequest("GET", "/movement-type", nil)
 		requires.NoError(err)
 
 		router.ServeHTTP(w, request)
