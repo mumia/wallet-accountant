@@ -2,6 +2,7 @@ package tagcategory
 
 import (
 	"context"
+	"errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -124,7 +125,13 @@ func (repository *ReadModelRepository) GetByTagIds(ctx context.Context, tagIds [
 		findOptions.Projection = bson.M{
 			"name":  1,
 			"notes": 1,
-			"tags":  bson.M{"$elemMatch": bson.M{"_id": bson.M{"$in": tagIds}}},
+			"tags": bson.M{
+				"$filter": bson.D{
+					{"input", "$tags"},
+					{"as", "tags"},
+					{"cond", bson.D{bson.E{"$in", bson.A{"$$tags._id", tagIds}}}},
+				},
+			},
 		}
 	}
 
@@ -172,7 +179,7 @@ func (repository *ReadModelRepository) CategoryExistsById(ctx context.Context, i
 func (repository *ReadModelRepository) CategoryExistsByName(ctx context.Context, name string) (bool, error) {
 	err := repository.collection().FindOne(ctx, bson.M{"name": name}).Err()
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = nil
 		}
 
