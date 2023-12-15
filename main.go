@@ -45,6 +45,8 @@ func main() {
 			definitions.AsRoute(queryapis.NewReadAllTagsApi),
 			definitions.AsRoute(queryapis.NewReadAllMovementTypesApi),
 			definitions.AsRoute(queryapis.NewReadMovementTypeApi),
+			definitions.AsRoute(queryapis.NewReadMovementTypeByAccountApi),
+			definitions.AsRoute(queryapis.NewReadCurrentAccountMonthApi),
 		),
 		fx.Provide(
 			// CommandMediator
@@ -58,7 +60,7 @@ func main() {
 			fx.Annotate(account.NewQueryMediator, fx.As(new(account.QueryMediatorer))),
 			fx.Annotate(tagcategory.NewQueryMediator, fx.As(new(tagcategory.QueryMediatorer))),
 			fx.Annotate(movementtype.NewQueryMediator, fx.As(new(movementtype.QueryMediatorer))),
-			//			fx.Annotate(accountmonth.NewQueryMediator, fx.As(new(accountmonth.QueryMediatorer))),
+			fx.Annotate(accountmonth.NewQueryMediator, fx.As(new(accountmonth.QueryMediatorer))),
 		),
 		fx.Provide(
 			// Aggregate factory

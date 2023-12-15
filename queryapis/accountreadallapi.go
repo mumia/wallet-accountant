@@ -34,5 +34,9 @@ func (api *ReadAllAccountsApi) Handle(ctx *gin.Context) {
 		return
 	}
 
+	if accounts == nil {
+		accounts = make([]*account.Entity, 0)
+	}
+
 	ctx.AsciiJSON(http.StatusOK, accounts)
 }

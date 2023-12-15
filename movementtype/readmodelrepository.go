@@ -4,6 +4,7 @@ import (
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"walletaccountant/account"
 	"walletaccountant/mongodb"
 )
 
@@ -16,6 +17,7 @@ type ReadModelWriter interface {
 type ReadModelReader interface {
 	GetAll(ctx context.Context) ([]*Entity, error)
 	GetByMovementTypeId(ctx context.Context, movementTypeId *Id) (*Entity, error)
+	GetByAccountId(ctx context.Context, accountId *account.Id) ([]*Entity, error)
 }
 
 type ReadModeler interface {
@@ -71,6 +73,31 @@ func (repository *ReadModelRepository) GetByMovementTypeId(ctx context.Context, 
 	}
 
 	return entity, nil
+}
+
+func (repository *ReadModelRepository) GetByAccountId(ctx context.Context, accountId *account.Id) ([]*Entity, error) {
+	cursor, err := repository.collection().Find(ctx, bson.M{"account_id": accountId})
+	if err != nil {
+		return nil, err
+	}
+
+	var entities []*Entity
+
+	for cursor.Next(ctx) {
+		var entity *Entity
+
+		if err := cursor.Decode(&entity); err != nil {
+			return nil, err
+		}
+
+		entities = append(entities, entity)
+	}
+
+	if err := cursor.Close(ctx); err != nil {
+		return nil, err
+	}
+
+	return entities, nil
 }
 
 func (repository *ReadModelRepository) collection() *mongo.Collection {
