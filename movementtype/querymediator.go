@@ -2,6 +2,7 @@ package movementtype
 
 import (
 	"github.com/gin-gonic/gin"
+	"walletaccountant/account"
 	"walletaccountant/definitions"
 )
 
@@ -9,6 +10,7 @@ var _ QueryMediatorer = &QueryMediator{}
 
 type QueryMediatorer interface {
 	MovementType(ctx *gin.Context, accountId *Id) (*Entity, *definitions.WalletAccountantError)
+	MovementTypesByAccountId(ctx *gin.Context, accountId *account.Id) ([]*Entity, *definitions.WalletAccountantError)
 	MovementTypes(ctx *gin.Context) ([]*Entity, *definitions.WalletAccountantError)
 }
 
@@ -31,6 +33,18 @@ func (mediator QueryMediator) MovementType(ctx *gin.Context, movementTypeId *Id)
 	}
 
 	return entity, nil
+}
+
+func (mediator QueryMediator) MovementTypesByAccountId(
+	ctx *gin.Context,
+	accountId *account.Id,
+) ([]*Entity, *definitions.WalletAccountantError) {
+	entities, err := mediator.repository.GetByAccountId(ctx, accountId)
+	if err != nil {
+		return nil, definitions.GenericError(err, nil)
+	}
+
+	return entities, nil
 }
 
 func (mediator QueryMediator) MovementTypes(ctx *gin.Context) ([]*Entity, *definitions.WalletAccountantError) {

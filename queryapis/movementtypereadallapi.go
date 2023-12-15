@@ -24,7 +24,7 @@ func (api *ReadAllMovementTypeApi) Configuration() (string, string) {
 }
 
 func (api *ReadAllMovementTypeApi) Handle(ctx *gin.Context) {
-	accounts, err := api.mediator.MovementTypes(ctx)
+	movementTypes, err := api.mediator.MovementTypes(ctx)
 
 	if err != nil {
 		api.log.Error("Failed to query all tags", zap.Error(err))
@@ -34,5 +34,9 @@ func (api *ReadAllMovementTypeApi) Handle(ctx *gin.Context) {
 		return
 	}
 
-	ctx.AsciiJSON(http.StatusOK, accounts)
+	if movementTypes == nil {
+		movementTypes = make([]*movementtype.Entity, 0)
+	}
+
+	ctx.AsciiJSON(http.StatusOK, movementTypes)
 }
