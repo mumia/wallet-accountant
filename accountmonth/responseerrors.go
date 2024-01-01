@@ -44,7 +44,7 @@ func NonExistentAccountError(
 
 func NonExistentMovementTypeError(
 	accountId string,
-	movementTypeId string,
+	movementTypeId *string,
 	month int,
 	year int,
 ) *definitions.WalletAccountantError {

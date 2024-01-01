@@ -4,15 +4,23 @@ import (
 	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/looplab/eventhorizon"
+	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
+	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 	"walletaccountant/movementtype"
+	"walletaccountant/tagcategory"
 )
+
+func stringPtr(value string) *string {
+	return &value
+}
 
 func setupCommandMediatorTest() {
 	commands := []func() eventhorizon.Command{
@@ -40,18 +48,28 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 	requires := require.New(t)
 
 	transferObject := accountmonth.RegisterNewAccountMovementTransferObject{
-		AccountId:      accountId1.String(),
-		MovementTypeId: movementTypeId1.String(),
-		Amount:         1010,
-		Date:           date,
+		AccountId:       accountId1.String(),
+		MovementTypeId:  stringPtr(movementTypeId1.String()),
+		Amount:          1010,
+		Date:            date,
+		Action:          "credit",
+		SourceAccountId: nil,
+		Description:     "My movement description",
+		Notes:           nil,
+		TagIds:          []string{tagId1.String()},
 	}
 
 	expectedCommand := &accountmonth.RegisterNewAccountMovement{
-		AccountMonthId:   accountMonthId,
-		MovementTypeId:   movementTypeId1,
-		MovementTypeType: movementtype.Credit,
-		Amount:           1010,
-		Date:             date,
+		AccountMonthId:    accountMonthId,
+		AccountMovementId: accountMovementId,
+		MovementTypeId:    &movementTypeId1,
+		Action:            common.Credit,
+		Amount:            1010,
+		Date:              date,
+		SourceAccountId:   nil,
+		Description:       "My movement description",
+		Notes:             nil,
+		TagIds:            []*tagcategory.TagId{&tagId1},
 	}
 
 	var accountByIdCalled int
@@ -83,7 +101,7 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 
 					requires.GreaterOrEqual(1, movementTypeByIdCalled)
 
-					asserts.Equal(expectedCommand.MovementTypeId, *movementTypeId)
+					asserts.Equal(expectedCommand.MovementTypeId, movementTypeId)
 
 					return &movementTypeEntity, nil
 				},
@@ -103,11 +121,18 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 				},
 			}
 
+			idCreator := &eventstoredb.IdCreatorMock{
+				NewFn: func() uuid.UUID {
+					return accountMovementId
+				},
+			}
+
 			commandMediator := accountmonth.NewCommandMediator(
 				commandHandler,
 				&accountmonth.ReadModelRepositoryMock{},
 				testCase.accountReadModelRepository,
 				testCase.movementTypeReadModelRepository,
+				idCreator,
 			)
 
 			err := commandMediator.RegisterNewAccountMovement(&gin.Context{}, transferObject)
@@ -246,6 +271,12 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 			accountByIdCalled = 0
 			movementTypeByIdCalled = 0
 
+			idCreator := &eventstoredb.IdCreatorMock{
+				NewFn: func() uuid.UUID {
+					return accountMovementId
+				},
+			}
+
 			commandMediator := accountmonth.NewCommandMediator(
 				&mocks.CommandHandlerMock{
 					HandleCommandFn: func(ctx context.Context, command eventhorizon.Command) error {
@@ -257,6 +288,7 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 				&accountmonth.ReadModelRepositoryMock{},
 				testCase.accountReadModelRepository,
 				testCase.movementTypeReadModelRepository,
+				idCreator,
 			)
 
 			err := commandMediator.RegisterNewAccountMovement(&gin.Context{}, testCase.transferObject)
@@ -329,6 +361,12 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			},
 		}
 
+		idCreator := &eventstoredb.IdCreatorMock{
+			NewFn: func() uuid.UUID {
+				return accountMovementId
+			},
+		}
+
 		commandMediator := accountmonth.NewCommandMediator(
 			commandHandler,
 			&accountmonth.ReadModelRepositoryMock{
@@ -353,6 +391,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				},
 			},
 			&movementtype.ReadModelRepositoryMock{},
+			idCreator,
 		)
 
 		err := commandMediator.EndAccountMonth(&gin.Context{}, transferObject)
@@ -526,6 +565,12 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			accountByIdCalled = 0
 			accountMonthByActiveMonthCalled = 0
 
+			idCreator := &eventstoredb.IdCreatorMock{
+				NewFn: func() uuid.UUID {
+					return accountMovementId
+				},
+			}
+
 			commandMediator := accountmonth.NewCommandMediator(
 				&mocks.CommandHandlerMock{
 					HandleCommandFn: func(ctx context.Context, command eventhorizon.Command) error {
@@ -537,6 +582,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				testCase.readModelRepository,
 				testCase.accountReadModelRepository,
 				&movementtype.ReadModelRepositoryMock{},
+				idCreator,
 			)
 
 			err := commandMediator.EndAccountMonth(&gin.Context{}, testCase.transferObject)

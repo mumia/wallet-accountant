@@ -77,7 +77,6 @@ func resolveAddress(logger *zap.Logger) string {
 	logger.Debug("Environment variable PORT is undefined. Using port :8080 by default")
 
 	return ":8080"
-
 }
 
 func addCorsConfig(router *gin.Engine, logger *zap.Logger) {
@@ -87,17 +86,22 @@ func addCorsConfig(router *gin.Engine, logger *zap.Logger) {
 
 	logger.Debug("CORS configured allowed hosts", zap.Strings("hosts", hosts))
 
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     hosts,
-		AllowMethods:     []string{"POST", "GET", "PUT", "PATCH"},
-		AllowHeaders:     []string{"Origin", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
-		AllowCredentials: true,
-		//AllowOriginFunc: func(origin string) bool {
-		//	return origin == "https://github.com"
-		//},
-		MaxAge: 12 * time.Hour,
-	}))
+	router.Use(
+		cors.New(
+			cors.Config{
+				AllowWebSockets:  true,
+				AllowOrigins:     hosts,
+				AllowMethods:     []string{"POST", "GET", "PUT", "PATCH"},
+				AllowHeaders:     []string{"Origin", "Content-Action, Content-Type"},
+				ExposeHeaders:    []string{"Content-Length", "Content-Action"},
+				AllowCredentials: true,
+				//AllowOriginFunc: func(origin string) bool {
+				//	return origin == "https://github.com"
+				//},
+				MaxAge: 12 * time.Hour,
+			},
+		),
+	)
 }
 
 func addRouteDefinitions(router *gin.Engine, routes []definitions.Route, logger *zap.Logger) {

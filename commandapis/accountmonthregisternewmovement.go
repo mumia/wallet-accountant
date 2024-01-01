@@ -65,5 +65,5 @@ func (api *RegisterNewAccountMovementApi) Handle(context *gin.Context) {
 		return
 	}
 
-	context.JSON(http.StatusNoContent, nil)
+	context.Status(http.StatusCreated)
 }

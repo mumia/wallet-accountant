@@ -6,23 +6,15 @@ import (
 	"fmt"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
-	"github.com/looplab/eventhorizon/uuid"
 	"time"
 	"walletaccountant/clock"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 )
 
 var _ events.VersionedAggregate = &Account{}
 
 const AggregateType eventhorizon.AggregateType = "account"
-
-type Id = uuid.UUID
-type Type int
-
-const (
-	Checking Type = iota + 1
-	Savings
-)
 
 type Currency string
 
@@ -43,7 +35,7 @@ type Account struct {
 
 	bankName            string
 	name                string
-	accountType         Type
+	accountType         common.AccountType
 	startingBalance     float64
 	startingBalanceDate time.Time
 	currency            Currency
@@ -157,7 +149,7 @@ func (account *Account) Name() string {
 	return account.name
 }
 
-func (account *Account) AccountType() Type {
+func (account *Account) AccountType() common.AccountType {
 	return account.accountType
 }
 

@@ -5,6 +5,7 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/common"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
 )
@@ -15,6 +16,8 @@ var year = uint(2023)
 var date = time.Date(int(year), month, 1, 0, 0, 0, 0, time.UTC)
 var accountMonthUUIDString = "46e18992-7977-9f44-4fee-b192d8c5a746"
 var accountMonthId = accountmonth.Id(uuid.MustParse(accountMonthUUIDString))
+var accountMovementUUIDString = "bbbcfa83-d879-4c24-b77d-a44e8ee572b2"
+var accountMovementId = accountmonth.AccountMovementId(uuid.MustParse(accountMovementUUIDString))
 var movementEventUUID1 = uuid.MustParse("72a196bc-d9b1-4c57-a916-3eabf1bf167b")
 var movementTypeId1 = movementtype.Id(movementEventUUID1)
 var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
@@ -51,7 +54,7 @@ var accountEntity = account.Entity{
 	AccountId:           &accountId1,
 	BankName:            "",
 	Name:                "",
-	AccountType:         0,
+	AccountType:         "checking",
 	StartingBalance:     0,
 	StartingBalanceDate: time.Time{},
 	Currency:            "",
@@ -66,7 +69,7 @@ var accountEntity2 = account.Entity{
 	AccountId:           &accountId1,
 	BankName:            "",
 	Name:                "",
-	AccountType:         0,
+	AccountType:         "checking",
 	StartingBalance:     0,
 	StartingBalanceDate: time.Time{},
 	Currency:            "",
@@ -79,7 +82,7 @@ var accountEntity2 = account.Entity{
 
 var movementTypeEntity = movementtype.Entity{
 	MovementTypeId:  &movementTypeId1,
-	Type:            movementtype.Credit,
+	Action:          common.Credit,
 	AccountId:       &accountId1,
 	SourceAccountId: nil,
 	Description:     description,
@@ -89,7 +92,7 @@ var movementTypeEntity = movementtype.Entity{
 
 var movementTypeEntity2 = movementtype.Entity{
 	MovementTypeId:  &movementTypeId1,
-	Type:            movementtype.Credit,
+	Action:          common.Credit,
 	AccountId:       &accountId2,
 	SourceAccountId: nil,
 	Description:     description,

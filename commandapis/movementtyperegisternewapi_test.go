@@ -23,20 +23,20 @@ import (
 var accountId2 = uuid.New()
 
 var movementTypeBody = `{
-	"type": "credit",
+	"action": "credit",
     "accountId": "` + accountId1.String() + `",
     "description": "mov type desc",
     "notes": "mov type notes",
-    "tags": ["` + tagId1.String() + `", "` + tagId2.String() + `"]
+    "tagIds": ["` + tagId1.String() + `", "` + tagId2.String() + `"]
 }`
 
 var movementTypeWithSourceAccountBody = `{
-	"type": "debit",
+	"action": "debit",
     "accountId": "` + accountId2.String() + `",
     "sourceAccountId": "` + accountId1.String() + `",
     "description": "mov type desc with source",
     "notes": "mov type notes with source",
-    "tags": ["` + tagId2.String() + `"]
+    "tagIds": ["` + tagId2.String() + `"]
 }`
 
 var expectedMovementTypeId1 = uuid.New()
@@ -46,7 +46,7 @@ var movNotes1 = "mov type notes"
 var movNotes2 = "mov type notes with source"
 
 var expectedMovementTypeTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
-	Type:            "credit",
+	Action:          "credit",
 	AccountId:       accountId1.String(),
 	SourceAccountId: nil,
 	Description:     "mov type desc",
@@ -56,7 +56,7 @@ var expectedMovementTypeTransferObject = movementtype.RegisterNewMovementTypeTra
 
 var sourceAccountIdString = accountId1.String()
 var expectedMovementTypeWithSourceTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
-	Type:            "debit",
+	Action:          "debit",
 	AccountId:       accountId2.String(),
 	SourceAccountId: &sourceAccountIdString,
 	Description:     "mov type desc with source",

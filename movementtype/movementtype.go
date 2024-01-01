@@ -9,28 +9,22 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"walletaccountant/account"
 	"walletaccountant/clock"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/tagcategory"
 )
 
 var _ events.VersionedAggregate = &MovementType{}
 
-const AggregateType eventhorizon.AggregateType = "movementType"
-
-const (
-	Debit  Type = "debit"
-	Credit Type = "credit"
-)
+const AggregateType eventhorizon.AggregateType = "action"
 
 type Id = uuid.UUID
-
-type Type string
 
 type MovementType struct {
 	*events.AggregateBase
 	clock *clock.Clock
 
-	movementType    Type
+	action          common.MovementAction
 	accountId       *account.Id
 	sourceAccountId *account.Id
 	description     string
@@ -64,7 +58,7 @@ func (movementType *MovementType) HandleCommand(ctx context.Context, command eve
 			NewMovementTypeRegistered,
 			&NewMovementTypeRegisteredData{
 				MovementTypeId:  &command.MovementTypeId,
-				Type:            command.Type,
+				Action:          command.Action,
 				AccountId:       &command.AccountId,
 				SourceAccountId: command.SourceAccountId,
 				Description:     command.Description,
@@ -89,7 +83,7 @@ func (movementType *MovementType) ApplyEvent(ctx context.Context, event eventhor
 			return definitions.EventDataTypeError(NewMovementTypeRegistered, event.EventType())
 		}
 
-		movementType.movementType = eventData.Type
+		movementType.action = eventData.Action
 		movementType.accountId = eventData.AccountId
 		movementType.sourceAccountId = eventData.SourceAccountId
 		movementType.description = eventData.Description
@@ -104,28 +98,4 @@ func (movementType *MovementType) MovementTypeId() *Id {
 	movementTypeId := Id(movementType.EntityID())
 
 	return &movementTypeId
-}
-
-func (movementType *MovementType) Type() Type {
-	return movementType.movementType
-}
-
-func (movementType *MovementType) AccountId() *account.Id {
-	return movementType.accountId
-}
-
-func (movementType *MovementType) SourceAccountId() *account.Id {
-	return movementType.sourceAccountId
-}
-
-func (movementType *MovementType) Description() string {
-	return movementType.description
-}
-
-func (movementType *MovementType) Notes() *string {
-	return movementType.notes
-}
-
-func (movementType *MovementType) TagIds() []*tagcategory.TagId {
-	return movementType.tagIds
 }

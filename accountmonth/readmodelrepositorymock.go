@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 	"walletaccountant/account"
-	"walletaccountant/movementtype"
 )
 
 var _ ReadModeler = &ReadModelRepository{}
@@ -25,10 +24,7 @@ type ReadModelRepositoryMock struct {
 	RegisterAccountMovementFn func(
 		ctx context.Context,
 		accountMonthId *Id,
-		movementTypeId *movementtype.Id,
-		movementTypeType movementtype.Type,
-		amount float64,
-		date time.Time,
+		eventData *NewAccountMovementRegisteredData,
 	) error
 	GetByAccountMonthIdFn     func(ctx context.Context, accountMonthId *Id) (*Entity, error)
 	GetByAccountActiveMonthFn func(ctx context.Context, account *account.Entity) (*Entity, error)
@@ -62,13 +58,10 @@ func (mock *ReadModelRepositoryMock) EndMonth(
 func (mock *ReadModelRepositoryMock) RegisterAccountMovement(
 	ctx context.Context,
 	accountMonthId *Id,
-	movementTypeId *movementtype.Id,
-	movementTypeType movementtype.Type,
-	amount float64,
-	date time.Time,
+	eventData *NewAccountMovementRegisteredData,
 ) error {
 	if mock != nil && mock.RegisterAccountMovementFn != nil {
-		return mock.RegisterAccountMovementFn(ctx, accountMonthId, movementTypeId, movementTypeType, amount, date)
+		return mock.RegisterAccountMovementFn(ctx, accountMonthId, eventData)
 	}
 
 	return nil

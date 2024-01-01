@@ -2,14 +2,18 @@ package accountmonth
 
 import (
 	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
+	"walletaccountant/eventstoredb"
 	"walletaccountant/movementtype"
+	"walletaccountant/tagcategory"
 )
 
 var _ CommandMediatorer = &CommandMediator{}
@@ -27,6 +31,7 @@ type CommandMediator struct {
 	repository             ReadModeler
 	accountRepository      account.ReadModeler
 	movementTypeRepository movementtype.ReadModeler
+	idCreator              eventstoredb.IdGenerator
 }
 
 func NewCommandMediator(
@@ -34,12 +39,14 @@ func NewCommandMediator(
 	repository ReadModeler,
 	accountRepository account.ReadModeler,
 	movementTypeRepository movementtype.ReadModeler,
+	idCreator eventstoredb.IdGenerator,
 ) *CommandMediator {
 	return &CommandMediator{
 		commandHandler:         commandHandler,
 		repository:             repository,
 		accountRepository:      accountRepository,
 		movementTypeRepository: movementTypeRepository,
+		idCreator:              idCreator,
 	}
 }
 
@@ -48,16 +55,21 @@ func (mediator CommandMediator) RegisterNewAccountMovement(
 	transferObject RegisterNewAccountMovementTransferObject,
 ) *definitions.WalletAccountantError {
 	accountId := account.Id(uuid.MustParse(transferObject.AccountId))
-	movementTypeId := account.Id(uuid.MustParse(transferObject.MovementTypeId))
 	month := transferObject.Date.Month()
 	year := uint(transferObject.Date.Year())
 
-	foundAccount, waErr := mediator.validateAccount(ctx, &accountId, &movementTypeId, month, year)
+	var movementTypeId = new(movementtype.Id)
+	if transferObject.MovementTypeId != nil {
+		parsedId := movementtype.Id(uuid.MustParse(*transferObject.MovementTypeId))
+		movementTypeId = &parsedId
+	}
+
+	foundAccount, waErr := mediator.validateAccount(ctx, &accountId, movementTypeId, month, year)
 	if waErr != nil {
 		return waErr
 	}
 
-	movementType, waErr := mediator.validateMovementType(ctx, transferObject)
+	movementType, waErr := mediator.validateMovementType(ctx, movementTypeId, transferObject)
 	if waErr != nil {
 		return waErr
 	}
@@ -84,10 +96,21 @@ func (mediator CommandMediator) RegisterNewAccountMovement(
 	)
 
 	registerNewAccountMovementCommand.AccountMonthId = *accountMonthId
-	registerNewAccountMovementCommand.MovementTypeId = *movementType.MovementTypeId
-	registerNewAccountMovementCommand.MovementTypeType = movementType.Type
+	registerNewAccountMovementCommand.AccountMovementId = AccountMovementId(mediator.idCreator.New())
+	if movementType != nil {
+		registerNewAccountMovementCommand.MovementTypeId = movementType.MovementTypeId
+	}
+	registerNewAccountMovementCommand.Action = common.MovementActionBuilder(transferObject.Action)
 	registerNewAccountMovementCommand.Amount = transferObject.Amount
 	registerNewAccountMovementCommand.Date = transferObject.Date
+	if transferObject.SourceAccountId != nil {
+		registerNewAccountMovementCommand.SourceAccountId = account.IdBuilder(
+			uuid.MustParse(*transferObject.SourceAccountId),
+		)
+	}
+	registerNewAccountMovementCommand.Description = transferObject.Description
+	registerNewAccountMovementCommand.Notes = transferObject.Notes
+	registerNewAccountMovementCommand.TagIds = tagcategory.TagIdsFromStrings(transferObject.TagIds)
 
 	err = mediator.commandHandler.HandleCommand(ctx, registerNewAccountMovementCommand)
 	if err != nil {
@@ -214,14 +237,18 @@ func (mediator CommandMediator) validateAccount(
 
 func (mediator CommandMediator) validateMovementType(
 	ctx context.Context,
+	movementTypeId *movementtype.Id,
 	transferObject RegisterNewAccountMovementTransferObject,
 ) (*movementtype.Entity, *definitions.WalletAccountantError) {
 	month := transferObject.Date.Month()
 	year := uint(transferObject.Date.Year())
 
-	movementTypeId := movementtype.Id(uuid.MustParse(transferObject.MovementTypeId))
-	movementType, err := mediator.movementTypeRepository.GetByMovementTypeId(ctx, &movementTypeId)
-	if err != nil && err != mongo.ErrNoDocuments {
+	if transferObject.MovementTypeId == nil {
+		return nil, nil
+	}
+
+	movementType, err := mediator.movementTypeRepository.GetByMovementTypeId(ctx, movementTypeId)
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, definitions.GenericError(err, definitions.ErrorContext{"movementTypeId": transferObject.MovementTypeId})
 	}
 
@@ -242,6 +269,9 @@ func (mediator CommandMediator) validateMovementTypeAccountMatch(
 	foundAccount *account.Entity,
 	transferObject RegisterNewAccountMovementTransferObject,
 ) *definitions.WalletAccountantError {
+	if movementType == nil {
+		return nil
+	}
 
 	if movementType.AccountId.String() != foundAccount.AccountId.String() {
 		return MismatchedAccountIdError(

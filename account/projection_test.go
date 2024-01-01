@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/common"
 )
 
 func TestProjection_HandleEvent(t *testing.T) {
@@ -20,7 +21,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		AccountId:           &accountId,
 		BankName:            "bank name",
 		Name:                "account name",
-		AccountType:         account.Checking,
+		AccountType:         common.Checking,
 		StartingBalance:     2069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.USD,

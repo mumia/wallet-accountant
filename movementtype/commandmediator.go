@@ -6,6 +6,7 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"walletaccountant/account"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/tagcategory"
@@ -67,7 +68,7 @@ func (mediator *CommandMediator) RegisterNewMovementType(
 	}
 
 	registerNewMovementTypeCommand.MovementTypeId = Id(mediator.idCreator.New())
-	registerNewMovementTypeCommand.Type = Type(transferObject.Type)
+	registerNewMovementTypeCommand.Action = common.MovementAction(transferObject.Action)
 	registerNewMovementTypeCommand.Description = transferObject.Description
 	registerNewMovementTypeCommand.Notes = transferObject.Notes
 

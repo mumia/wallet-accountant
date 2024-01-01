@@ -12,6 +12,7 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
@@ -23,7 +24,7 @@ var accountEntity1 = account.Entity{
 	AccountId:           &accountId1,
 	BankName:            "a bank name",
 	Name:                "an account name",
-	AccountType:         account.Checking,
+	AccountType:         common.Checking,
 	StartingBalance:     5069,
 	StartingBalanceDate: time.Now(),
 	Currency:            account.EUR,
@@ -40,7 +41,7 @@ var accountEntity2 = account.Entity{
 	AccountId:           &accountId2,
 	BankName:            "another bank name",
 	Name:                "annother account name",
-	AccountType:         account.Savings,
+	AccountType:         common.Savings,
 	StartingBalance:     6069,
 	StartingBalanceDate: time.Now().Add(1 * time.Minute),
 	Currency:            account.USD,
@@ -104,7 +105,7 @@ var note2 = "movement type with source account notes"
 
 var movementTypeEntity1 = movementtype.Entity{
 	MovementTypeId:  &movementTypeId1,
-	Type:            movementtype.Credit,
+	Action:          common.Credit,
 	AccountId:       &accountId1,
 	SourceAccountId: nil,
 	Description:     "movement type description",
@@ -114,7 +115,7 @@ var movementTypeEntity1 = movementtype.Entity{
 
 var movementTypeWithSourceAccountEntity1 = movementtype.Entity{
 	MovementTypeId:  &movementTypeId2,
-	Type:            movementtype.Debit,
+	Action:          common.Debit,
 	AccountId:       &accountId2,
 	SourceAccountId: &accountId1,
 	Description:     "movement type with source account description",

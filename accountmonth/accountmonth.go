@@ -12,8 +12,8 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/clock"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
-	"walletaccountant/movementtype"
 )
 
 var _ events.VersionedAggregate = &AccountMonth{}
@@ -22,6 +22,7 @@ const AggregateType eventhorizon.AggregateType = "accountMonth"
 const idFormat string = "%s-%d-%d"
 
 type Id = uuid.UUID
+type AccountMovementId = uuid.UUID
 
 type ActiveMonth struct {
 	month time.Month
@@ -32,9 +33,8 @@ type AccountMonth struct {
 	*events.AggregateBase
 	clock *clock.Clock
 
-	accountMonthId *Id
-	activeMonth    *ActiveMonth
-	balance        float64
+	activeMonth *ActiveMonth
+	balance     float64
 }
 
 func (accountMonth *AccountMonth) HandleCommand(ctx context.Context, command eventhorizon.Command) error {
@@ -78,11 +78,16 @@ func (accountMonth *AccountMonth) HandleCommand(ctx context.Context, command eve
 		accountMonth.AppendEvent(
 			NewAccountMovementRegistered,
 			&NewAccountMovementRegisteredData{
-				AccountMonthId:   &command.AccountMonthId,
-				MovementTypeId:   &command.MovementTypeId,
-				MovementTypeType: command.MovementTypeType,
-				Amount:           command.Amount,
-				Date:             command.Date,
+				AccountMonthId:    &command.AccountMonthId,
+				AccountMovementId: &command.AccountMovementId,
+				MovementTypeId:    command.MovementTypeId,
+				Action:            command.Action,
+				Amount:            command.Amount,
+				Date:              command.Date,
+				SourceAccountId:   command.SourceAccountId,
+				Description:       command.Description,
+				Notes:             command.Notes,
+				TagIds:            command.TagIds,
 			},
 			accountMonth.clock.Now(),
 		)
@@ -128,7 +133,6 @@ func (accountMonth *AccountMonth) ApplyEvent(ctx context.Context, event eventhor
 			year:  eventData.Year,
 		}
 
-		accountMonth.accountMonthId = eventData.AccountMonthId
 		accountMonth.activeMonth = &activeMonth
 		accountMonth.balance = eventData.StartBalance
 
@@ -138,11 +142,11 @@ func (accountMonth *AccountMonth) ApplyEvent(ctx context.Context, event eventhor
 			return definitions.EventDataTypeError(NewAccountMovementRegistered, event.EventType())
 		}
 
-		switch eventData.MovementTypeType {
-		case movementtype.Credit:
+		switch eventData.Action {
+		case common.Credit:
 			accountMonth.balance = accountMonth.balance + eventData.Amount
 
-		case movementtype.Debit:
+		case common.Debit:
 			accountMonth.balance = accountMonth.balance - eventData.Amount
 		}
 

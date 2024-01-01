@@ -40,7 +40,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 	requires := require.New(t)
 
 	transferObject := movementtype.RegisterNewMovementTypeTransferObject{
-		Type:            string(movementType),
+		Action:          string(movementType),
 		AccountId:       accountId1.String(),
 		SourceAccountId: nil,
 		Description:     description,
@@ -49,7 +49,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 	}
 	accountId1String := accountId1.String()
 	transferObjectWithSameAccounts := movementtype.RegisterNewMovementTypeTransferObject{
-		Type:            string(movementType),
+		Action:          string(movementType),
 		AccountId:       accountId1.String(),
 		SourceAccountId: &accountId1String,
 		Description:     description,
@@ -59,7 +59,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 
 	expectedCommand := &movementtype.RegisterNewMovementType{
 		MovementTypeId:  movementTypeId1,
-		Type:            movementType,
+		Action:          movementType,
 		AccountId:       accountId1,
 		SourceAccountId: nil,
 		Description:     description,
@@ -187,7 +187,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		idCreator                      *eventstoredb.IdCreatorMock
 	}{
 		{
-			"fails to handle register new movementType, because of account and source account are the same",
+			"fails to handle register new action, because of account and source account are the same",
 			0,
 			0,
 			0,
@@ -221,7 +221,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 			},
 		},
 		{
-			"fails to handle register new movementType, because of account not found",
+			"fails to handle register new action, because of account not found",
 			0,
 			1,
 			0,
@@ -255,7 +255,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 			},
 		},
 		{
-			"fails to handle register new movementType, because of tags not found",
+			"fails to handle register new action, because of tags not found",
 			0,
 			1,
 			1,
@@ -289,7 +289,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 			},
 		},
 		{
-			"fails to handle register new movementType, because of err on command handler",
+			"fails to handle register new action, because of err on command handler",
 			1,
 			1,
 			1,

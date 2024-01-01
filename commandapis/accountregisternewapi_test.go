@@ -18,13 +18,14 @@ import (
 	"walletaccountant/account"
 	"walletaccountant/api"
 	"walletaccountant/commandapis"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 )
 
 var accountBody1 = `{
 	"bankName": "a bank name",
 	"name": "the bank account",
-	"accountType": 1,
+	"accountType": "savings",
 	"startingBalance": 10069.5,
 	"startingBalanceDate": "2018-08-26T00:00:00Z",
 	"currency": "USD",
@@ -34,7 +35,7 @@ var accountBody1 = `{
 var accountBody2 = `{
 	"bankName": "a bank name",
 	"name": "the bank account",
-	"accountType": 1,
+	"accountType": "savings",
 	"startingBalance": 10069.5,
 	"startingBalanceDate": "2018-08-26T00:00:00Z",
 	"currency": "USD",
@@ -44,7 +45,7 @@ var accountBody2 = `{
 var accountBody3 = `{
 	"bankName": "a bank name",
 	"name": "the bank account",
-	"accountType": 1,
+	"accountType": "savings",
 	"startingBalance": 10069.5,
 	"startingBalanceDate": "2018-08-26T00:00:00Z",
 	"currency": "USD"
@@ -55,7 +56,7 @@ var notes1 = "some notes of the account"
 var expectedTransferObject1 = account.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
-	AccountType:         1,
+	AccountType:         string(common.Savings),
 	StartingBalance:     10069.5,
 	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
 	Currency:            "USD",
@@ -66,7 +67,7 @@ var notes2 = ""
 var expectedTransferObject2 = account.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
-	AccountType:         1,
+	AccountType:         string(common.Savings),
 	StartingBalance:     10069.5,
 	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
 	Currency:            "USD",
@@ -76,7 +77,7 @@ var expectedTransferObject2 = account.RegisterNewAccountTransferObject{
 var expectedTransferObject3 = account.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
-	AccountType:         1,
+	AccountType:         string(common.Savings),
 	StartingBalance:     10069.5,
 	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
 	Currency:            "USD",

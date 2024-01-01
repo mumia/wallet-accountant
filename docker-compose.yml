@@ -7,7 +7,7 @@ services:
     environment:
       - EVENTSTORE_CONNETION_STRING=esdb://eventstore:2113?keepAliveTimeout=10000&keepAliveInterval=10000&tls=false
       - MONGO_CONNECTION_STRING=mongodb://root:example@mongodb:27017/wallet-accountant?authSource=admin
-      - FRONTEND_URLS=http://wallet-accountant-ui:3000|http://localhost:3000
+      - FRONTEND_URLS=http://wallet-accountant-ui:3000|ws://wallet-accountant-ui:3000|http://localhost:3000
     ports:
       - "3080:8080"
       - "40000:40000"

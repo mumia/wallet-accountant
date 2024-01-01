@@ -5,6 +5,7 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"time"
 	"walletaccountant/commands"
+	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 )
 
@@ -39,14 +40,14 @@ func RegisterCommandHandler(
 }
 
 type RegisterNewAccount struct {
-	AccountId           Id        `json:"account_id"`
-	BankName            string    `json:"bank_name"`
-	Name                string    `json:"name"`
-	AccountType         Type      `json:"type"`
-	StartingBalance     float64   `json:"starting_balance"`
-	StartingBalanceDate time.Time `json:"starting_balance_date"`
-	Currency            Currency  `json:"currency"`
-	Notes               *string   `json:"notes" eh:"optional"`
+	AccountId           Id                 `json:"account_id"`
+	BankName            string             `json:"bank_name"`
+	Name                string             `json:"name"`
+	AccountType         common.AccountType `json:"type"`
+	StartingBalance     float64            `json:"starting_balance"`
+	StartingBalanceDate time.Time          `json:"starting_balance_date"`
+	Currency            Currency           `json:"currency"`
+	Notes               *string            `json:"notes" eh:"optional"`
 }
 
 func (r RegisterNewAccount) AggregateID() uuid.UUID {

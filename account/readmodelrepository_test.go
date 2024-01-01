@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/common"
 	"walletaccountant/mongodb"
 )
 
@@ -24,7 +25,7 @@ var expectedAccountEntity1 = account.Entity{
 	AccountId:           &expectedAccountId1,
 	BankName:            "a bank name",
 	Name:                "an account name",
-	AccountType:         account.Checking,
+	AccountType:         common.Checking,
 	StartingBalance:     5069,
 	StartingBalanceDate: time.Now(),
 	Currency:            account.EUR,
@@ -57,7 +58,7 @@ var expectedAccountEntity2 = account.Entity{
 	AccountId:           &expectedAccountId1,
 	BankName:            "another bank name",
 	Name:                "annother account name",
-	AccountType:         account.Savings,
+	AccountType:         common.Savings,
 	StartingBalance:     6069,
 	StartingBalanceDate: time.Now().Add(1 * time.Minute),
 	Currency:            account.USD,
@@ -270,7 +271,10 @@ func assertCreate(update bson.Raw, asserts *assert.Assertions) {
 
 	asserts.Equal(expectedAccountEntity1.BankName, update.Lookup("bank_name").StringValue())
 	asserts.Equal(expectedAccountEntity1.Name, update.Lookup("name").StringValue())
-	asserts.Equal(expectedAccountEntity1.AccountType, account.Type(update.Lookup("account_type").Int32()))
+	asserts.Equal(
+		expectedAccountEntity1.AccountType,
+		common.AccountType(update.Lookup("account_type").StringValue()),
+	)
 	asserts.Equal(expectedAccountEntity1.StartingBalance, update.Lookup("starting_balance").Double())
 	asserts.Equal(
 		expectedAccountEntity1.StartingBalanceDate.Format("2006-02-01"),
