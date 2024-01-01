@@ -3,7 +3,9 @@ package accountmonth
 import (
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/common"
 	"walletaccountant/movementtype"
+	"walletaccountant/tagcategory"
 )
 
 type Entity struct {
@@ -12,6 +14,7 @@ type Entity struct {
 	ActiveMonth    *EntityActiveMonth `json:"activeMonth" bson:"active_month"`
 	Movements      []*EntityMovement  `json:"movements" bson:"movements"`
 	Balance        float64            `json:"balance" bson:"balance"`
+	InitialBalance float64            `json:"initialBalance" bson:"initial_balance"`
 	MonthEnded     bool               `json:"monthEnded" bson:"month_ended"`
 }
 
@@ -21,7 +24,12 @@ type EntityActiveMonth struct {
 }
 
 type EntityMovement struct {
-	MovementTypeId *movementtype.Id `json:"movementTypeId" bson:"movement_type_id"`
-	Amount         float64          `json:"amount" bson:"amount"`
-	Date           time.Time        `json:"date" bson:"date"`
+	MovementTypeId  *movementtype.Id      `json:"movementTypeId" bson:"movement_type_id"`
+	Action          common.MovementAction `json:"action" bson:"action"`
+	Amount          float64               `json:"amount" bson:"amount"`
+	Date            time.Time             `json:"date" bson:"date"`
+	SourceAccountId *account.Id           `json:"sourceAccountId" bson:"source_account_id"`
+	Description     string                `json:"description" bson:"description"`
+	Notes           *string               `json:"notes" bson:"notes"`
+	TagIds          []*tagcategory.TagId  `json:"tagIds" bson:"tag_ids"`
 }

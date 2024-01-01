@@ -6,8 +6,10 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/commands"
+	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/movementtype"
+	"walletaccountant/tagcategory"
 )
 
 var _ eventhorizon.Command = &RegisterNewAccountMovement{}
@@ -46,11 +48,16 @@ func RegisterCommandHandler(
 }
 
 type RegisterNewAccountMovement struct {
-	AccountMonthId   Id                `json:"account_month"`
-	MovementTypeId   movementtype.Id   `json:"movement_type_id"`
-	MovementTypeType movementtype.Type `json:"movement_type"`
-	Amount           float64           `json:"amount"`
-	Date             time.Time         `json:"date"`
+	AccountMonthId    Id                    `json:"account_month_id"`
+	AccountMovementId AccountMovementId     `json:"account_movement_id"`
+	MovementTypeId    *movementtype.Id      `json:"movement_type_id" eh:"optional"`
+	Action            common.MovementAction `json:"action"`
+	Amount            float64               `json:"amount"`
+	Date              time.Time             `json:"date"`
+	SourceAccountId   *account.Id           `json:"source_account_id" eh:"optional"`
+	Description       string                `json:"description"`
+	Notes             *string               `json:"notes" eh:"optional"`
+	TagIds            []*tagcategory.TagId  `json:"tagIds"`
 }
 
 func (command RegisterNewAccountMovement) AggregateID() uuid.UUID {

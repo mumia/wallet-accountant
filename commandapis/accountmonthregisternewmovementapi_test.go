@@ -17,21 +17,43 @@ import (
 	"walletaccountant/accountmonth"
 	"walletaccountant/api"
 	"walletaccountant/commandapis"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 )
 
 var registerNewMovementBody = `{
 	"accountId": "aeea307f-3c57-467c-8954-5f541aef6772",
+	"action": "credit",
 	"movementTypeId": "72a196bc-d9b1-4c57-a916-3eabf1bf167b",
 	"amount": 200,
-	"date": "2023-01-01T01:00:00Z"
+	"date": "2023-01-01T01:00:00Z",
+	"description": "mov type desc",
+    "notes": "mov type notes",
+    "tagIds": ["b6e4fa72-a603-4226-857f-1f11d2af9f44", "99a2b571-152e-65f4-c9ef-0bd08751519c"]
 }`
+
+//var movementTypeWithSourceAccountBody = `{
+//	"action": "debit",
+//    "accountId": "` + accountId2.String() + `",
+//    "sourceAccountId": "` + accountId1.String() + `",
+//    "description": "mov type desc with source",
+//    "notes": "mov type notes with source",
+//    "tags": ["` + tagId2.String() + `"]
+//}`
 
 var expectedRegisterNewMovementTransferObject = accountmonth.RegisterNewAccountMovementTransferObject{
 	AccountId:      accountId1.String(),
-	MovementTypeId: movementTypeId1.String(),
+	Action:         string(common.Credit),
+	MovementTypeId: stringPtr(movementTypeId1.String()),
 	Amount:         200,
 	Date:           time.Date(2023, time.January, 1, 1, 0, 0, 0, time.UTC),
+	Description:    "mov type desc",
+	Notes:          stringPtr("mov type notes"),
+	TagIds:         []string{tagId1.String(), tagId2.String()},
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
@@ -83,7 +105,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			case 5:
 				return accountmonth.NonExistentMovementTypeError(
 					accountId1.String(),
-					movementTypeId1.String(),
+					stringPtr(movementTypeId1.String()),
 					1,
 					2023,
 				)
@@ -120,7 +142,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 		request.Header.Add("Content-Type", "application/json")
 		router.ServeHTTP(w, request)
 
-		asserts.Equal(http.StatusNoContent, w.Code)
+		asserts.Equal(http.StatusCreated, w.Code)
 		asserts.Equal("", w.Body.String())
 	})
 

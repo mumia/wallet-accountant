@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 	"testing"
+	"walletaccountant/common"
 	"walletaccountant/mongodb"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
@@ -128,7 +129,7 @@ func assertEventsForInsert(mt *mtest.T, asserts *assert.Assertions, requires *re
 
 func assertCreate1(command bson.Raw, asserts *assert.Assertions) {
 	assertBinaryId(command.Lookup("_id"), movementTypeId1.String(), asserts)
-	asserts.Equal(string(movementtype.Credit), command.Lookup("type").StringValue())
+	asserts.Equal(string(common.Credit), command.Lookup("action").StringValue())
 	assertBinaryId(command.Lookup("account_id"), accountId1.String(), asserts)
 	asserts.True(command.Lookup("source_account_id").IsZero())
 	asserts.Equal(description, command.Lookup("description").StringValue())
@@ -138,7 +139,7 @@ func assertCreate1(command bson.Raw, asserts *assert.Assertions) {
 
 func assertCreateWithSourceAccount(command bson.Raw, asserts *assert.Assertions) {
 	assertBinaryId(command.Lookup("_id"), movementTypeId2.String(), asserts)
-	asserts.Equal(string(movementtype.Debit), command.Lookup("type").StringValue())
+	asserts.Equal(string(common.Debit), command.Lookup("action").StringValue())
 	assertBinaryId(command.Lookup("account_id"), accountId2.String(), asserts)
 	assertBinaryId(command.Lookup("source_account_id"), sourceAccountId.String(), asserts)
 	asserts.Equal(description2, command.Lookup("description").StringValue())

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/common"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
 )
@@ -24,7 +25,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 	var notes1 = "my movement type notes"
 	newMovementTypeRegisteredData := movementtype.NewMovementTypeRegisteredData{
 		MovementTypeId:  &movementTypeId,
-		Type:            movementtype.Credit,
+		Action:          common.Credit,
 		AccountId:       &accountId,
 		SourceAccountId: &sourceAccountId,
 		Description:     "movement type description",
@@ -34,7 +35,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 
 	expectedMovementTypeEntity := movementtype.Entity{
 		MovementTypeId:  newMovementTypeRegisteredData.MovementTypeId,
-		Type:            newMovementTypeRegisteredData.Type,
+		Action:          newMovementTypeRegisteredData.Action,
 		AccountId:       newMovementTypeRegisteredData.AccountId,
 		SourceAccountId: newMovementTypeRegisteredData.SourceAccountId,
 		Description:     newMovementTypeRegisteredData.Description,

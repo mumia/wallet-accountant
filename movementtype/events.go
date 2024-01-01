@@ -3,6 +3,7 @@ package movementtype
 import (
 	"github.com/looplab/eventhorizon"
 	"walletaccountant/account"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/tagcategory"
 )
@@ -30,11 +31,11 @@ func (eventList *EventRegister) Registers() []definitions.EventDataRegister {
 }
 
 type NewMovementTypeRegisteredData struct {
-	MovementTypeId  *Id                  `json:"movement_type_id"`
-	Type            Type                 `json:"type"`
-	AccountId       *account.Id          `json:"account_id"`
-	SourceAccountId *account.Id          `json:"source_account_id"`
-	Description     string               `json:"description"`
-	Notes           *string              `json:"notes"`
-	TagIds          []*tagcategory.TagId `json:"tag_ids"`
+	MovementTypeId  *Id                   `json:"movement_type_id"`
+	Action          common.MovementAction `json:"action"`
+	AccountId       *account.Id           `json:"account_id"`
+	SourceAccountId *account.Id           `json:"source_account_id"`
+	Description     string                `json:"description"`
+	Notes           *string               `json:"notes"`
+	TagIds          []*tagcategory.TagId  `json:"tag_ids"`
 }

@@ -9,7 +9,8 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
-	"walletaccountant/movementtype"
+	"walletaccountant/common"
+	"walletaccountant/tagcategory"
 )
 
 func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
@@ -17,21 +18,29 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 	requires := require.New(t)
 
 	newMovementTypeRegisteredData := accountmonth.NewAccountMovementRegisteredData{
-		AccountMonthId:   &accountMonthId,
-		MovementTypeId:   &movementTypeId1,
-		MovementTypeType: movementtype.Debit,
-		Amount:           1040.20,
-		Date:             date,
+		AccountMonthId:  &accountMonthId,
+		MovementTypeId:  &movementTypeId1,
+		Action:          common.Debit,
+		Amount:          1040.20,
+		Date:            date,
+		SourceAccountId: nil,
+		Description:     "Test description",
+		Notes:           nil,
+		TagIds:          []*tagcategory.TagId{&tagId1},
 	}
 
 	expectedRegisterAccountMonthId := &accountMonthId
 
 	expectedRegisterMovement := accountmonth.EntityMovement{
-		MovementTypeId: &movementTypeId1,
-		Amount:         1040.20,
-		Date:           date,
+		MovementTypeId:  &movementTypeId1,
+		Action:          common.Debit,
+		Amount:          1040.20,
+		Date:            date,
+		SourceAccountId: nil,
+		Description:     "Test description",
+		Notes:           nil,
+		TagIds:          []*tagcategory.TagId{&tagId1},
 	}
-	expectedRegisterMovementType := movementtype.Debit
 
 	registerCallCount := 0
 	getByAccountMonthIdCallCount := 0
@@ -39,18 +48,19 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 		RegisterAccountMovementFn: func(
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
-			movementTypeId *movementtype.Id,
-			movementTypeType movementtype.Type,
-			amount float64,
-			date time.Time,
+			eventData *accountmonth.NewAccountMovementRegisteredData,
 		) error {
 			registerCallCount++
 
 			asserts.Equal(expectedRegisterAccountMonthId, accountMonthId)
-			asserts.Equal(expectedRegisterMovement.MovementTypeId, movementTypeId)
-			asserts.Equal(expectedRegisterMovement.Amount, amount)
-			asserts.Equal(expectedRegisterMovement.Date, date)
-			asserts.Equal(expectedRegisterMovementType, movementTypeType)
+			asserts.Equal(expectedRegisterMovement.MovementTypeId, eventData.MovementTypeId)
+			asserts.Equal(expectedRegisterMovement.Action, eventData.Action)
+			asserts.Equal(expectedRegisterMovement.Amount, eventData.Amount)
+			asserts.Equal(expectedRegisterMovement.Date, eventData.Date)
+			asserts.Equal(expectedRegisterMovement.SourceAccountId, eventData.SourceAccountId)
+			asserts.Equal(expectedRegisterMovement.Description, eventData.Description)
+			asserts.Equal(expectedRegisterMovement.Notes, eventData.Notes)
+			asserts.Equal(expectedRegisterMovement.TagIds, eventData.TagIds)
 
 			return nil
 		},

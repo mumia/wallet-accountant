@@ -10,6 +10,7 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 	"walletaccountant/saga"
@@ -97,7 +98,7 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 									AccountId:           &accountId1,
 									BankName:            "bank name",
 									Name:                "account name",
-									AccountType:         account.Checking,
+									AccountType:         common.Checking,
 									StartingBalance:     2069,
 									StartingBalanceDate: time.Now(),
 									Currency:            account.USD,

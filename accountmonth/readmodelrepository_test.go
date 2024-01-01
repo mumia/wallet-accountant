@@ -9,8 +9,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 	"testing"
 	"walletaccountant/accountmonth"
+	"walletaccountant/common"
 	"walletaccountant/mongodb"
-	"walletaccountant/movementtype"
 )
 
 func setupBalance() float64 {
@@ -116,17 +116,22 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-		err := readModelRepository.RegisterAccountMovement(
-			context.Background(),
-			&accountMonthId,
-			&movementTypeId1,
-			movementtype.Debit,
-			setupBalance(),
-			date,
-		)
+		eventData := accountmonth.NewAccountMovementRegisteredData{
+			AccountMonthId:  &accountMonthId,
+			MovementTypeId:  &movementTypeId1,
+			Action:          common.Debit,
+			Amount:          setupBalance(),
+			Date:            date,
+			SourceAccountId: nil,
+			Description:     "",
+			Notes:           nil,
+			TagIds:          nil,
+		}
+
+		err := readModelRepository.RegisterAccountMovement(context.Background(), &accountMonthId, &eventData)
 		requires.NoError(err)
 
-		assertRegisterAccountMovement(movementtype.Debit, assertEventsForUpdate(mt, asserts, requires), asserts)
+		assertRegisterAccountMovement(common.Debit, assertEventsForUpdate(mt, asserts, requires), asserts)
 	})
 
 	mt.Run("test successful register account movement, credit", func(mt *mtest.T) {
@@ -134,17 +139,22 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-		err := readModelRepository.RegisterAccountMovement(
-			context.Background(),
-			&accountMonthId,
-			&movementTypeId1,
-			movementtype.Credit,
-			setupBalance(),
-			date,
-		)
+		eventData := accountmonth.NewAccountMovementRegisteredData{
+			AccountMonthId:  &accountMonthId,
+			MovementTypeId:  &movementTypeId1,
+			Action:          common.Credit,
+			Amount:          setupBalance(),
+			Date:            date,
+			SourceAccountId: nil,
+			Description:     "",
+			Notes:           nil,
+			TagIds:          nil,
+		}
+
+		err := readModelRepository.RegisterAccountMovement(context.Background(), &accountMonthId, &eventData)
 		requires.NoError(err)
 
-		assertRegisterAccountMovement(movementtype.Credit, assertEventsForUpdate(mt, asserts, requires), asserts)
+		assertRegisterAccountMovement(common.Credit, assertEventsForUpdate(mt, asserts, requires), asserts)
 	})
 
 	mt.Run("test failure to start account month", func(mt *mtest.T) {
@@ -160,17 +170,22 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 			),
 		)
 
-		err := readModelRepository.RegisterAccountMovement(
-			context.Background(),
-			&accountMonthId,
-			&movementTypeId1,
-			movementtype.Debit,
-			setupBalance(),
-			date,
-		)
+		eventData := accountmonth.NewAccountMovementRegisteredData{
+			AccountMonthId:  &accountMonthId,
+			MovementTypeId:  &movementTypeId1,
+			Action:          common.Debit,
+			Amount:          setupBalance(),
+			Date:            date,
+			SourceAccountId: nil,
+			Description:     "",
+			Notes:           nil,
+			TagIds:          nil,
+		}
+
+		err := readModelRepository.RegisterAccountMovement(context.Background(), &accountMonthId, &eventData)
 		requires.Error(err)
 
-		assertRegisterAccountMovement(movementtype.Debit, assertEventsForUpdate(mt, asserts, requires), asserts)
+		assertRegisterAccountMovement(common.Debit, assertEventsForUpdate(mt, asserts, requires), asserts)
 	})
 }
 
@@ -257,9 +272,9 @@ func assertEndMonth(command bson.Raw, asserts *assert.Assertions) {
 	asserts.True(command.Lookup("$set").Document().Lookup("month_ended").Boolean())
 }
 
-func assertRegisterAccountMovement(movementType movementtype.Type, command bson.Raw, asserts *assert.Assertions) {
+func assertRegisterAccountMovement(movementAction common.MovementAction, command bson.Raw, asserts *assert.Assertions) {
 	balanceChange := setupBalance()
-	if movementType == movementtype.Debit {
+	if movementAction == common.Debit {
 		balanceChange = balanceChange * -1
 	}
 

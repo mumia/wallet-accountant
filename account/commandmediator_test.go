@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 )
@@ -18,7 +19,7 @@ var newId = uuid.New()
 var expectedAccountId = Id(newId)
 var bankName = "my bank name"
 var name = "account name"
-var accountType = Type(Checking)
+var accountType = common.Checking
 var startingBalance = float64(1269)
 var startingBalanceDate = time.Now()
 var currency = Currency(USD)
@@ -50,7 +51,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 	transferObject := RegisterNewAccountTransferObject{
 		BankName:            bankName,
 		Name:                name,
-		AccountType:         int(accountType),
+		AccountType:         string(accountType),
 		StartingBalance:     startingBalance,
 		StartingBalanceDate: startingBalanceDate,
 		Currency:            string(currency),

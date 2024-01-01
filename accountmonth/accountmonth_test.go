@@ -10,7 +10,8 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/clock"
-	"walletaccountant/movementtype"
+	"walletaccountant/common"
+	"walletaccountant/tagcategory"
 )
 
 func setupAccountMonthTest(instants []clock.Instant) func(id uuid.UUID) eventhorizon.Aggregate {
@@ -21,9 +22,17 @@ func setupAccountMonthTest(instants []clock.Instant) func(id uuid.UUID) eventhor
 }
 
 func setupAccountMonthId() *Id {
-	uuidString := "72a196bc-d9b1-4c57-a916-3eabf1bf167b"
+	uuidString := "6c686c88-3f90-494f-bbb4-9c412d514302"
 
 	id := Id(uuid.MustParse(uuidString))
+
+	return &id
+}
+
+func setupAccountMovementId() *AccountMovementId {
+	uuidString := "bbbcfa83-d879-4c24-b77d-a44e8ee572b2"
+
+	id := AccountMovementId(uuid.MustParse(uuidString))
 
 	return &id
 }
@@ -112,6 +121,9 @@ func TestAccountMonth_HandleCommand_RegisterNewAccountMovement(t *testing.T) {
 		uncommittedEvents := accountMonthAggregate.UncommittedEvents()
 		asserts.Equal(1, len(uncommittedEvents))
 		asserts.Equal(expectedEvent, uncommittedEvents[0])
+		asserts.Equal(expectedEvent.EventType(), uncommittedEvents[0].EventType())
+		asserts.Equal(expectedEvent.AggregateType(), uncommittedEvents[0].AggregateType())
+		asserts.Equal(expectedEvent.Data(), uncommittedEvents[0].Data())
 	})
 
 	t.Run("fails to register new account movement, because account month not started", func(t *testing.T) {
@@ -211,12 +223,19 @@ func TestAccountMonth_HandleCommand_EndAccountMonth(t *testing.T) {
 }
 
 func createRegisterNewAccountMovementCommand(date time.Time) eventhorizon.Command {
+	tagId := tagcategory.TagId(uuid.MustParse("84c34932-9d22-40f0-9e56-443fcafc84fe"))
+
 	return &RegisterNewAccountMovement{
-		AccountMonthId:   *setupAccountMonthId(),
-		MovementTypeId:   *setupMovementTypeId(),
-		MovementTypeType: movementtype.Debit,
-		Amount:           1032,
-		Date:             date,
+		AccountMonthId:    *setupAccountMonthId(),
+		AccountMovementId: *setupAccountMovementId(),
+		MovementTypeId:    setupMovementTypeId(),
+		Action:            common.Debit,
+		Amount:            1032,
+		Date:              date,
+		SourceAccountId:   nil,
+		Description:       "Movement description",
+		Notes:             nil,
+		TagIds:            []*tagcategory.TagId{&tagId},
 	}
 }
 
@@ -245,17 +264,24 @@ func createEndAccountMonthCommand() eventhorizon.Command {
 }
 
 func createRegisterNewAccountEvent(date time.Time, createdAt time.Time) eventhorizon.Event {
+	tagId := tagcategory.TagId(uuid.MustParse("84c34932-9d22-40f0-9e56-443fcafc84fe"))
+
 	return eventhorizon.NewEvent(
 		NewAccountMovementRegistered,
 		&NewAccountMovementRegisteredData{
-			AccountMonthId:   setupAccountMonthId(),
-			MovementTypeId:   setupMovementTypeId(),
-			MovementTypeType: movementtype.Debit,
-			Amount:           1032,
-			Date:             date,
+			AccountMonthId:    setupAccountMonthId(),
+			AccountMovementId: setupAccountMovementId(),
+			MovementTypeId:    setupMovementTypeId(),
+			Action:            common.Debit,
+			Amount:            1032,
+			Date:              date,
+			SourceAccountId:   nil,
+			Description:       "Movement description",
+			Notes:             nil,
+			TagIds:            []*tagcategory.TagId{&tagId},
 		},
 		createdAt,
-		eventhorizon.ForAggregate(AggregateType, *setupMovementTypeId(), 2),
+		eventhorizon.ForAggregate(AggregateType, *setupAccountMonthId(), 2),
 	)
 }
 
@@ -272,7 +298,7 @@ func createAccountMonthStartedEvent(createdAt time.Time) eventhorizon.Event {
 			Year:           year,
 		},
 		createdAt,
-		eventhorizon.ForAggregate(AggregateType, *setupMovementTypeId(), 1),
+		eventhorizon.ForAggregate(AggregateType, *setupAccountMonthId(), 1),
 	)
 }
 
@@ -289,6 +315,6 @@ func createAccountMonthEndedEvent(createdAt time.Time) eventhorizon.Event {
 			Year:           year,
 		},
 		createdAt,
-		eventhorizon.ForAggregate(AggregateType, *setupMovementTypeId(), 3),
+		eventhorizon.ForAggregate(AggregateType, *setupAccountMonthId(), 3),
 	)
 }

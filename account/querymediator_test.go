@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/common"
 )
 
 func TestQueryMediator_Account(t *testing.T) {
@@ -21,7 +22,7 @@ func TestQueryMediator_Account(t *testing.T) {
 		AccountId:           &expectedAccountId,
 		BankName:            "bank name",
 		Name:                "account name",
-		AccountType:         account.Savings,
+		AccountType:         common.Savings,
 		StartingBalance:     3069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
@@ -62,7 +63,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 		AccountId:           &expectedAccountId1,
 		BankName:            "bank name",
 		Name:                "account name",
-		AccountType:         account.Savings,
+		AccountType:         common.Savings,
 		StartingBalance:     3069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
@@ -79,7 +80,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 		AccountId:           &expectedAccountId2,
 		BankName:            "bank name2",
 		Name:                "account name2",
-		AccountType:         account.Checking,
+		AccountType:         common.Checking,
 		StartingBalance:     4069,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.USD,

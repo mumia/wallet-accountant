@@ -11,6 +11,7 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/clock"
+	"walletaccountant/common"
 	"walletaccountant/tagcategory"
 )
 
@@ -32,12 +33,12 @@ func setupMovementTypeId(withSourceAccount bool) *Id {
 	return &id
 }
 
-func setupMovementType(withSourceAccount bool) Type {
+func setupMovementAction(withSourceAccount bool) common.MovementAction {
 	if withSourceAccount {
-		return Debit
+		return common.Debit
 	}
 
-	return Credit
+	return common.Credit
 }
 
 func setupAccountIds(withSourceAccount bool) (*account.Id, *account.Id) {
@@ -135,7 +136,7 @@ func createRegisterNewMovementTypeCommand(withSourceAccount bool) eventhorizon.C
 
 	return &RegisterNewMovementType{
 		MovementTypeId:  *setupMovementTypeId(withSourceAccount),
-		Type:            setupMovementType(withSourceAccount),
+		Action:          setupMovementAction(withSourceAccount),
 		AccountId:       *accountId,
 		SourceAccountId: sourceAccountId,
 		Description:     description,
@@ -162,7 +163,7 @@ func createRegisterNewAccountEvent(withSourceAccount bool, createdAt time.Time) 
 		NewMovementTypeRegistered,
 		&NewMovementTypeRegisteredData{
 			MovementTypeId:  movementTypeId,
-			Type:            setupMovementType(withSourceAccount),
+			Action:          setupMovementAction(withSourceAccount),
 			AccountId:       accountId,
 			SourceAccountId: sourceAccountId,
 			Description:     description,

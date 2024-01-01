@@ -1,10 +1,10 @@
 package movementtype
 
 type RegisterNewMovementTypeTransferObject struct {
-	Type            string   `json:"type" binding:"required"`
+	Action          string   `json:"action" binding:"required"`
 	AccountId       string   `json:"accountId" binding:"required,uuid"`
-	SourceAccountId *string  `json:"sourceAccountId"`
+	SourceAccountId *string  `json:"sourceAccountId" binding:"omitempty,uuid"`
 	Description     string   `json:"description" binding:"required"`
 	Notes           *string  `json:"notes"`
-	TagIds          []string `json:"tags" binding:"required"`
+	TagIds          []string `json:"tagIds" binding:"required"`
 }

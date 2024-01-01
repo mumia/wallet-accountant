@@ -5,6 +5,7 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"time"
+	"walletaccountant/common"
 )
 
 var _ ReadModeler = &ReadModelRepositoryMock{}
@@ -53,7 +54,7 @@ func (repoMock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*Entity,
 			&accountId1,
 			"some bank name",
 			"some name",
-			Checking,
+			common.Checking,
 			1069,
 			time.Date(2023, 9, 10, 0, 0, 0, 0, time.UTC),
 			EUR,
@@ -67,7 +68,7 @@ func (repoMock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*Entity,
 			&accountId2,
 			"another bank name",
 			"another name",
-			Savings,
+			common.Savings,
 			1169,
 			time.Date(2022, 8, 10, 0, 0, 0, 0, time.UTC),
 			USD,
@@ -90,7 +91,7 @@ func (repoMock *ReadModelRepositoryMock) GetByAccountId(ctx context.Context, acc
 		accountId,
 		"bank name",
 		"name",
-		Checking,
+		common.Checking,
 		1069,
 		time.Date(2023, 9, 10, 0, 0, 0, 0, time.UTC),
 		EUR,
@@ -114,7 +115,7 @@ func (repoMock *ReadModelRepositoryMock) entity(
 	accountId *Id,
 	bankName string,
 	name string,
-	accountType Type,
+	accountType common.AccountType,
 	startingBalance float64,
 	startingBalanceDate time.Time,
 	currency Currency,

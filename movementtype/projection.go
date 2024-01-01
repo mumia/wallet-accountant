@@ -61,7 +61,7 @@ func (projection *Projection) handleNewMovementTypeRegistered(ctx context.Contex
 
 	account := Entity{
 		MovementTypeId:  eventData.MovementTypeId,
-		Type:            eventData.Type,
+		Action:          eventData.Action,
 		AccountId:       eventData.AccountId,
 		SourceAccountId: eventData.SourceAccountId,
 		Description:     eventData.Description,

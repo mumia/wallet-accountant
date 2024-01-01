@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/clock"
+	"walletaccountant/common"
 )
 
 func setupAccountTest(instants []clock.Instant) (func(id uuid.UUID) eventhorizon.Aggregate, ActiveMonth, ActiveMonth) {
@@ -212,7 +213,7 @@ func createAccountData(accountId uuid.UUID, activeMonth *ActiveMonth) Account {
 		AggregateBase:       events.NewAggregateBase(AggregateType, accountId),
 		bankName:            "My Bank",
 		name:                "Account name",
-		accountType:         Savings,
+		accountType:         common.Savings,
 		startingBalance:     1069,
 		startingBalanceDate: startBalanceDate,
 		currency:            USD,

@@ -4,10 +4,12 @@ import (
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"sort"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/common"
 	"walletaccountant/mongodb"
-	"walletaccountant/movementtype"
 )
 
 var _ ReadModeler = &ReadModelRepository{}
@@ -28,10 +30,7 @@ type ReadModelWriter interface {
 	RegisterAccountMovement(
 		ctx context.Context,
 		accountMonthId *Id,
-		movementTypeId *movementtype.Id,
-		movementTypeType movementtype.Type,
-		amount float64,
-		date time.Time,
+		eventData *NewAccountMovementRegisteredData,
 	) error
 }
 
@@ -68,9 +67,10 @@ func (repository *ReadModelRepository) StartMonth(
 			Month: month,
 			Year:  year,
 		},
-		Movements:  []*EntityMovement{},
-		Balance:    startBalance,
-		MonthEnded: false,
+		Movements:      []*EntityMovement{},
+		Balance:        startBalance,
+		InitialBalance: startBalance,
+		MonthEnded:     false,
 	}
 
 	_, err := repository.collection().InsertOne(ctx, newAccountMonth)
@@ -95,20 +95,22 @@ func (repository *ReadModelRepository) EndMonth(ctx context.Context, accountMont
 func (repository *ReadModelRepository) RegisterAccountMovement(
 	ctx context.Context,
 	accountMonthId *Id,
-	movementTypeId *movementtype.Id,
-	movementTypeType movementtype.Type,
-	amount float64,
-	date time.Time,
+	eventData *NewAccountMovementRegisteredData,
 ) error {
 	newMovementTypeEntity := EntityMovement{
-		MovementTypeId: movementTypeId,
-		Amount:         amount,
-		Date:           date,
+		MovementTypeId:  eventData.MovementTypeId,
+		Action:          eventData.Action,
+		Amount:          eventData.Amount,
+		Date:            eventData.Date,
+		SourceAccountId: eventData.SourceAccountId,
+		Description:     eventData.Description,
+		Notes:           eventData.Notes,
+		TagIds:          eventData.TagIds,
 	}
 
-	balanceChange := amount
-	if movementTypeType == movementtype.Debit {
-		balanceChange = amount * -1
+	balanceChange := eventData.Amount
+	if eventData.Action == common.Debit {
+		balanceChange = eventData.Amount * -1
 	}
 
 	_, err := repository.collection().UpdateOne(
@@ -126,10 +128,21 @@ func (repository *ReadModelRepository) RegisterAccountMovement(
 func (repository *ReadModelRepository) GetByAccountMonthId(ctx context.Context, accountMonthId *Id) (*Entity, error) {
 	var entity *Entity
 
-	err := repository.collection().FindOne(ctx, bson.M{"_id": accountMonthId}).Decode(&entity)
+	err := repository.collection().
+		FindOne(
+			ctx,
+			bson.M{"_id": accountMonthId},
+			&options.FindOneOptions{Sort: bson.D{{"movements.date", 1}}},
+		).
+		Decode(&entity)
 	if err != nil {
 		return nil, err
 	}
+
+	sort.SliceStable(
+		entity.Movements,
+		func(i, j int) bool { return entity.Movements[i].Date.Before(entity.Movements[j].Date) },
+	)
 
 	return entity, nil
 }

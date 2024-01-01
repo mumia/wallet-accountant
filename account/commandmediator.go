@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/looplab/eventhorizon"
 	"go.mongodb.org/mongo-driver/mongo"
+	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 )
@@ -60,7 +61,7 @@ func (mediator CommandMediator) RegisterNewAccount(
 	registerNewAccountCommand.AccountId = Id(mediator.idCreator.New())
 	registerNewAccountCommand.BankName = transferObject.BankName
 	registerNewAccountCommand.Name = transferObject.Name
-	registerNewAccountCommand.AccountType = Type(transferObject.AccountType)
+	registerNewAccountCommand.AccountType = common.AccountType(transferObject.AccountType)
 	registerNewAccountCommand.StartingBalance = transferObject.StartingBalance
 	registerNewAccountCommand.StartingBalanceDate = transferObject.StartingBalanceDate
 	registerNewAccountCommand.Currency = Currency(transferObject.Currency)

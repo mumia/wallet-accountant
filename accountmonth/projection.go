@@ -59,10 +59,7 @@ func (projection Projection) handleNewAccountMovementRegistered(ctx context.Cont
 	return projection.repository.RegisterAccountMovement(
 		ctx,
 		accountMonth.AccountMonthId,
-		eventData.MovementTypeId,
-		eventData.MovementTypeType,
-		eventData.Amount,
-		eventData.Date,
+		eventData,
 	)
 }
 

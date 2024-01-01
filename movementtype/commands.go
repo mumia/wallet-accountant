@@ -5,6 +5,7 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"walletaccountant/account"
 	"walletaccountant/commands"
+	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/tagcategory"
 )
@@ -33,13 +34,13 @@ func RegisterCommandHandler(
 }
 
 type RegisterNewMovementType struct {
-	MovementTypeId  Id                   `json:"movementTypeId"`
-	Type            Type                 `json:"type"`
-	AccountId       account.Id           `json:"accountId"`
-	SourceAccountId *account.Id          `json:"sourceAccountId" eh:"optional"`
-	Description     string               `json:"description"`
-	Notes           *string              `json:"notes" eh:"optional"`
-	TagIds          []*tagcategory.TagId `json:"tagIds"`
+	MovementTypeId  Id                    `json:"movementTypeId"`
+	Action          common.MovementAction `json:"action"`
+	AccountId       account.Id            `json:"accountId"`
+	SourceAccountId *account.Id           `json:"sourceAccountId" eh:"optional"`
+	Description     string                `json:"description"`
+	Notes           *string               `json:"notes" eh:"optional"`
+	TagIds          []*tagcategory.TagId  `json:"tagIds"`
 }
 
 func (r RegisterNewMovementType) AggregateID() uuid.UUID {
