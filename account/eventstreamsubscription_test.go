@@ -34,7 +34,7 @@ func TestSubscribeEventStream(t *testing.T) {
 					EventID:        uuid.UUID{},
 					EventType:      account.NewAccountRegistered.String(),
 					ContentType:    "",
-					StreamID:       "",
+					StreamID:       "account-7cb19cfb-5db0-4a2f-845f-1ba2055ec341",
 					EventNumber:    0,
 					Position:       esdb.Position{},
 					CreatedDate:    time.Now(),

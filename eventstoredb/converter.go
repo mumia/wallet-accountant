@@ -14,9 +14,10 @@ func CreateEvent(esdbEvent *esdb.ResolvedEvent) (eventhorizon.Event, error) {
 	aggregateType := eventhorizon.AggregateType(esdbEvent.Event.StreamID[:streamSplitPosition])
 	aggregateId := uuid.MustParse(esdbEvent.Event.StreamID[streamSplitPosition+1:])
 
-	return createEvent(
+	return CreateEventForAggregate(
 		esdbEvent,
-		eventhorizon.ForAggregate(aggregateType, aggregateId, int(esdbEvent.Event.EventNumber)+1),
+		aggregateType,
+		aggregateId,
 	)
 }
 
