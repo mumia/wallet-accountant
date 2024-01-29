@@ -19,3 +19,12 @@ debug:
 test:
 	go test -coverpkg=./... -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
+
+karatebuild:
+	docker compose -f karate-docker-compose.yml build wallet-accountant-karate
+
+karatenb:
+	docker compose -f karate-docker-compose.yml up karate
+	docker compose -f karate-docker-compose.yml down
+
+karate: karatebuild karatenb

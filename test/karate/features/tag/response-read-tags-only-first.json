@@ -1,0 +1,14 @@
+[
+  {
+    "tagCategoryId": "#uuid",
+    "name": "locations",
+    "notes":  "My locations",
+    "tags": [
+      {
+        "tagId": "#uuid",
+        "name": "Vieira",
+        "notes":  ""
+      }
+    ]
+  }
+]

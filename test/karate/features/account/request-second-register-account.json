@@ -1,0 +1,8 @@
+{
+  "bankName": "another bank",
+  "name": "my other account",
+  "accountType": "savings",
+  "startingBalance": 678,
+  "startingBalanceDate": "2022-01-23T00:00:00Z",
+  "currency": "USD"
+}
