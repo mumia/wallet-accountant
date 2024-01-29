@@ -27,9 +27,10 @@ var endMonthBody = `{
 	"year": 2023
 }`
 
+var endBalance = 10069.5
 var expectedEndAccountMonthTransferObject = accountmonth.EndAccountMonthTransferObject{
 	AccountId:  accountId1.String(),
-	EndBalance: 10069.5,
+	EndBalance: &endBalance,
 	Month:      time.January,
 	Year:       2023,
 }

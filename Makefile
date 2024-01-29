@@ -1,6 +1,9 @@
 up:
 	docker compose up -d --build --remove-orphans
 
+upnb:
+	docker compose up -d --remove-orphans
+
 down:
 	docker compose down
 
