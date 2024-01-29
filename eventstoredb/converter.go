@@ -5,10 +5,19 @@ import (
 	"github.com/EventStore/EventStore-Client-Go/v3/esdb"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/uuid"
+	"strings"
 )
 
 func CreateEvent(esdbEvent *esdb.ResolvedEvent) (eventhorizon.Event, error) {
-	return createEvent(esdbEvent)
+	streamSplitPosition := strings.Index(esdbEvent.Event.StreamID, "-")
+
+	aggregateType := eventhorizon.AggregateType(esdbEvent.Event.StreamID[:streamSplitPosition])
+	aggregateId := uuid.MustParse(esdbEvent.Event.StreamID[streamSplitPosition+1:])
+
+	return createEvent(
+		esdbEvent,
+		eventhorizon.ForAggregate(aggregateType, aggregateId, int(esdbEvent.Event.EventNumber)+1),
+	)
 }
 
 func CreateEventForAggregate(
