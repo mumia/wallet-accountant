@@ -46,7 +46,7 @@ jobs:
           name: Run karate tests
           command: |
             docker compose -f karate-docker-compose.yml build wallet-accountant-karate
-            docker compose -f karate-docker-compose.yml up karate
+            docker compose -f karate-docker-compose.yml up eventstore-karate karate
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
