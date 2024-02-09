@@ -21,7 +21,7 @@ services:
 
   api-available:
     image: alpine:latest
-    command: sh -c '/app/wait-for http://wallet-accountant-karate:8080/healthcheck -- echo "Api is up!"'
+    command: sh -c '/app/wait-for http://wallet-accountant-karate:8080/healthcheck -t 60 -- echo "Api is up!"'
     volumes:
       - "./docker/karate/wait-for:/app/wait-for"
     depends_on:
@@ -49,7 +49,7 @@ services:
 
   eventstore-available:
     image: alpine:latest
-    command: sh -c '/app/wait-for http://eventstore-karate:2113/health/live -- echo "Eventstore is up!"'
+    command: sh -c '/app/wait-for http://eventstore-karate:2113/health/live -t 60 -- echo "Eventstore is up!"'
     volumes:
       - "./docker/karate/wait-for:/app/wait-for"
     depends_on:
