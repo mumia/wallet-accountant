@@ -49,7 +49,7 @@ services:
 
   eventstore-available:
     image: alpine:latest
-    command: sh -c '/app/wait-for http://eventstore-karate:2113/health/live -t 120 -- echo "Eventstore is up!"'
+    command: sh -c '/app/wait-for http://eventstore-karate:2113/health/live -t 0 -- echo "Eventstore is up!"'
     volumes:
       - "./docker/karate/wait-for:/app/wait-for"
     depends_on:
