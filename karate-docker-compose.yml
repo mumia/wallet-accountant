@@ -20,7 +20,9 @@ services:
       wallet-accountant-karate: ~
 
   api-available:
-    image: alpine:latest
+    build:
+      context: "."
+      dockerfile: docker/waitfor.dockerfile
     command: sh -c '/app/wait-for http://wallet-accountant-karate:8080/healthcheck -t 60 -- echo "Api is up!"'
     volumes:
       - "./docker/karate/wait-for:/app/wait-for"
@@ -48,7 +50,9 @@ services:
       wallet-accountant-karate: ~
 
   eventstore-available:
-    image: alpine:latest
+    build:
+      context: "."
+      dockerfile: docker/waitfor.dockerfile
     command: sh -c '/app/wait-for http://eventstore-karate:2113/health/live -t 0 -- echo "Eventstore is up!"'
     volumes:
       - "./docker/karate/wait-for:/app/wait-for"
