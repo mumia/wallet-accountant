@@ -23,9 +23,9 @@ services:
     build:
       context: "."
       dockerfile: docker/waitfor.dockerfile
-    command: sh -c '/app/wait-for http://wallet-accountant-karate:8080/healthcheck -t 60 -- echo "Api is up!"'
-    volumes:
-      - "./docker/karate/wait-for:/app/wait-for"
+    command: sh -c '/app/wait-for http://wallet-accountant-karate:8080/healthcheck -t 30 -- echo "Api is up!"'
+#    volumes:
+#      - "./docker/karate/wait-for:/app/wait-for"
     depends_on:
       wallet-accountant-karate:
         condition: service_started
