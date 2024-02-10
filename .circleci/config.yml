@@ -47,7 +47,7 @@ jobs:
           user: root
           command: |
             docker compose -f karate-docker-compose.yml build wallet-accountant-karate
-            docker compose -f karate-docker-compose.yml up eventstore-karate eventstore-available karate
+            docker compose -f karate-docker-compose.yml up karate
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows

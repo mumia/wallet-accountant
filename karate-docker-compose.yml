@@ -81,7 +81,7 @@ services:
     image: eclipse-temurin:21-jre
     working_dir: /workdir
     entrypoint: /bin/bash
-    command: ./docker/karate/karate.sh
+    command: ./app/karate.sh
     environment:
       KARATE_CONFIG_ENV: "docker"
       KARATE_CONFIG_MODULE_ROOT: "."
@@ -90,6 +90,7 @@ services:
       STARTUP_WAIT_TIMEOUT: 80
     volumes:
       - .:/workdir
+      - ./docker/karate/karate.sh:/app/karate.sh
       - ./docker/karate/karate-1.4.1.jar:/app/karate.jar
     container_name: wallet-accountant-karate-runner
     depends_on:
