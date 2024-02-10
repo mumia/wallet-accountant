@@ -38,6 +38,7 @@ jobs:
     docker:
       - image: cimg/go:1.21.1
     steps:
+      - checkout
       - run:
           name: Run tests
           command: |
