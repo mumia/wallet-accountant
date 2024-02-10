@@ -44,6 +44,7 @@ jobs:
       - setup_remote_docker
       - run:
           name: Run karate tests
+          user: root
           command: |
             docker compose -f karate-docker-compose.yml build wallet-accountant-karate
             docker compose -f karate-docker-compose.yml up eventstore-available eventstore-karate karate
