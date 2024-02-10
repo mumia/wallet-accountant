@@ -33,6 +33,11 @@ jobs:
           key: go-mod-v4-{{ checksum "go.sum" }}
           paths:
             - "/go/pkg/mod"
+  test:
+    working_directory: ~/repo
+    docker:
+      - image: cimg/go:1.21.1
+    steps:
       - run:
           name: Run tests
           command: |
@@ -41,6 +46,12 @@ jobs:
             gotestsum --junitfile /tmp/test-reports/unit-tests.xml
       - store_test_results:
           path: /tmp/test-reports
+  karate:
+    working_directory: ~/repo
+    docker:
+      - image: cimg/go:1.21.1
+    steps:
+      - checkout
       - setup_remote_docker
       - run:
           name: Run karate tests
@@ -52,7 +63,13 @@ jobs:
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 workflows:
-  sample: # This is the name of the workflow, feel free to change it to better match your workflow.
+  wa: # This is the name of the workflow, feel free to change it to better match your workflow.
     # Inside the workflow, you define the jobs you want to run.
     jobs:
       - build
+      - test:
+          requires:
+            - build
+      - karate:
+          requires:
+            - build
