@@ -53,7 +53,7 @@ services:
     build:
       context: "."
       dockerfile: docker/waitfor.dockerfile
-    command: sh -c 'which sh && chmod 777 /app/wait-for && whoami && ls -la /app && /app/wait-for http://eventstore-karate:2113/health/live -t 10 -- echo "Eventstore is up!"'
+    command: sh -c '/app/wait-for http://eventstore-karate:2113/health/live -t 30 -- echo "Eventstore is up!"'
 #    volumes:
 #      - "./docker/karate/wait-for:/app/wait-for"
     depends_on:
