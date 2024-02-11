@@ -59,7 +59,7 @@ func (mediator CommandMediator) RegisterNewAccount(
 	}
 
 	registerNewAccountCommand.AccountId = Id(mediator.idCreator.New())
-	registerNewAccountCommand.BankName = transferObject.BankName
+	registerNewAccountCommand.BankName = BankName(transferObject.BankName)
 	registerNewAccountCommand.Name = transferObject.Name
 	registerNewAccountCommand.AccountType = common.AccountType(transferObject.AccountType)
 	registerNewAccountCommand.StartingBalance = transferObject.StartingBalance

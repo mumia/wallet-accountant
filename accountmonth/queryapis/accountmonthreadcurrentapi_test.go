@@ -14,9 +14,10 @@ import (
 	"testing"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonth/queryapis"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
-	"walletaccountant/queryapis"
+	queryapis2 "walletaccountant/queryapis"
 )
 
 func TestNewReadCurrentAccountMonthApi(t *testing.T) {
@@ -40,11 +41,11 @@ func TestNewReadCurrentAccountMonthApi(t *testing.T) {
 		) (*accountmonth.Entity, *definitions.WalletAccountantError) {
 			accountMonthCalled++
 
-			asserts.Equal(&accountId1, accountId)
+			asserts.Equal(&queryapis2.accountId1, accountId)
 
 			switch accountMonthCalled {
 			case 1:
-				return &accountMonthEntity1, nil
+				return &queryapis2.accountMonthEntity1, nil
 
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
@@ -53,8 +54,8 @@ func TestNewReadCurrentAccountMonthApi(t *testing.T) {
 				return nil, accountmonth.NonExistentAccountMonthError(
 					accountId.String(),
 					"",
-					int(month),
-					int(year),
+					int(queryapis2.month),
+					int(queryapis2.year),
 				)
 			}
 
@@ -74,15 +75,15 @@ func TestNewReadCurrentAccountMonthApi(t *testing.T) {
 	requires.NoError(lifecycle.Start(ctx))
 
 	t.Run("successfully get current account month", func(t *testing.T) {
-		expectedAccountMonthResponse, err := json.Marshal(accountMonthEntity1)
+		expectedAccountMonthResponse, err := json.Marshal(queryapis2.accountMonthEntity1)
 		requires.NoError(err)
 
-		executeAndAssertResult(
+		queryapis2.executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/account-month/"+accountId1.String(),
+			"/account-month/"+queryapis2.accountId1.String(),
 			nil,
 			http.StatusOK,
 			string(expectedAccountMonthResponse),
@@ -91,7 +92,7 @@ func TestNewReadCurrentAccountMonthApi(t *testing.T) {
 	})
 
 	t.Run("fails to get current account month, because of invalid uuid", func(t *testing.T) {
-		executeAndAssertResult(
+		queryapis2.executeAndAssertResult(
 			asserts,
 			requires,
 			router,
@@ -105,12 +106,12 @@ func TestNewReadCurrentAccountMonthApi(t *testing.T) {
 	})
 
 	t.Run("fails to get current account month, because of a generic mediator error", func(t *testing.T) {
-		executeAndAssertResult(
+		queryapis2.executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/account-month/"+accountId1.String(),
+			"/account-month/"+queryapis2.accountId1.String(),
 			nil,
 			http.StatusInternalServerError,
 			"an error",
@@ -119,12 +120,12 @@ func TestNewReadCurrentAccountMonthApi(t *testing.T) {
 	})
 
 	t.Run("fails to get all accounts, because of non existent account", func(t *testing.T) {
-		executeAndAssertResult(
+		queryapis2.executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/account-month/"+accountId1.String(),
+			"/account-month/"+queryapis2.accountId1.String(),
 			nil,
 			http.StatusNotFound,
 			"{\"error\":\"Account month does not exist\",\"code\":404,\"context\":{\"accountId\":\"aeea307f-3c57-467c-8954-5f541aef6772\",\"month\":1,\"movementTypeId\":\"\",\"year\":2023}}",

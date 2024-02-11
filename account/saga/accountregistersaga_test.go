@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	saga2 "walletaccountant/account/saga"
 	"walletaccountant/accountmonth"
 	"walletaccountant/common"
 	"walletaccountant/mocks"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestAccountRegisterSaga_Matcher(t *testing.T) {
-	sagaSubject := saga.NewAccountRegisterSaga()
+	sagaSubject := saga2.NewAccountRegisterSaga()
 
 	assert.Equal(
 		t,
@@ -32,23 +33,23 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 
 	notes := "my account notes"
 	newAccountRegisteredData := account.NewAccountRegisteredData{
-		AccountId:           &accountId1,
+		AccountId:           &saga.accountId1,
 		BankName:            "bank name",
 		Name:                "account name",
 		AccountType:         common.Checking,
 		StartingBalance:     2069.96,
-		StartingBalanceDate: date,
+		StartingBalanceDate: saga.date,
 		Currency:            account.USD,
 		Notes:               &notes,
-		ActiveMonth:         month,
-		ActiveYear:          year,
+		ActiveMonth:         saga.month,
+		ActiveYear:          saga.year,
 	}
 
 	newAccountRegisteredEvent := eventhorizon.NewEvent(
 		account.NewAccountRegistered,
 		&newAccountRegisteredData,
 		time.Now(),
-		eventhorizon.ForAggregate(account.AggregateType, accountId1, 1),
+		eventhorizon.ForAggregate(account.AggregateType, saga.accountId1, 1),
 	)
 
 	handleCommandCalled := 0
@@ -57,11 +58,11 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 			handleCommandCalled++
 
 			expectedCommand := &accountmonth.StartAccountMonth{
-				AccountMonthId: accountMonthId,
-				AccountId:      accountId1,
+				AccountMonthId: saga.accountMonthId,
+				AccountId:      saga.accountId1,
 				StartBalance:   2069.96,
-				Month:          month,
-				Year:           year,
+				Month:          saga.month,
+				Year:           saga.year,
 			}
 
 			asserts.Equal(expectedCommand, command)
@@ -70,7 +71,7 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 		},
 	}
 
-	sagaSubject := saga.NewAccountRegisterSaga()
+	sagaSubject := saga2.NewAccountRegisterSaga()
 	err := sagaSubject.RunSaga(context.Background(), newAccountRegisteredEvent, &commandHandler)
 	requires.NoError(err)
 

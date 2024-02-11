@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/clock"
-	"walletaccountant/common"
 )
 
 func setupAccountTest(instants []clock.Instant) (func(id uuid.UUID) eventhorizon.Aggregate, ActiveMonth, ActiveMonth) {
@@ -210,13 +209,7 @@ func createAccountData(accountId uuid.UUID, activeMonth *ActiveMonth) Account {
 	}
 
 	return Account{
-		AggregateBase:       events.NewAggregateBase(AggregateType, accountId),
-		bankName:            "My Bank",
-		name:                "Account name",
-		accountType:         common.Savings,
-		startingBalance:     1069,
-		startingBalanceDate: startBalanceDate,
-		currency:            USD,
+		AggregateBase: events.NewAggregateBase(AggregateType, accountId),
 		activeMonth: ActiveMonth{
 			month: activeMonth.Month(),
 			year:  activeMonth.Year(),
@@ -226,17 +219,11 @@ func createAccountData(accountId uuid.UUID, activeMonth *ActiveMonth) Account {
 
 func createRegisterNewAccountCommand(accountData Account) eventhorizon.Command {
 	return &RegisterNewAccount{
-		AccountId:           accountData.EntityID(),
-		BankName:            accountData.BankName(),
-		Name:                accountData.Name(),
-		AccountType:         accountData.AccountType(),
-		StartingBalance:     accountData.StartingBalance(),
-		StartingBalanceDate: accountData.StartingBalanceDate(),
-		Currency:            accountData.Currency(),
+		AccountId: accountData.EntityID(),
 	}
 }
 
-func createStartNextMonthCommand(accountId uuid.UUID, balance float64) eventhorizon.Command {
+func createStartNextMonthCommand(accountId uuid.UUID, balance float32) eventhorizon.Command {
 	return &StartNextMonth{AccountId: accountId, Balance: balance}
 }
 
@@ -245,15 +232,7 @@ func createRegisterNewAccountEvent(accountData Account, createdAt time.Time) eve
 	return eventhorizon.NewEvent(
 		NewAccountRegistered,
 		&NewAccountRegisteredData{
-			AccountId:           &accountId,
-			BankName:            accountData.BankName(),
-			Name:                accountData.Name(),
-			AccountType:         accountData.AccountType(),
-			StartingBalance:     accountData.StartingBalance(),
-			StartingBalanceDate: accountData.StartingBalanceDate(),
-			Currency:            accountData.Currency(),
-			ActiveMonth:         accountData.StartingBalanceDate().Month(),
-			ActiveYear:          uint(accountData.StartingBalanceDate().Year()),
+			AccountId: &accountId,
 		},
 		createdAt,
 		eventhorizon.ForAggregate(AggregateType, accountId, 1),
@@ -262,7 +241,7 @@ func createRegisterNewAccountEvent(accountData Account, createdAt time.Time) eve
 
 func createStartNextMonthEvent(
 	aggregateId uuid.UUID,
-	balance float64,
+	balance float32,
 	activeMonth ActiveMonth,
 	createdAt time.Time,
 	version int,
@@ -289,11 +268,6 @@ func assetAccountValues(
 	asserts *assert.Assertions,
 ) {
 	asserts.Equal(expectedAccountData.EntityID(), account.EntityID())
-	asserts.Equal(expectedAccountData.BankName(), account.BankName())
-	asserts.Equal(expectedAccountData.Name(), account.Name())
-	asserts.Equal(expectedAccountData.AccountType(), account.AccountType())
-	asserts.Equal(expectedAccountData.StartingBalance(), account.StartingBalance())
-	asserts.Equal(expectedAccountData.StartingBalanceDate(), account.StartingBalanceDate())
 	asserts.Equal(expectedActiveMonth.Month(), account.ActiveMonth().Month())
 	asserts.Equal(expectedActiveMonth.Year(), account.ActiveMonth().Year())
 }

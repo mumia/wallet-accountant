@@ -15,9 +15,10 @@ import (
 	"strings"
 	"testing"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
+	commandapis2 "walletaccountant/commandapis"
 	"walletaccountant/definitions"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategory/commandapis"
 )
 
 var tagWithCategoryBody = `{
@@ -61,7 +62,7 @@ func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 			case 1:
 				asserts.Equal(expectedTagWithCategoryTransferObject, transferObject)
 
-				return &expectedTagId, &expectedTagCategoryId, nil
+				return &commandapis2.expectedTagId, &commandapis2.expectedTagCategoryId, nil
 			case 2:
 				return nil, nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -94,8 +95,8 @@ func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 		requires.NoError(err)
 
 		asserts.Equal(http.StatusCreated, w.Code)
-		asserts.Equal(expectedTagId.String(), actualResponse["tagId"])
-		asserts.Equal(expectedTagCategoryId.String(), actualResponse["tagCategoryId"])
+		asserts.Equal(commandapis2.expectedTagId.String(), actualResponse["tagId"])
+		asserts.Equal(commandapis2.expectedTagCategoryId.String(), actualResponse["tagCategoryId"])
 	})
 
 	t.Run("fails to add new tag to new category, because of invalid JSON body", func(t *testing.T) {
@@ -107,7 +108,7 @@ func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis2.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"invalid character 'i' looking for beginning of object key string",
 			asserts,
@@ -124,7 +125,7 @@ func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis2.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,

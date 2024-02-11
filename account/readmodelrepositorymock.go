@@ -113,10 +113,10 @@ func (repoMock *ReadModelRepositoryMock) GetByName(ctx context.Context, name str
 
 func (repoMock *ReadModelRepositoryMock) entity(
 	accountId *Id,
-	bankName string,
+	bankName BankName,
 	name string,
 	accountType common.AccountType,
-	startingBalance float64,
+	startingBalance float32,
 	startingBalanceDate time.Time,
 	currency Currency,
 	notes *string,

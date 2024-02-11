@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/accountmonth"
+	commandapis2 "walletaccountant/accountmonth/commandapis"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
 	"walletaccountant/definitions"
 )
 
@@ -27,7 +27,7 @@ var endMonthBody = `{
 	"year": 2023
 }`
 
-var endBalance = 10069.5
+var endBalance = float32(10069.5)
 var expectedEndAccountMonthTransferObject = accountmonth.EndAccountMonthTransferObject{
 	AccountId:  accountId1.String(),
 	EndBalance: &endBalance,
@@ -115,7 +115,7 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewEndAccountMonthApi(&mediator, logger)},
+		[]definitions.Route{commandapis2.NewEndAccountMonthApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -179,8 +179,8 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			errorCode: accountmonth.NonExistentAccountErrorCode,
 			errorContext: &definitions.ErrorContext{
 				"accountId": accountId1.String(),
-				"month":     float64(1),
-				"year":      float64(2023),
+				"month":     float32(1),
+				"year":      float32(2023),
 			},
 			reason: "Account for account month does not exist",
 		},
@@ -190,10 +190,10 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			errorContext: &definitions.ErrorContext{
 				"accountId":      accountId1.String(),
 				"movementTypeId": movementTypeId1.String(),
-				"accountMonth":   float64(12),
-				"accountYear":    float64(2022),
-				"month":          float64(1),
-				"year":           float64(2023),
+				"accountMonth":   float32(12),
+				"accountYear":    float32(2022),
+				"month":          float32(1),
+				"year":           float32(2023),
 			},
 			reason: "Active month is different",
 		},
@@ -203,8 +203,8 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			errorContext: &definitions.ErrorContext{
 				"accountId":      accountId1.String(),
 				"movementTypeId": movementTypeId1.String(),
-				"month":          float64(1),
-				"year":           float64(2023),
+				"month":          float32(1),
+				"year":           float32(2023),
 			},
 			reason: "Account month does not exist",
 		},
@@ -214,8 +214,8 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			errorContext: &definitions.ErrorContext{
 				"accountMonthId": accountMonthId1.String(),
 				"accountId":      accountId1.String(),
-				"month":          float64(1),
-				"year":           float64(2023),
+				"month":          float32(1),
+				"year":           float32(2023),
 			},
 			reason: "Account month already ended",
 		},
@@ -224,10 +224,10 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			errorCode: accountmonth.MismatchedEndBalanceErrorCode,
 			errorContext: &definitions.ErrorContext{
 				"accountMonthId":      accountMonthId1.String(),
-				"accountMonthBalance": float64(1000),
+				"accountMonthBalance": float32(1000),
 				"endMonthBalance":     10069.5,
-				"month":               float64(1),
-				"year":                float64(2023),
+				"month":               float32(1),
+				"year":                float32(2023),
 			},
 			reason: "Account month does not match end balance",
 		},

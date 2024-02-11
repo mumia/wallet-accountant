@@ -15,16 +15,17 @@ import (
 	"testing"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
+	"walletaccountant/movementtype"
+	queryapis2 "walletaccountant/movementtype/queryapis"
 	"walletaccountant/queryapis"
-	"walletaccountant/tagcategory"
 )
 
-func TestReadAllTagsApi_Handle(t *testing.T) {
+func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 	ctx := context.Background()
 
-	err := os.Setenv("PORT", "59600")
+	err := os.Setenv("PORT", "59602")
 	requires.NoError(err)
 	err = os.Setenv("FRONTEND_URL", "http://localhost")
 	requires.NoError(err)
@@ -32,14 +33,14 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	lifecycle := fxtest.NewLifecycle(t)
 
-	tagsCalled := 0
-	mediator := tagcategory.QueryMediatorMock{
-		TagsFn: func(ctx *gin.Context, filters tagcategory.FiltersTransferObject) ([]*tagcategory.CategoryEntity, *definitions.WalletAccountantError) {
-			tagsCalled++
+	movementTypesCalled := 0
+	mediator := movementtype.QueryMediatorMock{
+		MovementTypesFn: func(ctx *gin.Context) ([]*movementtype.Entity, *definitions.WalletAccountantError) {
+			movementTypesCalled++
 
-			switch tagsCalled {
+			switch movementTypesCalled {
 			case 1:
-				return []*tagcategory.CategoryEntity{&tagCategoryEntity1, &tagCategoryEntity2}, nil
+				return []*movementtype.Entity{&queryapis.movementTypeEntity1, &queryapis.movementTypeWithSourceAccountEntity1}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -52,38 +53,38 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis.NewReadAllTagsApi(&mediator, logger)},
+		[]definitions.Route{queryapis2.NewReadAllMovementTypesApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
 	)
 	requires.NoError(lifecycle.Start(ctx))
 
-	t.Run("successfully gets all tags", func(t *testing.T) {
+	t.Run("successfully gets all movement types", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("GET", "/tags", nil)
+		request, err := http.NewRequest("GET", "/movement-type", nil)
 		requires.NoError(err)
 
 		router.ServeHTTP(w, request)
 
-		expectedTagsResponse, err := json.Marshal(
-			[]tagcategory.CategoryEntity{tagCategoryEntity1, tagCategoryEntity2},
+		expectedMovementTypesResponse, err := json.Marshal(
+			[]movementtype.Entity{queryapis.movementTypeEntity1, queryapis.movementTypeWithSourceAccountEntity1},
 		)
 		requires.NoError(err)
 
 		asserts.Equal(http.StatusOK, w.Code)
-		asserts.Equal(string(expectedTagsResponse), w.Body.String())
+		asserts.Equal(string(expectedMovementTypesResponse), w.Body.String())
 	})
 
-	t.Run("fails to get all tags", func(t *testing.T) {
+	t.Run("fails to get all movement types", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("GET", "/tags", nil)
+		request, err := http.NewRequest("GET", "/movement-type", nil)
 		requires.NoError(err)
 
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		assertGenericErrorFromResponse(
+		queryapis.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,
@@ -91,5 +92,5 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 		)
 	})
 
-	asserts.Equal(2, tagsCalled)
+	asserts.Equal(2, movementTypesCalled)
 }

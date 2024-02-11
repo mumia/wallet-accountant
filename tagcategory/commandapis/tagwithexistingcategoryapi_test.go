@@ -18,17 +18,18 @@ import (
 	"walletaccountant/commandapis"
 	"walletaccountant/definitions"
 	"walletaccountant/tagcategory"
+	commandapis2 "walletaccountant/tagcategory/commandapis"
 )
 
 var tagInCategoryBody = `{
-	"tagCategoryId": "` + expectedTagCategoryId.String() + `",
+	"tagCategoryId": "` + commandapis.expectedTagCategoryId.String() + `",
     "tagName": "Tag name",
     "tagNotes": "Tag notes"
 }`
 
 var expectedTagInCategoryNotes = "Tag notes"
 var expectedTagInCategoryTransferObject = tagcategory.AddNewTagToExistingCategoryTransferObject{
-	TagCategoryId: expectedTagCategoryId.String(),
+	TagCategoryId: commandapis.expectedTagCategoryId.String(),
 	TagName:       "Tag name",
 	TagNotes:      &expectedTagInCategoryNotes,
 }
@@ -58,7 +59,7 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 			case 1:
 				asserts.Equal(expectedTagInCategoryTransferObject, transferObject)
 
-				return &expectedTagId, nil
+				return &commandapis.expectedTagId, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -71,7 +72,7 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewNewTagWithExistingCategoryApi(&mediator, logger)},
+		[]definitions.Route{commandapis2.NewNewTagWithExistingCategoryApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -91,7 +92,7 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 		requires.NoError(err)
 
 		asserts.Equal(http.StatusCreated, w.Code)
-		asserts.Equal(expectedTagId.String(), actualResponse["tagId"])
+		asserts.Equal(commandapis.expectedTagId.String(), actualResponse["tagId"])
 	})
 
 	t.Run("fails to add new tag to existing category, because of invalid JSON body", func(t *testing.T) {
@@ -103,7 +104,7 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"invalid character 'i' looking for beginning of object key string",
 			asserts,
@@ -120,7 +121,7 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,

@@ -326,8 +326,8 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	endBalance1 := 1030.56
-	endBalance2 := float64(1030)
+	endBalance1 := float32(1030.56)
+	endBalance2 := float32(1030)
 
 	transferObject := accountmonth.EndAccountMonthTransferObject{
 		AccountId:  accountId1.String(),

@@ -18,25 +18,26 @@ import (
 	"walletaccountant/commandapis"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
+	commandapis2 "walletaccountant/movementtype/commandapis"
 )
 
 var accountId2 = uuid.New()
 
 var movementTypeBody = `{
 	"action": "credit",
-    "accountId": "` + accountId1.String() + `",
+    "accountId": "` + commandapis.accountId1.String() + `",
     "description": "mov type desc",
     "notes": "mov type notes",
-    "tagIds": ["` + tagId1.String() + `", "` + tagId2.String() + `"]
+    "tagIds": ["` + commandapis.tagId1.String() + `", "` + commandapis.tagId2.String() + `"]
 }`
 
 var movementTypeWithSourceAccountBody = `{
 	"action": "debit",
     "accountId": "` + accountId2.String() + `",
-    "sourceAccountId": "` + accountId1.String() + `",
+    "sourceAccountId": "` + commandapis.accountId1.String() + `",
     "description": "mov type desc with source",
     "notes": "mov type notes with source",
-    "tagIds": ["` + tagId2.String() + `"]
+    "tagIds": ["` + commandapis.tagId2.String() + `"]
 }`
 
 var expectedMovementTypeId1 = uuid.New()
@@ -47,21 +48,21 @@ var movNotes2 = "mov type notes with source"
 
 var expectedMovementTypeTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
 	Action:          "credit",
-	AccountId:       accountId1.String(),
+	AccountId:       commandapis.accountId1.String(),
 	SourceAccountId: nil,
 	Description:     "mov type desc",
 	Notes:           &movNotes1,
-	TagIds:          []string{tagId1.String(), tagId2.String()},
+	TagIds:          []string{commandapis.tagId1.String(), commandapis.tagId2.String()},
 }
 
-var sourceAccountIdString = accountId1.String()
+var sourceAccountIdString = commandapis.accountId1.String()
 var expectedMovementTypeWithSourceTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
 	Action:          "debit",
 	AccountId:       accountId2.String(),
 	SourceAccountId: &sourceAccountIdString,
 	Description:     "mov type desc with source",
 	Notes:           &movNotes2,
-	TagIds:          []string{tagId2.String()},
+	TagIds:          []string{commandapis.tagId2.String()},
 }
 
 func TestRegisterNewMovementTypeApi_Handle(t *testing.T) {
@@ -106,7 +107,7 @@ func TestRegisterNewMovementTypeApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewRegisterNewMovementTypeApi(&mediator, logger)},
+		[]definitions.Route{commandapis2.NewRegisterNewMovementTypeApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -150,7 +151,7 @@ func TestRegisterNewMovementTypeApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"invalid character 'i' looking for beginning of object key string",
 			asserts,
@@ -167,7 +168,7 @@ func TestRegisterNewMovementTypeApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,

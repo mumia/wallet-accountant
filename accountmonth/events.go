@@ -47,7 +47,7 @@ type NewAccountMovementRegisteredData struct {
 	AccountMovementId *AccountMovementId    `json:"account_movement_id"`
 	MovementTypeId    *movementtype.Id      `json:"movement_type_id"`
 	Action            common.MovementAction `json:"action"`
-	Amount            float64               `json:"amount"`
+	Amount            float32               `json:"amount"`
 	Date              time.Time             `json:"date"`
 	SourceAccountId   *account.Id           `json:"source_account_id"`
 	Description       string                `json:"description"`
@@ -58,7 +58,7 @@ type NewAccountMovementRegisteredData struct {
 type MonthStartedData struct {
 	AccountMonthId *Id         `json:"account_month_id"`
 	AccountId      *account.Id `json:"account_id"`
-	StartBalance   float64     `json:"start_balance"`
+	StartBalance   float32     `json:"start_balance"`
 	Month          time.Month  `json:"month"`
 	Year           uint        `json:"year"`
 }
@@ -66,7 +66,7 @@ type MonthStartedData struct {
 type MonthEndedData struct {
 	AccountMonthId *Id         `json:"account_month_id"`
 	AccountId      *account.Id `json:"account_id"`
-	EndBalance     float64     `json:"end_balance"`
+	EndBalance     float32     `json:"end_balance"`
 	Month          time.Month  `json:"month"`
 	Year           uint        `json:"year"`
 }

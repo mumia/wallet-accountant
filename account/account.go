@@ -8,13 +8,20 @@ import (
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"time"
 	"walletaccountant/clock"
-	"walletaccountant/common"
 	"walletaccountant/definitions"
 )
 
 var _ events.VersionedAggregate = &Account{}
 
 const AggregateType eventhorizon.AggregateType = "account"
+
+type BankName string
+
+const (
+	DB  BankName = "Deutsche Bank"
+	N26 BankName = "N26"
+	BCP BankName = "Millennium bcp"
+)
 
 type Currency string
 
@@ -33,13 +40,7 @@ type Account struct {
 	*events.AggregateBase
 	clock *clock.Clock
 
-	bankName            string
-	name                string
-	accountType         common.AccountType
-	startingBalance     float64
-	startingBalanceDate time.Time
-	currency            Currency
-	activeMonth         ActiveMonth
+	activeMonth ActiveMonth
 }
 
 func (account *Account) HandleCommand(ctx context.Context, command eventhorizon.Command) error {
@@ -109,12 +110,6 @@ func (account *Account) ApplyEvent(ctx context.Context, event eventhorizon.Event
 			return definitions.EventDataTypeError(NewAccountRegistered, event.EventType())
 		}
 
-		account.bankName = eventData.BankName
-		account.name = eventData.Name
-		account.accountType = eventData.AccountType
-		account.startingBalance = eventData.StartingBalance
-		account.startingBalanceDate = eventData.StartingBalanceDate
-		account.currency = eventData.Currency
 		account.activeMonth = ActiveMonth{
 			month: eventData.ActiveMonth,
 			year:  eventData.ActiveYear,
@@ -139,30 +134,6 @@ func (account *Account) AccountId() *Id {
 	accountId := Id(account.EntityID())
 
 	return &accountId
-}
-
-func (account *Account) BankName() string {
-	return account.bankName
-}
-
-func (account *Account) Name() string {
-	return account.name
-}
-
-func (account *Account) AccountType() common.AccountType {
-	return account.accountType
-}
-
-func (account *Account) StartingBalance() float64 {
-	return account.startingBalance
-}
-
-func (account *Account) StartingBalanceDate() time.Time {
-	return account.startingBalanceDate
-}
-
-func (account *Account) Currency() Currency {
-	return account.currency
 }
 
 func (account *Account) ActiveMonth() ActiveMonth {

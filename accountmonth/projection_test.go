@@ -110,7 +110,7 @@ func TestProjection_HandleEvent_MonthStarted(t *testing.T) {
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
 			accountId *account.Id,
-			startBalance float64,
+			startBalance float32,
 			month time.Month,
 			year uint,
 		) error {

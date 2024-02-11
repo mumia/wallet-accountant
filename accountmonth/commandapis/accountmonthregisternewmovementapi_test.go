@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/accountmonth"
+	commandapis2 "walletaccountant/accountmonth/commandapis"
 	"walletaccountant/api"
 	"walletaccountant/commandapis"
 	"walletaccountant/common"
@@ -42,14 +43,14 @@ var registerNewMovementBody = `{
 //}`
 
 var expectedRegisterNewMovementTransferObject = accountmonth.RegisterNewAccountMovementTransferObject{
-	AccountId:      accountId1.String(),
+	AccountId:      commandapis.accountId1.String(),
 	Action:         string(common.Credit),
-	MovementTypeId: stringPtr(movementTypeId1.String()),
+	MovementTypeId: stringPtr(commandapis.movementTypeId1.String()),
 	Amount:         200,
 	Date:           time.Date(2023, time.January, 1, 1, 0, 0, 0, time.UTC),
 	Description:    "mov type desc",
 	Notes:          stringPtr("mov type notes"),
-	TagIds:         []string{tagId1.String(), tagId2.String()},
+	TagIds:         []string{commandapis.tagId1.String(), commandapis.tagId2.String()},
 }
 
 func stringPtr(value string) *string {
@@ -87,15 +88,15 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 
 			case 3:
 				return accountmonth.NonExistentAccountError(
-					accountId1.String(),
+					commandapis.accountId1.String(),
 					1,
 					2023,
 				)
 
 			case 4:
 				return accountmonth.MismatchedActiveMonthError(
-					accountId1.String(),
-					movementTypeId1.String(),
+					commandapis.accountId1.String(),
+					commandapis.movementTypeId1.String(),
 					12,
 					2022,
 					1,
@@ -104,16 +105,16 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 
 			case 5:
 				return accountmonth.NonExistentMovementTypeError(
-					accountId1.String(),
-					stringPtr(movementTypeId1.String()),
+					commandapis.accountId1.String(),
+					stringPtr(commandapis.movementTypeId1.String()),
 					1,
 					2023,
 				)
 
 			case 6:
 				return accountmonth.MismatchedAccountIdError(
-					accountId1.String(),
-					movementTypeId1.String(),
+					commandapis.accountId1.String(),
+					commandapis.movementTypeId1.String(),
 					1,
 					2023,
 				)
@@ -127,7 +128,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewAccountMonthRegisterNewMovementApi(&mediator, logger)},
+		[]definitions.Route{commandapis2.NewAccountMonthRegisterNewMovementApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -155,7 +156,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"invalid character 'i' looking for beginning of object key string",
 			asserts,
@@ -172,7 +173,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		assertGenericErrorFromResponse(
+		commandapis.assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,
@@ -190,9 +191,9 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			testName:  "fails to register new account movement, because of NonExistentAccountError",
 			errorCode: accountmonth.NonExistentAccountErrorCode,
 			errorContext: &definitions.ErrorContext{
-				"accountId": accountId1.String(),
-				"month":     float64(1),
-				"year":      float64(2023),
+				"accountId": commandapis.accountId1.String(),
+				"month":     float32(1),
+				"year":      float32(2023),
 			},
 			reason: "Account for account month does not exist",
 		},
@@ -200,12 +201,12 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			testName:  "fails to register new account movement, because of MismatchedActiveMonthError",
 			errorCode: accountmonth.MismatchedActiveMonthErrorCode,
 			errorContext: &definitions.ErrorContext{
-				"accountId":      accountId1.String(),
-				"movementTypeId": movementTypeId1.String(),
-				"accountMonth":   float64(12),
-				"accountYear":    float64(2022),
-				"month":          float64(1),
-				"year":           float64(2023),
+				"accountId":      commandapis.accountId1.String(),
+				"movementTypeId": commandapis.movementTypeId1.String(),
+				"accountMonth":   float32(12),
+				"accountYear":    float32(2022),
+				"month":          float32(1),
+				"year":           float32(2023),
 			},
 			reason: "Active month is different",
 		},
@@ -213,10 +214,10 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			testName:  "fails to register new account movement, because of NonExistentAccountMonthError",
 			errorCode: accountmonth.NonExistentMovementTypeErrorCode,
 			errorContext: &definitions.ErrorContext{
-				"accountId":      accountId1.String(),
-				"movementTypeId": movementTypeId1.String(),
-				"month":          float64(1),
-				"year":           float64(2023),
+				"accountId":      commandapis.accountId1.String(),
+				"movementTypeId": commandapis.movementTypeId1.String(),
+				"month":          float32(1),
+				"year":           float32(2023),
 			},
 			reason: "Movement type for account movement does not exist",
 		},
@@ -224,10 +225,10 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			testName:  "fails to register new account movement, because of AlreadyEndedError",
 			errorCode: accountmonth.MismatchedAccountIdErrorCode,
 			errorContext: &definitions.ErrorContext{
-				"accountId":      accountId1.String(),
-				"movementTypeId": movementTypeId1.String(),
-				"month":          float64(1),
-				"year":           float64(2023),
+				"accountId":      commandapis.accountId1.String(),
+				"movementTypeId": commandapis.movementTypeId1.String(),
+				"month":          float32(1),
+				"year":           float32(2023),
 			},
 			reason: "Movement type and account have different ids",
 		},
@@ -242,7 +243,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			router.ServeHTTP(w, request)
 
 			asserts.Equal(http.StatusBadRequest, w.Code)
-			assertErrorFromResponse(
+			commandapis.assertErrorFromResponse(
 				w.Body.Bytes(),
 				testCase.reason,
 				testCase.errorCode,

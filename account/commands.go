@@ -41,10 +41,10 @@ func RegisterCommandHandler(
 
 type RegisterNewAccount struct {
 	AccountId           Id                 `json:"account_id"`
-	BankName            string             `json:"bank_name"`
+	BankName            BankName           `json:"bank_name"`
 	Name                string             `json:"name"`
 	AccountType         common.AccountType `json:"type"`
-	StartingBalance     float64            `json:"starting_balance"`
+	StartingBalance     float32            `json:"starting_balance"`
 	StartingBalanceDate time.Time          `json:"starting_balance_date"`
 	Currency            Currency           `json:"currency"`
 	Notes               *string            `json:"notes" eh:"optional"`
@@ -64,7 +64,7 @@ func (r RegisterNewAccount) CommandType() eventhorizon.CommandType {
 
 type StartNextMonth struct {
 	AccountId Id      `json:"account_id"`
-	Balance   float64 `json:"balance"`
+	Balance   float32 `json:"balance"`
 }
 
 func (s StartNextMonth) AggregateID() uuid.UUID {

@@ -13,7 +13,7 @@ import (
 	"walletaccountant/mongodb"
 )
 
-func setupBalance() float64 {
+func setupBalance() float32 {
 	return 1070.60
 }
 
