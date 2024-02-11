@@ -16,7 +16,7 @@ import (
 
 var _ events.VersionedAggregate = &MovementType{}
 
-const AggregateType eventhorizon.AggregateType = "action"
+const AggregateType eventhorizon.AggregateType = "movementType"
 
 type Id = uuid.UUID
 

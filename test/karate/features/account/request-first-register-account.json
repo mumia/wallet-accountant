@@ -1,0 +1,8 @@
+{
+  "bankName": "a bank",
+  "name": "my account",
+  "accountType": "checking",
+  "startingBalance": 123.45,
+  "startingBalanceDate": "2023-08-26T00:00:00Z",
+  "currency": "EUR"
+}

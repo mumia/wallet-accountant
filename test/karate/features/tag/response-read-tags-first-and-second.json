@@ -1,0 +1,26 @@
+[
+  {
+    "tagCategoryId": "#uuid",
+    "name": "locations",
+    "notes":  "My locations",
+    "tags": [
+      {
+        "tagId": "#uuid",
+        "name": "Vieira",
+        "notes":  ""
+      }
+    ]
+  },
+  {
+    "tagCategoryId": "#uuid",
+    "name": "insurance",
+    "notes":  "",
+    "tags": [
+      {
+        "tagId": "#uuid",
+        "name": "Car",
+        "notes":  "notes"
+      }
+    ]
+  }
+]

@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/looplab/eventhorizon"
+	"github.com/looplab/eventhorizon/uuid"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"net/http"
 	"sync"
@@ -34,16 +36,19 @@ type modelUpdateNotifier struct {
 }
 
 type ModelUpdater struct {
-	notifiers map[eventhorizon.AggregateType]modelUpdateNotifier
-	upgrader  *websocket.Upgrader
-	wg        *sync.WaitGroup
-	log       *zap.Logger
+	notifiers                map[eventhorizon.AggregateType]modelUpdateNotifier
+	upgrader                 *websocket.Upgrader
+	wg                       *sync.WaitGroup
+	log                      *zap.Logger
+	registeredListenersMutex sync.Mutex
+	registeredListeners      map[uuid.UUID]chan message
 }
 
 func NewModelUpdater(
 	projectorRegistry *eventhandler.ProjectionRegistry,
 	upgrader *websocket.Upgrader,
 	log *zap.Logger,
+	lifecycle fx.Lifecycle,
 ) *ModelUpdater {
 	log = log.With(zap.String("struct", "ModelUpdater"))
 
@@ -63,11 +68,34 @@ func NewModelUpdater(
 		log.Debug("notifier registered", zap.String("aggregate", notifier.UpdatedAggregate().String()))
 	}
 
-	return &ModelUpdater{
-		notifiers: notifierInstances,
-		upgrader:  upgrader,
-		log:       log,
+	modelUpdater := &ModelUpdater{
+		notifiers:           notifierInstances,
+		upgrader:            upgrader,
+		log:                 log,
+		registeredListeners: make(map[uuid.UUID]chan message),
 	}
+
+	var lifecycleCtx context.Context
+	var lifecycleCtxCancel context.CancelFunc
+	lifecycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			lifecycleCtx, lifecycleCtxCancel = context.WithCancel(context.Background())
+
+			for aggregate, notifier := range modelUpdater.notifiers {
+				go modelUpdater.listenToUpdaters(lifecycleCtx, notifier, aggregate)
+			}
+
+			return nil
+		},
+
+		OnStop: func(ctx context.Context) error {
+			lifecycleCtxCancel()
+
+			return nil
+		},
+	})
+
+	return modelUpdater
 }
 
 func (m *ModelUpdater) Configuration() (string, string) {
@@ -102,23 +130,20 @@ func (m *ModelUpdater) Handle(ctx *gin.Context) {
 	//	return conn.PongHandler()(appData)
 	//})
 
-	for aggregate, notifier := range m.notifiers {
-		go m.handleUpdateNotification(ctx, conn, aggregate, notifier)
-	}
+	go m.registerAndHandleUpdateNotification(ctx, conn)
 }
 
-func (m *ModelUpdater) handleUpdateNotification(
-	ctx context.Context,
-	conn *websocket.Conn,
-	aggregate eventhorizon.AggregateType,
-	notifier modelUpdateNotifier,
-) {
+func (m *ModelUpdater) registerAndHandleUpdateNotification(ctx context.Context, conn *websocket.Conn) {
 	defer func(conn *websocket.Conn) {
 		err := conn.Close()
 		if err != nil {
 			m.log.Error("failed to close websocket connection", zap.Error(err))
 		}
 	}(conn)
+
+	listenerId := uuid.New()
+	messageChannel := m.registerListener(listenerId)
+	defer m.unregisterListener(listenerId)
 
 	//go m.handleIncoming(conn)
 
@@ -128,18 +153,13 @@ func (m *ModelUpdater) handleUpdateNotification(
 		case <-ctx.Done():
 			keepRunning = false
 
-		case modelUpdated := <-notifier.channel:
-			bytes, err := json.Marshal(
-				message{
-					Subject: aggregate.String(),
-					Event:   modelUpdated.Event.String(),
-				},
-			)
+		case message := <-messageChannel:
+			bytes, err := json.Marshal(message)
 			if err != nil {
 				m.log.Error(
 					"failed to marshal web socket message",
-					zap.String("aggregate", aggregate.String()),
-					zap.String("event", modelUpdated.Event.String()),
+					zap.String("aggregate", message.Subject),
+					zap.String("event", message.Event),
 					zap.Error(err),
 				)
 
@@ -148,16 +168,16 @@ func (m *ModelUpdater) handleUpdateNotification(
 
 			m.log.Debug(
 				"notifying web socket",
-				zap.String("aggregate", aggregate.String()),
-				zap.String("event", modelUpdated.Event.String()),
+				zap.String("aggregate", message.Subject),
+				zap.String("event", message.Event),
 			)
 
 			err = conn.WriteMessage(websocket.TextMessage, bytes)
 			if err != nil {
 				m.log.Warn(
 					"failed to notify web socket",
-					zap.String("aggregate", aggregate.String()),
-					zap.String("event", modelUpdated.Event.String()),
+					zap.String("aggregate", message.Subject),
+					zap.String("event", message.Event),
 					zap.Error(err),
 				)
 
@@ -181,6 +201,48 @@ func (m *ModelUpdater) handleUpdateNotification(
 			//		zap.String("aggregate", aggregate.String()),
 			//	)
 			//	_ = conn.WriteMessage(websocket.TextMessage, bytes)
+		}
+	}
+}
+
+func (m *ModelUpdater) registerListener(listenerId uuid.UUID) chan message {
+	m.registeredListenersMutex.Lock()
+	defer m.registeredListenersMutex.Unlock()
+
+	channel := make(chan message)
+
+	m.registeredListeners[listenerId] = channel
+
+	return channel
+}
+
+func (m *ModelUpdater) unregisterListener(listenerId uuid.UUID) {
+	m.registeredListenersMutex.Lock()
+	defer m.registeredListenersMutex.Unlock()
+
+	delete(m.registeredListeners, listenerId)
+}
+
+func (m *ModelUpdater) listenToUpdaters(ctx context.Context, notifier modelUpdateNotifier, aggregate eventhorizon.AggregateType) {
+	keepRunning := true
+	for keepRunning {
+		select {
+		case <-ctx.Done():
+			keepRunning = false
+
+		case modelUpdated := <-notifier.channel:
+			m.registeredListenersMutex.Lock()
+
+			updateMessage := message{
+				Subject: aggregate.String(),
+				Event:   modelUpdated.Event.String(),
+			}
+
+			for _, listenerChannel := range m.registeredListeners {
+				listenerChannel <- updateMessage
+			}
+
+			m.registeredListenersMutex.Unlock()
 		}
 	}
 }

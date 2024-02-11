@@ -1,0 +1,9 @@
+{
+  "accountMonthId": "#uuid",
+  "accountId": "#uuid",
+  "activeMonth":  {"month": 8, "year": 2023},
+  "movements": [],
+  "balance": 100,
+  "initialBalance": 100,
+  "monthEnded": false
+}

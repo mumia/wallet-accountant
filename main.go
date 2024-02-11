@@ -26,6 +26,7 @@ func main() {
 	fx.New(
 		fx.Provide(
 			fx.Annotate(api.NewServer, fx.ParamTags(`group:"routes"`, `group:"aggregateFactories"`)),
+			definitions.AsRoute(api.NewHealthcheckApi),
 			zap.NewDevelopment,
 			clock.NewClock,
 		),

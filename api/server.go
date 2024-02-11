@@ -30,6 +30,8 @@ func NewServer(
 
 	router := gin.Default()
 
+	router.Use(firstLogger(logger))
+
 	addCorsConfig(router, logger)
 	addRouteDefinitions(router, routes, logger)
 
@@ -112,5 +114,13 @@ func addRouteDefinitions(router *gin.Engine, routes []definitions.Route, logger 
 		router.Handle(method, pattern, handle)
 
 		logger.Debug("new route added", zap.String("method", method), zap.String("pattern", pattern))
+	}
+}
+
+func firstLogger(logger *zap.Logger) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		logger.Debug("Incoming call", zap.String("path", ctx.Request.RemoteAddr))
+
+		ctx.Next()
 	}
 }

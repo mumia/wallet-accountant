@@ -160,11 +160,11 @@ func (mediator CommandMediator) EndAccountMonth(
 		)
 	}
 
-	if accountMonth.Balance != transferObject.EndBalance {
+	if accountMonth.Balance != *transferObject.EndBalance {
 		return MismatchedEndBalanceError(
 			accountMonth.AccountMonthId.String(),
 			accountMonth.Balance,
-			transferObject.EndBalance,
+			*transferObject.EndBalance,
 			int(accountMonth.ActiveMonth.Month),
 			int(accountMonth.ActiveMonth.Year),
 		)
@@ -185,7 +185,7 @@ func (mediator CommandMediator) EndAccountMonth(
 
 	endAccountMonthCommand.AccountMonthId = *accountMonth.AccountMonthId
 	endAccountMonthCommand.AccountId = accountId
-	endAccountMonthCommand.EndBalance = transferObject.EndBalance
+	endAccountMonthCommand.EndBalance = *transferObject.EndBalance
 	endAccountMonthCommand.Month = transferObject.Month
 	endAccountMonthCommand.Year = transferObject.Year
 

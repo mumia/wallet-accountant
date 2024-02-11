@@ -19,12 +19,26 @@ jobs:
           keys:
             - go-mod-v4-{{ checksum "go.sum" }}
       - run:
+          name: Install Docker Compose
+          environment:
+            COMPOSE_VERSION: '2.23.3'
+          command: |
+            curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o ~/docker-compose
+            chmod +x ~/docker-compose
+            sudo mv ~/docker-compose /usr/local/bin/docker-compose
+      - run:
           name: Install Dependencies
           command: go mod download
       - save_cache:
           key: go-mod-v4-{{ checksum "go.sum" }}
           paths:
             - "/go/pkg/mod"
+  test:
+    working_directory: ~/repo
+    docker:
+      - image: cimg/go:1.21.1
+    steps:
+      - checkout
       - run:
           name: Run tests
           command: |
@@ -33,11 +47,29 @@ jobs:
             gotestsum --junitfile /tmp/test-reports/unit-tests.xml
       - store_test_results:
           path: /tmp/test-reports
+  karate:
+    working_directory: ~/repo
+    docker:
+      - image: cimg/go:1.21.1
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Run karate tests
+          command: |
+            docker compose -f karate-docker-compose.yml build wallet-accountant-karate
+            docker compose -f karate-docker-compose.yml up karate
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 workflows:
-  sample: # This is the name of the workflow, feel free to change it to better match your workflow.
+  wa: # This is the name of the workflow, feel free to change it to better match your workflow.
     # Inside the workflow, you define the jobs you want to run.
     jobs:
       - build
+      - test:
+          requires:
+            - build
+      - karate:
+          requires:
+            - build

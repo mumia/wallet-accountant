@@ -1,0 +1,36 @@
+[
+  {
+    "tagCategoryId": "#uuid",
+    "name": "locations",
+    "notes":  "My locations",
+    "tags": [
+      {
+        "tagId": "#uuid",
+        "name": "Vieira",
+        "notes":  ""
+      },
+      {
+        "tagId": "#uuid",
+        "name": "Berlin",
+        "notes":  "Always good weather...."
+      }
+    ]
+  },
+  {
+    "tagCategoryId": "#uuid",
+    "name": "insurance",
+    "notes":  "",
+    "tags": [
+      {
+        "tagId": "#uuid",
+        "name": "Car",
+        "notes":  "notes"
+      },
+      {
+        "tagId": "#uuid",
+        "name": "House",
+        "notes":  ""
+      }
+    ]
+  }
+]

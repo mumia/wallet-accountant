@@ -34,7 +34,7 @@ func TestSubscribeEventStream(t *testing.T) {
 					EventID:        uuid.UUID{},
 					EventType:      movementtype.NewMovementTypeRegistered.String(),
 					ContentType:    "",
-					StreamID:       "",
+					StreamID:       "movementType-c18f4763-7601-46d2-a5ee-54e733549f83",
 					EventNumber:    0,
 					Position:       esdb.Position{},
 					CreatedDate:    time.Now(),

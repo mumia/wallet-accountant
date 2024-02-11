@@ -18,7 +18,7 @@ type RegisterNewAccountMovementTransferObject struct {
 
 type EndAccountMonthTransferObject struct {
 	AccountId  string     `json:"accountId" binding:"required,uuid"`
-	EndBalance float64    `json:"endBalance" binding:"required"`
+	EndBalance *float64   `json:"endBalance" binding:"required,number"`
 	Month      time.Month `json:"month" binding:"required"`
 	Year       uint       `json:"year" binding:"required"`
 }
