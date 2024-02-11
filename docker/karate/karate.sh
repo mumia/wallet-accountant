@@ -3,14 +3,14 @@
 set -e
 
 ### DO NOT alter any paths in this section ###
-KARATE_JAR="/app/karate.jar"
+KARATE_JAR="/workdir/karate.jar"
 ##############################################
 
 # User-specified CLI args
 test_path="${KARATE_CONFIG_MODULE_ROOT}/test/karate/features"
 config_dir="${KARATE_CONFIG_MODULE_ROOT}/test/karate"
 karate_env="docker"
-output_dir="/app/target"
+output_dir="/workdir/target"
 
 # Build the Karate CLI args
 karate_command=()

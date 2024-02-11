@@ -24,8 +24,6 @@ services:
       context: "."
       dockerfile: docker/waitfor.dockerfile
     command: sh -c '/app/wait-for http://wallet-accountant-karate:8080/healthcheck -t 30 -- echo "Api is up!"'
-#    volumes:
-#      - "./docker/karate/wait-for:/app/wait-for"
     depends_on:
       wallet-accountant-karate:
         condition: service_started
@@ -54,8 +52,6 @@ services:
       context: "."
       dockerfile: docker/waitfor.dockerfile
     command: sh -c '/app/wait-for http://eventstore-karate:2113/health/live -t 30 -- echo "Eventstore is up!"'
-#    volumes:
-#      - "./docker/karate/wait-for:/app/wait-for"
     depends_on:
       eventstore-karate:
         condition: service_started
@@ -68,8 +64,6 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=root
       - MONGO_INITDB_ROOT_PASSWORD=example
       - MONGO_INITDB_DATABASE=wallet-accountant
-#    ports:
-#      - '3085:27017'
     volumes:
       - "./docker/karate/mongo:/docker-entrypoint-initdb.d"
       - type: tmpfs
@@ -81,20 +75,13 @@ services:
     build:
       context: "."
       dockerfile: docker/karate.dockerfile
-    working_dir: /workdir
-    entrypoint: /bin/bash
-    command: ./app/karate.sh
+    container_name: wallet-accountant-karate-runner
     environment:
       KARATE_CONFIG_ENV: "docker"
-      KARATE_CONFIG_MODULE_ROOT: "."
+      KARATE_CONFIG_MODULE_ROOT: "/workdir"
       KARATE_CONFIG_SERVICE: "wallet-accountant-karate"
       KARATE_CONFIG_PORT: "3081"
       STARTUP_WAIT_TIMEOUT: 80
-#    volumes:
-#      - .:/workdir
-#      - ./docker/karate/karate.sh:/app/karate.sh
-#      - ./docker/karate/karate-1.4.1.jar:/app/karate.jar
-    container_name: wallet-accountant-karate-runner
     depends_on:
       api-available:
         condition: service_completed_successfully
