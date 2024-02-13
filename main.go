@@ -7,18 +7,26 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"walletaccountant/account"
+	accountCommandApis "walletaccountant/account/commandapis"
+	accountQueryApis "walletaccountant/account/queryapis"
+	accountSaga "walletaccountant/account/saga"
 	"walletaccountant/accountmonth"
+	accountMonthCommandApis "walletaccountant/accountmonth/commandapis"
+	accountMonthQueryApis "walletaccountant/accountmonth/queryapis"
+	accountMonthSaga "walletaccountant/accountmonth/saga"
 	"walletaccountant/api"
 	"walletaccountant/clock"
-	"walletaccountant/commandapis"
+	"walletaccountant/common/saga"
 	"walletaccountant/definitions"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mongodb"
 	"walletaccountant/movementtype"
-	"walletaccountant/queryapis"
-	"walletaccountant/saga"
+	movementTypeCommandApis "walletaccountant/movementtype/commandapis"
+	movementTypequeryApis "walletaccountant/movementtype/queryapis"
 	"walletaccountant/tagcategory"
+	tagCategoryCommandApis "walletaccountant/tagcategory/commandapis"
+	tagCategoryQueryApis "walletaccountant/tagcategory/queryapis"
 	"walletaccountant/websocket"
 )
 
@@ -32,22 +40,22 @@ func main() {
 		),
 		fx.Provide(
 			// Command routes
-			definitions.AsRoute(commandapis.NewRegisterNewAccountApi),
-			definitions.AsRoute(commandapis.NewNewTagAndCategoryApi),
-			definitions.AsRoute(commandapis.NewNewTagWithExistingCategoryApi),
-			definitions.AsRoute(commandapis.NewRegisterNewMovementTypeApi),
-			definitions.AsRoute(commandapis.NewAccountMonthRegisterNewMovementApi),
-			definitions.AsRoute(commandapis.NewEndAccountMonthApi),
+			definitions.AsRoute(accountCommandApis.NewRegisterNewAccountApi),
+			definitions.AsRoute(tagCategoryCommandApis.NewNewTagAndCategoryApi),
+			definitions.AsRoute(tagCategoryCommandApis.NewNewTagWithExistingCategoryApi),
+			definitions.AsRoute(movementTypeCommandApis.NewRegisterNewMovementTypeApi),
+			definitions.AsRoute(accountMonthCommandApis.NewAccountMonthRegisterNewMovementApi),
+			definitions.AsRoute(accountMonthCommandApis.NewEndAccountMonthApi),
 		),
 		fx.Provide(
 			// Query routes
-			definitions.AsRoute(queryapis.NewReadAllAccountsApi),
-			definitions.AsRoute(queryapis.NewReadAccountsApi),
-			definitions.AsRoute(queryapis.NewReadAllTagsApi),
-			definitions.AsRoute(queryapis.NewReadAllMovementTypesApi),
-			definitions.AsRoute(queryapis.NewReadMovementTypeApi),
-			definitions.AsRoute(queryapis.NewReadMovementTypeByAccountApi),
-			definitions.AsRoute(queryapis.NewReadCurrentAccountMonthApi),
+			definitions.AsRoute(accountQueryApis.NewReadAllAccountsApi),
+			definitions.AsRoute(accountQueryApis.NewReadAccountsApi),
+			definitions.AsRoute(tagCategoryQueryApis.NewReadAllTagsApi),
+			definitions.AsRoute(movementTypequeryApis.NewReadAllMovementTypesApi),
+			definitions.AsRoute(movementTypequeryApis.NewReadMovementTypeApi),
+			definitions.AsRoute(movementTypequeryApis.NewReadMovementTypeByAccountApi),
+			definitions.AsRoute(accountMonthQueryApis.NewReadCurrentAccountMonthApi),
 		),
 		fx.Provide(
 			// CommandMediator
@@ -104,8 +112,8 @@ func main() {
 				eventhandler.NewSagaRegistry,
 				fx.ParamTags(`group:"sagaProviders"`),
 			),
-			definitions.AsSagaProvider(saga.NewAccountRegisterSaga),
-			definitions.AsSagaProvider(saga.NewAccountMonthEndedSaga),
+			definitions.AsSagaProvider(accountSaga.NewAccountRegisterSaga),
+			definitions.AsSagaProvider(accountMonthSaga.NewAccountMonthEndedSaga),
 		),
 		fx.Provide(
 			// Read model repositories
