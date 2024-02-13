@@ -10,10 +10,10 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonth/saga"
 	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
-	"walletaccountant/saga"
 )
 
 func TestAccountMonthEndedSaga_Matcher(t *testing.T) {

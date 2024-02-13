@@ -17,10 +17,10 @@ import (
 
 var newId = uuid.New()
 var expectedAccountId = Id(newId)
-var bankName = "my bank name"
+var bankName = BankName("my bank name")
 var name = "account name"
 var accountType = common.Checking
-var startingBalance = float64(1269)
+var startingBalance = float32(1269)
 var startingBalanceDate = time.Now()
 var currency = Currency(USD)
 var notes = "my account notes"
@@ -49,7 +49,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 	requires := require.New(t)
 
 	transferObject := RegisterNewAccountTransferObject{
-		BankName:            bankName,
+		BankName:            string(bankName),
 		Name:                name,
 		AccountType:         string(accountType),
 		StartingBalance:     startingBalance,

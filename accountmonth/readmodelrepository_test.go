@@ -2,6 +2,7 @@ package accountmonth_test
 
 import (
 	"context"
+	"fmt"
 	googleUUID "github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ import (
 	"walletaccountant/mongodb"
 )
 
-func setupBalance() float64 {
+func setupBalance() float32 {
 	return 1070.60
 }
 
@@ -262,7 +263,8 @@ func assertStartMonth(command bson.Raw, asserts *assert.Assertions) {
 	asserts.Equal(int32(1), activeMonth.Lookup("month").Int32())
 	asserts.Equal(int64(2023), activeMonth.Lookup("year").Int64())
 
-	asserts.Equal(1070.60, command.Lookup("balance").Double())
+	assertFloat(1070.60, command.Lookup("balance").Double(), asserts)
+
 	asserts.False(command.Lookup("month_ended").Boolean())
 
 	asserts.Equal("{}", command.Lookup("movements").Array().String())
@@ -278,11 +280,15 @@ func assertRegisterAccountMovement(movementAction common.MovementAction, command
 		balanceChange = balanceChange * -1
 	}
 
-	asserts.Equal(balanceChange, command.Lookup("$inc").Document().Lookup("balance").Double())
+	assertFloat(
+		float64(balanceChange),
+		command.Lookup("$inc").Document().Lookup("balance").Double(),
+		asserts,
+	)
 
 	movementAdded := command.Lookup("$push").Document().Lookup("movements").Document()
 	assertBinaryId(movementAdded.Lookup("movement_type_id"), movementTypeId1.String(), asserts)
-	asserts.Equal(setupBalance(), movementAdded.Lookup("amount").Double())
+	assertFloat(float64(setupBalance()), movementAdded.Lookup("amount").Double(), asserts)
 	asserts.Equal(date.UnixMilli(), movementAdded.Lookup("date").DateTime())
 }
 
@@ -293,4 +299,11 @@ func assertBinaryId(idValue bson.RawValue, expectedId string, asserts *assert.As
 	asserts.NoError(err)
 
 	asserts.Equal(expectedId, actualUuid.String())
+}
+
+func assertFloat(expected float64, actual float64, asserts *assert.Assertions) {
+	asserts.Equal(
+		fmt.Sprintf("%.2f", expected),
+		fmt.Sprintf("%.2f", actual),
+	)
 }

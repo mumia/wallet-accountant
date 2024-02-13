@@ -37,10 +37,10 @@ func (eventList *EventRegister) Registers() []definitions.EventDataRegister {
 
 type NewAccountRegisteredData struct {
 	AccountId           *Id                `json:"account_id"`
-	BankName            string             `json:"bank_name"`
+	BankName            BankName           `json:"bank_name"`
 	Name                string             `json:"name"`
 	AccountType         common.AccountType `json:"type"`
-	StartingBalance     float64            `json:"starting_balance"`
+	StartingBalance     float32            `json:"starting_balance"`
 	StartingBalanceDate time.Time          `json:"starting_balance_date"`
 	Currency            Currency           `json:"currency"`
 	Notes               *string            `json:"notes"`
@@ -50,7 +50,7 @@ type NewAccountRegisteredData struct {
 
 type NextMonthStartedData struct {
 	AccountId *Id        `json:"account_id"`
-	Balance   float64    `json:"balance"`
+	Balance   float32    `json:"balance"`
 	NextMonth time.Month `json:"next_month"`
 	NextYear  uint       `json:"next_year"`
 }

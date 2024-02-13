@@ -13,7 +13,7 @@ type ReadModelRepositoryMock struct {
 		ctx context.Context,
 		accountMonthId *Id,
 		accountId *account.Id,
-		startBalance float64,
+		startBalance float32,
 		month time.Month,
 		year uint,
 	) error
@@ -34,7 +34,7 @@ func (mock *ReadModelRepositoryMock) StartMonth(
 	ctx context.Context,
 	accountMonthId *Id,
 	accountId *account.Id,
-	startBalance float64,
+	startBalance float32,
 	month time.Month,
 	year uint,
 ) error {

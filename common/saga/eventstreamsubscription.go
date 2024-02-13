@@ -4,7 +4,9 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"walletaccountant/account"
+	"walletaccountant/account/saga"
 	"walletaccountant/accountmonth"
+	saga2 "walletaccountant/accountmonth/saga"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/subscription"
@@ -18,7 +20,7 @@ func AccountRegisterSagaSubscribeEventStream(
 ) error {
 	return subscription.SubscribeEventStreamForSaga(
 		account.AggregateType,
-		subscription.HandlerTypeForSaga(AccountRegisterSagaType.String()),
+		subscription.HandlerTypeForSaga(saga.AccountRegisterSagaType.String()),
 		client,
 		sagas,
 		logger,
@@ -34,7 +36,7 @@ func AccountMonthEndedSagaSubscribeEventStream(
 ) error {
 	return subscription.SubscribeEventStreamForSaga(
 		accountmonth.AggregateType,
-		subscription.HandlerTypeForSaga(AccountMonthEndedSagaType.String()),
+		subscription.HandlerTypeForSaga(saga2.AccountMonthEndedSagaType.String()),
 		client,
 		sagas,
 		logger,

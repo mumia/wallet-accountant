@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/account/commandapis"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 )

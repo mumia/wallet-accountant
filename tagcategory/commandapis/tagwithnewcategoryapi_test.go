@@ -15,30 +15,33 @@ import (
 	"strings"
 	"testing"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
 	"walletaccountant/definitions"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategory/commandapis"
 )
 
-var tagInCategoryBody = `{
-	"tagCategoryId": "` + expectedTagCategoryId.String() + `",
+var tagWithCategoryBody = `{
+	"categoryName": "Category name",
+    "categoryNotes": "Category notes",
     "tagName": "Tag name",
     "tagNotes": "Tag notes"
 }`
 
-var expectedTagInCategoryNotes = "Tag notes"
-var expectedTagInCategoryTransferObject = tagcategory.AddNewTagToExistingCategoryTransferObject{
-	TagCategoryId: expectedTagCategoryId.String(),
+var expectedTagWithCategoryCategoryNotes = "Category notes"
+var expectedTagWithCategoryTagNotes = "Tag notes"
+var expectedTagWithCategoryTransferObject = tagcategory.AddNewTagToNewCategoryTransferObject{
+	CategoryName:  "Category name",
+	CategoryNotes: &expectedTagWithCategoryCategoryNotes,
 	TagName:       "Tag name",
-	TagNotes:      &expectedTagInCategoryNotes,
+	TagNotes:      &expectedTagWithCategoryTagNotes,
 }
 
-func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
+func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 	ctx := context.Background()
 
-	err := os.Setenv("PORT", "59599")
+	err := os.Setenv("PORT", "59598")
 	requires.NoError(err)
 	err = os.Setenv("FRONTEND_URL", "http://localhost")
 	requires.NoError(err)
@@ -46,41 +49,41 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	lifecycle := fxtest.NewLifecycle(t)
 
-	addExistingFunctionCalled := 0
+	addFunctionCalled := 0
 	mediator := tagcategory.CommandMediatorMock{
-		AddNewTagToExistingCategoryFn: func(
+		AddNewTagToNewCategoryFn: func(
 			ctx *gin.Context,
-			transferObject tagcategory.AddNewTagToExistingCategoryTransferObject,
-		) (*tagcategory.TagId, *definitions.WalletAccountantError) {
-			addExistingFunctionCalled++
+			transferObject tagcategory.AddNewTagToNewCategoryTransferObject,
+		) (*tagcategory.TagId, *tagcategory.Id, *definitions.WalletAccountantError) {
+			addFunctionCalled++
 
-			switch addExistingFunctionCalled {
+			switch addFunctionCalled {
 			case 1:
-				asserts.Equal(expectedTagInCategoryTransferObject, transferObject)
+				asserts.Equal(expectedTagWithCategoryTransferObject, transferObject)
 
-				return &expectedTagId, nil
+				return &expectedTagId, &expectedTagCategoryId, nil
 			case 2:
-				return nil, definitions.GenericError(errors.New("an error"), nil)
+				return nil, nil, definitions.GenericError(errors.New("an error"), nil)
 			}
 
 			t.Log("should not be called more than twice")
 			t.Fail()
 
-			return nil, nil
+			return nil, nil, nil
 		},
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewNewTagWithExistingCategoryApi(&mediator, logger)},
+		[]definitions.Route{commandapis.NewNewTagAndCategoryApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
 	)
 	requires.NoError(lifecycle.Start(ctx))
 
-	t.Run("successfully adds new tag to existing category", func(t *testing.T) {
+	t.Run("successfully adds new tag to new category", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/tag", strings.NewReader(tagInCategoryBody))
+		request, err := http.NewRequest("POST", "/tag-category", strings.NewReader(tagWithCategoryBody))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
@@ -92,11 +95,12 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 
 		asserts.Equal(http.StatusCreated, w.Code)
 		asserts.Equal(expectedTagId.String(), actualResponse["tagId"])
+		asserts.Equal(expectedTagCategoryId.String(), actualResponse["tagCategoryId"])
 	})
 
-	t.Run("fails to add new tag to existing category, because of invalid JSON body", func(t *testing.T) {
+	t.Run("fails to add new tag to new category, because of invalid JSON body", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/tag", strings.NewReader("{invalid"))
+		request, err := http.NewRequest("POST", "/tag-category", strings.NewReader("{invalid"))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
@@ -111,9 +115,9 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 		)
 	})
 
-	t.Run("fails to add new tag to existing category, because of mediator error", func(t *testing.T) {
+	t.Run("fails to add new tag to new category, because of mediator error", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/tag", strings.NewReader(tagInCategoryBody))
+		request, err := http.NewRequest("POST", "/tag-category", strings.NewReader(tagWithCategoryBody))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
@@ -128,5 +132,5 @@ func TestAddNewTagToExistingCategoryApi_Handle(t *testing.T) {
 		)
 	})
 
-	asserts.Equal(2, addExistingFunctionCalled)
+	asserts.Equal(2, addFunctionCalled)
 }

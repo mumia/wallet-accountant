@@ -15,9 +15,9 @@ import (
 	"strings"
 	"testing"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
+	"walletaccountant/movementtype/commandapis"
 )
 
 var accountId2 = uuid.New()

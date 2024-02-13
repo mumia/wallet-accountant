@@ -15,7 +15,7 @@ import (
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
-	"walletaccountant/queryapis"
+	"walletaccountant/movementtype/queryapis"
 )
 
 func TestReadMovementTypeApi_Handle(t *testing.T) {

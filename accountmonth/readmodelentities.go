@@ -13,8 +13,8 @@ type Entity struct {
 	AccountId      *account.Id        `json:"accountId" bson:"account_id"`
 	ActiveMonth    *EntityActiveMonth `json:"activeMonth" bson:"active_month"`
 	Movements      []*EntityMovement  `json:"movements" bson:"movements"`
-	Balance        float64            `json:"balance" bson:"balance"`
-	InitialBalance float64            `json:"initialBalance" bson:"initial_balance"`
+	Balance        float32            `json:"balance" bson:"balance"`
+	InitialBalance float32            `json:"initialBalance" bson:"initial_balance"`
 	MonthEnded     bool               `json:"monthEnded" bson:"month_ended"`
 }
 
@@ -26,7 +26,7 @@ type EntityActiveMonth struct {
 type EntityMovement struct {
 	MovementTypeId  *movementtype.Id      `json:"movementTypeId" bson:"movement_type_id"`
 	Action          common.MovementAction `json:"action" bson:"action"`
-	Amount          float64               `json:"amount" bson:"amount"`
+	Amount          float32               `json:"amount" bson:"amount"`
 	Date            time.Time             `json:"date" bson:"date"`
 	SourceAccountId *account.Id           `json:"sourceAccountId" bson:"source_account_id"`
 	Description     string                `json:"description" bson:"description"`

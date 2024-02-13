@@ -34,7 +34,7 @@ type AccountMonth struct {
 	clock *clock.Clock
 
 	activeMonth *ActiveMonth
-	balance     float64
+	balance     float32
 }
 
 func (accountMonth *AccountMonth) HandleCommand(ctx context.Context, command eventhorizon.Command) error {
@@ -149,12 +149,6 @@ func (accountMonth *AccountMonth) ApplyEvent(ctx context.Context, event eventhor
 		case common.Debit:
 			accountMonth.balance = accountMonth.balance - eventData.Amount
 		}
-
-		//case MonthEnded:
-		//	eventData, ok := event.Data().(MonthEndedData)
-		//	if !ok {
-		//		return definitions.EventDataTypeError(MonthEnded, event.EventType())
-		//	}
 	}
 
 	return nil

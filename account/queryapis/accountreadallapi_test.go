@@ -14,9 +14,9 @@ import (
 	"os"
 	"testing"
 	"walletaccountant/account"
+	"walletaccountant/account/queryapis"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
-	"walletaccountant/queryapis"
 )
 
 func TestReadAllAccountsApi_Handle(t *testing.T) {

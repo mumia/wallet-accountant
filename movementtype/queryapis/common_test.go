@@ -9,9 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"time"
 	"walletaccountant/account"
-	"walletaccountant/accountmonth"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
@@ -19,83 +17,11 @@ import (
 )
 
 var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
-var notes1 = "a set of notes"
-var accountEntity1 = account.Entity{
-	AccountId:           &accountId1,
-	BankName:            "a bank name",
-	Name:                "an account name",
-	AccountType:         common.Checking,
-	StartingBalance:     5069,
-	StartingBalanceDate: time.Now(),
-	Currency:            account.EUR,
-	Notes:               &notes1,
-	ActiveMonth: account.EntityActiveMonth{
-		Month: time.August,
-		Year:  2023,
-	},
-}
-
 var accountId2 = account.Id(uuid.New())
-var notes2 = "another set of notes"
-var accountEntity2 = account.Entity{
-	AccountId:           &accountId2,
-	BankName:            "another bank name",
-	Name:                "annother account name",
-	AccountType:         common.Savings,
-	StartingBalance:     6069,
-	StartingBalanceDate: time.Now().Add(1 * time.Minute),
-	Currency:            account.USD,
-	Notes:               &notes2,
-	ActiveMonth: account.EntityActiveMonth{
-		Month: time.April,
-		Year:  2022,
-	},
-}
 
-var tagCategoryId1 = tagcategory.Id(uuid.New())
-var tagCategoryId2 = tagcategory.Id(uuid.New())
 var tagId1 = tagcategory.TagId(uuid.New())
 var tagId2 = tagcategory.TagId(uuid.New())
 var tagId3 = tagcategory.TagId(uuid.New())
-
-var tagCategoryNotes1 = "tag category 1 notes"
-var tagCategoryNotes2 = "tag category 2 notes"
-
-var tagNotes1 = "tag 1 notes"
-var tagNotes2 = "tag 2 notes"
-var tagNotes3 = "tag 3 notes"
-
-var tag1 = tagcategory.Entity{
-	TagId: &tagId1,
-	Name:  "tag 1 name",
-	Notes: &tagNotes1,
-}
-
-var tag2 = tagcategory.Entity{
-	TagId: &tagId2,
-	Name:  "tag 2 name",
-	Notes: &tagNotes2,
-}
-
-var tag3 = tagcategory.Entity{
-	TagId: &tagId3,
-	Name:  "tag 3 name",
-	Notes: &tagNotes3,
-}
-
-var tagCategoryEntity1 = tagcategory.CategoryEntity{
-	TagCategoryId: &tagCategoryId1,
-	Name:          "tag category 1 name",
-	Notes:         &tagCategoryNotes1,
-	Tags:          []*tagcategory.Entity{&tag2, &tag1},
-}
-
-var tagCategoryEntity2 = tagcategory.CategoryEntity{
-	TagCategoryId: &tagCategoryId2,
-	Name:          "tag category 2 name",
-	Notes:         &tagCategoryNotes2,
-	Tags:          []*tagcategory.Entity{&tag3},
-}
 
 var movementTypeId1 = movementtype.Id(uuid.New())
 var movementTypeId2 = movementtype.Id(uuid.New())
@@ -121,23 +47,6 @@ var movementTypeWithSourceAccountEntity1 = movementtype.Entity{
 	Description:     "movement type with source account description",
 	Notes:           &note2,
 	Tags:            []*tagcategory.TagId{&tagId3, &tagId2},
-}
-
-var month = time.January
-var year = uint(2023)
-var accountMonthUUIDString = "46e18992-7977-9f44-4fee-b192d8c5a746"
-var accountMonthId = accountmonth.Id(uuid.MustParse(accountMonthUUIDString))
-
-var accountMonthEntity1 = accountmonth.Entity{
-	AccountMonthId: &accountMonthId,
-	AccountId:      &accountId1,
-	ActiveMonth: &accountmonth.EntityActiveMonth{
-		Month: month,
-		Year:  year,
-	},
-	Movements:  []*accountmonth.EntityMovement{},
-	Balance:    1000.45,
-	MonthEnded: false,
 }
 
 func executeAndAssertResult(

@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/accountmonth"
+	commandapis2 "walletaccountant/accountmonth/commandapis"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 )
@@ -31,15 +31,6 @@ var registerNewMovementBody = `{
     "notes": "mov type notes",
     "tagIds": ["b6e4fa72-a603-4226-857f-1f11d2af9f44", "99a2b571-152e-65f4-c9ef-0bd08751519c"]
 }`
-
-//var movementTypeWithSourceAccountBody = `{
-//	"action": "debit",
-//    "accountId": "` + accountId2.String() + `",
-//    "sourceAccountId": "` + accountId1.String() + `",
-//    "description": "mov type desc with source",
-//    "notes": "mov type notes with source",
-//    "tags": ["` + tagId2.String() + `"]
-//}`
 
 var expectedRegisterNewMovementTransferObject = accountmonth.RegisterNewAccountMovementTransferObject{
 	AccountId:      accountId1.String(),
@@ -127,7 +118,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewAccountMonthRegisterNewMovementApi(&mediator, logger)},
+		[]definitions.Route{commandapis2.NewAccountMonthRegisterNewMovementApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,

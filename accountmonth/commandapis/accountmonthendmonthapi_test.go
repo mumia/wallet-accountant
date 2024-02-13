@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/accountmonth"
+	commandapis2 "walletaccountant/accountmonth/commandapis"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
 	"walletaccountant/definitions"
 )
 
@@ -27,7 +27,7 @@ var endMonthBody = `{
 	"year": 2023
 }`
 
-var endBalance = 10069.5
+var endBalance = float32(10069.5)
 var expectedEndAccountMonthTransferObject = accountmonth.EndAccountMonthTransferObject{
 	AccountId:  accountId1.String(),
 	EndBalance: &endBalance,
@@ -115,7 +115,7 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewEndAccountMonthApi(&mediator, logger)},
+		[]definitions.Route{commandapis2.NewEndAccountMonthApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -225,7 +225,7 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			errorContext: &definitions.ErrorContext{
 				"accountMonthId":      accountMonthId1.String(),
 				"accountMonthBalance": float64(1000),
-				"endMonthBalance":     10069.5,
+				"endMonthBalance":     float64(10069.5),
 				"month":               float64(1),
 				"year":                float64(2023),
 			},
