@@ -16,7 +16,6 @@ import (
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
 	"walletaccountant/movementtype/queryapis"
-	queryapis2 "walletaccountant/queryapis"
 )
 
 func TestReadMovementTypeApi_Handle(t *testing.T) {
@@ -42,15 +41,15 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 
 			switch movementTypeCalled {
 			case 1:
-				asserts.Equal(&queryapis2.movementTypeId2, movementTypeId)
+				asserts.Equal(&movementTypeId2, movementTypeId)
 
-				return &queryapis2.movementTypeWithSourceAccountEntity1, nil
+				return &movementTypeWithSourceAccountEntity1, nil
 
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 
 			case 3:
-				asserts.Equal(&queryapis2.movementTypeId1, movementTypeId)
+				asserts.Equal(&movementTypeId1, movementTypeId)
 
 				return nil, movementtype.NonExistentMovementTypeError(movementTypeId.String())
 			}
@@ -71,15 +70,15 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 	requires.NoError(lifecycle.Start(ctx))
 
 	t.Run("successfully gets a specific movement type", func(t *testing.T) {
-		expectedMovementTypeResponse, err := json.Marshal(queryapis2.movementTypeWithSourceAccountEntity1)
+		expectedMovementTypeResponse, err := json.Marshal(movementTypeWithSourceAccountEntity1)
 		requires.NoError(err)
 
-		queryapis2.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/movement-type/"+queryapis2.movementTypeId2.String(),
+			"/movement-type/"+movementTypeId2.String(),
 			nil,
 			http.StatusOK,
 			string(expectedMovementTypeResponse),
@@ -88,7 +87,7 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 	})
 
 	t.Run("fails to get all accounts, because of invalid uuid", func(t *testing.T) {
-		queryapis2.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
@@ -102,12 +101,12 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 	})
 
 	t.Run("fails to get all accounts, because of an unspecified mediator error", func(t *testing.T) {
-		queryapis2.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/movement-type/"+queryapis2.movementTypeId1.String(),
+			"/movement-type/"+movementTypeId1.String(),
 			nil,
 			http.StatusInternalServerError,
 			"an error",
@@ -116,15 +115,15 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 	})
 
 	t.Run("fails to get all accounts, because of non existent account", func(t *testing.T) {
-		queryapis2.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/movement-type/"+queryapis2.movementTypeId1.String(),
+			"/movement-type/"+movementTypeId1.String(),
 			nil,
 			http.StatusNotFound,
-			"{\"error\":\"Movement type does not exist\",\"code\":300,\"context\":{\"movementTypeId\":\""+queryapis2.movementTypeId1.String()+"\"}}",
+			"{\"error\":\"Movement type does not exist\",\"code\":300,\"context\":{\"movementTypeId\":\""+movementTypeId1.String()+"\"}}",
 			false,
 		)
 	})

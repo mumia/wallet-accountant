@@ -16,8 +16,7 @@ import (
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
-	queryapis2 "walletaccountant/movementtype/queryapis"
-	"walletaccountant/queryapis"
+	"walletaccountant/movementtype/queryapis"
 )
 
 func TestReadAllMovementTypeApi_Handle(t *testing.T) {
@@ -40,7 +39,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 
 			switch movementTypesCalled {
 			case 1:
-				return []*movementtype.Entity{&queryapis.movementTypeEntity1, &queryapis.movementTypeWithSourceAccountEntity1}, nil
+				return []*movementtype.Entity{&movementTypeEntity1, &movementTypeWithSourceAccountEntity1}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -53,7 +52,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis2.NewReadAllMovementTypesApi(&mediator, logger)},
+		[]definitions.Route{queryapis.NewReadAllMovementTypesApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -68,7 +67,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		expectedMovementTypesResponse, err := json.Marshal(
-			[]movementtype.Entity{queryapis.movementTypeEntity1, queryapis.movementTypeWithSourceAccountEntity1},
+			[]movementtype.Entity{movementTypeEntity1, movementTypeWithSourceAccountEntity1},
 		)
 		requires.NoError(err)
 
@@ -84,7 +83,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		queryapis.assertGenericErrorFromResponse(
+		assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,

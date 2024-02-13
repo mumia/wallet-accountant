@@ -15,9 +15,8 @@ import (
 	"testing"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
-	"walletaccountant/queryapis"
 	"walletaccountant/tagcategory"
-	queryapis2 "walletaccountant/tagcategory/queryapis"
+	"walletaccountant/tagcategory/queryapis"
 )
 
 func TestReadAllTagsApi_Handle(t *testing.T) {
@@ -40,7 +39,7 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 
 			switch tagsCalled {
 			case 1:
-				return []*tagcategory.CategoryEntity{&queryapis.tagCategoryEntity1, &queryapis.tagCategoryEntity2}, nil
+				return []*tagcategory.CategoryEntity{&tagCategoryEntity1, &tagCategoryEntity2}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -53,7 +52,7 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis2.NewReadAllTagsApi(&mediator, logger)},
+		[]definitions.Route{queryapis.NewReadAllTagsApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -68,7 +67,7 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		expectedTagsResponse, err := json.Marshal(
-			[]tagcategory.CategoryEntity{queryapis.tagCategoryEntity1, queryapis.tagCategoryEntity2},
+			[]tagcategory.CategoryEntity{tagCategoryEntity1, tagCategoryEntity2},
 		)
 		requires.NoError(err)
 
@@ -84,7 +83,7 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		queryapis.assertGenericErrorFromResponse(
+		assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,

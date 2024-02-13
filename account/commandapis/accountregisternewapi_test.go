@@ -16,9 +16,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
-	commandapis2 "walletaccountant/account/commandapis"
+	"walletaccountant/account/commandapis"
 	"walletaccountant/api"
-	"walletaccountant/commandapis"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 )
@@ -131,7 +130,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis2.NewRegisterNewAccountApi(&mediator, logger)},
+		[]definitions.Route{commandapis.NewRegisterNewAccountApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -183,7 +182,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusBadRequest, w.Code)
-		commandapis.assertGenericErrorFromResponse(
+		assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"invalid character 'i' looking for beginning of object key string",
 			asserts,
@@ -200,7 +199,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		commandapis.assertGenericErrorFromResponse(
+		assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,

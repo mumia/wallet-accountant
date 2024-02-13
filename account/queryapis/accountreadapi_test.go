@@ -13,10 +13,9 @@ import (
 	"os"
 	"testing"
 	"walletaccountant/account"
-	queryapis2 "walletaccountant/account/queryapis"
+	"walletaccountant/account/queryapis"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
-	"walletaccountant/queryapis"
 )
 
 func TestReadAccountsApi_Handle(t *testing.T) {
@@ -37,11 +36,11 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 		AccountFn: func(ctx *gin.Context, accountId *account.Id) (*account.Entity, *definitions.WalletAccountantError) {
 			accountCalled++
 
-			asserts.Equal(&queryapis.accountId1, accountId)
+			asserts.Equal(&accountId1, accountId)
 
 			switch accountCalled {
 			case 1:
-				return &queryapis.accountEntity1, nil
+				return &accountEntity1, nil
 
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
@@ -58,7 +57,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis2.NewReadAccountsApi(&mediator, logger)},
+		[]definitions.Route{queryapis.NewReadAccountsApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -66,15 +65,15 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 	requires.NoError(lifecycle.Start(ctx))
 
 	t.Run("successfully gets a specific account", func(t *testing.T) {
-		expectedAccountResponse, err := json.Marshal(queryapis.accountEntity1)
+		expectedAccountResponse, err := json.Marshal(accountEntity1)
 		requires.NoError(err)
 
-		queryapis.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/account/"+queryapis.accountId1.String(),
+			"/account/"+accountId1.String(),
 			nil,
 			http.StatusOK,
 			string(expectedAccountResponse),
@@ -83,7 +82,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 	})
 
 	t.Run("fails to get all accounts, because of invalid uuid", func(t *testing.T) {
-		queryapis.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
@@ -97,12 +96,12 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 	})
 
 	t.Run("fails to get all accounts, because of an unspecified mediator error", func(t *testing.T) {
-		queryapis.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/account/"+queryapis.accountId1.String(),
+			"/account/"+accountId1.String(),
 			nil,
 			http.StatusInternalServerError,
 			"an error",
@@ -111,15 +110,15 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 	})
 
 	t.Run("fails to get all accounts, because of non existent account", func(t *testing.T) {
-		queryapis.executeAndAssertResult(
+		executeAndAssertResult(
 			asserts,
 			requires,
 			router,
 			"GET",
-			"/account/"+queryapis.accountId1.String(),
+			"/account/"+accountId1.String(),
 			nil,
 			http.StatusNotFound,
-			"{\"error\":\"Account does not exist\",\"code\":101,\"context\":{\"AccountId\":\""+queryapis.accountId1.String()+"\"}}",
+			"{\"error\":\"Account does not exist\",\"code\":101,\"context\":{\"AccountId\":\""+accountId1.String()+"\"}}",
 			false,
 		)
 	})

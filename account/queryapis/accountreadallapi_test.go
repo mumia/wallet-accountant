@@ -17,7 +17,6 @@ import (
 	"walletaccountant/account/queryapis"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
-	queryapis2 "walletaccountant/queryapis"
 )
 
 func TestReadAllAccountsApi_Handle(t *testing.T) {
@@ -40,7 +39,7 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 
 			switch accountsCalled {
 			case 1:
-				return []*account.Entity{&queryapis2.accountEntity1, &queryapis2.accountEntity2}, nil
+				return []*account.Entity{&accountEntity1, &accountEntity2}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -67,7 +66,7 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 
 		router.ServeHTTP(w, request)
 
-		expectedAccountsResponse, err := json.Marshal([]account.Entity{queryapis2.accountEntity1, queryapis2.accountEntity2})
+		expectedAccountsResponse, err := json.Marshal([]account.Entity{accountEntity1, accountEntity2})
 		requires.NoError(err)
 
 		asserts.Equal(http.StatusOK, w.Code)
@@ -82,7 +81,7 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		asserts.Equal(http.StatusInternalServerError, w.Code)
-		queryapis2.assertGenericErrorFromResponse(
+		assertGenericErrorFromResponse(
 			w.Body.Bytes(),
 			"an error",
 			asserts,

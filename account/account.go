@@ -19,8 +19,8 @@ type BankName string
 
 const (
 	DB  BankName = "Deutsche Bank"
-	N26 BankName = "N26"
-	BCP BankName = "Millennium bcp"
+	N26          = "N26"
+	BCP          = "Millennium bcp"
 )
 
 type Currency string

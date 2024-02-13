@@ -61,7 +61,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 	t.Run("correctly handles register new account", func(t *testing.T) {
 		expectedCommand := &RegisterNewAccount{
 			AccountId:           expectedAccountId,
-			BankName:            string(bankName),
+			BankName:            bankName,
 			Name:                name,
 			AccountType:         accountType,
 			StartingBalance:     startingBalance,

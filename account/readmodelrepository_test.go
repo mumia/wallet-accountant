@@ -23,10 +23,10 @@ var expectedActiveMonth = account.EntityActiveMonth{
 var notes1 = "a set of notes"
 var expectedAccountEntity1 = account.Entity{
 	AccountId:           &expectedAccountId1,
-	BankName:            "a bank name",
+	BankName:            account.BankName("a bank name"),
 	Name:                "an account name",
 	AccountType:         common.Checking,
-	StartingBalance:     5069,
+	StartingBalance:     float32(5069),
 	StartingBalanceDate: time.Now(),
 	Currency:            account.EUR,
 	Notes:               &notes1,
@@ -56,7 +56,7 @@ var expectedAccountId2 = account.Id(uuid.New())
 var notes2 = "another set of notes"
 var expectedAccountEntity2 = account.Entity{
 	AccountId:           &expectedAccountId1,
-	BankName:            "another bank name",
+	BankName:            account.BankName("another bank name"),
 	Name:                "annother account name",
 	AccountType:         common.Savings,
 	StartingBalance:     6069,
@@ -66,25 +66,6 @@ var expectedAccountEntity2 = account.Entity{
 	ActiveMonth: account.EntityActiveMonth{
 		Month: time.April,
 		Year:  2022,
-	},
-}
-
-var accountIdBson2, _ = bson.Marshal(expectedAccountId2)
-var accountBson2 = bson.D{
-	{"_id", accountIdBson2},
-	{"bank_name", expectedAccountEntity2.BankName},
-	{"name", expectedAccountEntity2.Name},
-	{"account_type", expectedAccountEntity2.AccountType},
-	{"starting_balance", expectedAccountEntity2.StartingBalance},
-	{"starting_balance_date", expectedAccountEntity2.StartingBalanceDate},
-	{"currency", expectedAccountEntity2.Currency},
-	{"notes", expectedAccountEntity2.Notes},
-	{
-		"active_month",
-		bson.D{
-			{"month", expectedAccountEntity2.ActiveMonth.Month},
-			{"year", expectedAccountEntity2.ActiveMonth.Year},
-		},
 	},
 }
 
@@ -269,13 +250,13 @@ func assetUpdates(mt *mtest.T, asserts *assert.Assertions, requires *require.Ass
 func assertCreate(update bson.Raw, asserts *assert.Assertions) {
 	assertBinaryId(update.Lookup("_id"), asserts)
 
-	asserts.Equal(expectedAccountEntity1.BankName, update.Lookup("bank_name").StringValue())
+	asserts.Equal(string(expectedAccountEntity1.BankName), update.Lookup("bank_name").StringValue())
 	asserts.Equal(expectedAccountEntity1.Name, update.Lookup("name").StringValue())
 	asserts.Equal(
 		expectedAccountEntity1.AccountType,
 		common.AccountType(update.Lookup("account_type").StringValue()),
 	)
-	asserts.Equal(expectedAccountEntity1.StartingBalance, update.Lookup("starting_balance").Double())
+	asserts.Equal(float64(expectedAccountEntity1.StartingBalance), update.Lookup("starting_balance").Double())
 	asserts.Equal(
 		expectedAccountEntity1.StartingBalanceDate.Format("2006-02-01"),
 		time.UnixMilli(update.Lookup("starting_balance_date").DateTime()).Format("2006-02-01"),

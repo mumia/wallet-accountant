@@ -42,18 +42,18 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 	eventhorizon.RegisterAggregate(account.NewFactory().Factory())
 
 	monthEndedData := accountmonth.MonthEndedData{
-		AccountMonthId: &saga.accountMonthId,
-		AccountId:      &saga.accountId1,
+		AccountMonthId: &accountMonthId,
+		AccountId:      &accountId1,
 		EndBalance:     1000.43,
-		Month:          saga.month,
-		Year:           saga.year,
+		Month:          month,
+		Year:           year,
 	}
 
 	newAccountRegisteredEvent := eventhorizon.NewEvent(
 		accountmonth.MonthEnded,
 		&monthEndedData,
 		time.Now(),
-		eventhorizon.ForAggregate(account.AggregateType, saga.accountId1, 1),
+		eventhorizon.ForAggregate(account.AggregateType, accountId1, 1),
 	)
 
 	handleCommandCalled := 0
@@ -65,17 +65,17 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 			switch handleCommandCalled {
 			case 1:
 				expectedCommand = &account.StartNextMonth{
-					AccountId: saga.accountId1,
+					AccountId: accountId1,
 					Balance:   1000.43,
 				}
 
 			case 2:
 				expectedCommand = &accountmonth.StartAccountMonth{
-					AccountMonthId: saga.accountMonthId,
-					AccountId:      saga.accountId1,
+					AccountMonthId: accountMonthId,
+					AccountId:      accountId1,
 					StartBalance:   1000.43,
-					Month:          saga.month,
-					Year:           saga.year,
+					Month:          month,
+					Year:           year,
 				}
 			}
 
@@ -95,7 +95,7 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 							eventhorizon.NewEvent(
 								account.NewAccountRegistered,
 								&account.NewAccountRegisteredData{
-									AccountId:           &saga.accountId1,
+									AccountId:           &accountId1,
 									BankName:            "bank name",
 									Name:                "account name",
 									AccountType:         common.Checking,
@@ -103,13 +103,13 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 									StartingBalanceDate: time.Now(),
 									Currency:            account.USD,
 									Notes:               &notes,
-									ActiveMonth:         saga.month,
-									ActiveYear:          saga.year,
+									ActiveMonth:         month,
+									ActiveYear:          year,
 								},
 								time.Now(),
 								eventhorizon.ForAggregate(
 									account.AggregateType,
-									uuid2.MustParse(saga.accountId1.String()),
+									uuid2.MustParse(accountId1.String()),
 									1,
 								),
 							),
