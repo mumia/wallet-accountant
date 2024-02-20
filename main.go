@@ -7,13 +7,17 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"walletaccountant/account"
-	accountCommandApis "walletaccountant/account/commandapis"
-	accountQueryApis "walletaccountant/account/queryapis"
-	accountSaga "walletaccountant/account/saga"
+	"walletaccountant/accountcommand"
 	"walletaccountant/accountmonth"
-	accountMonthCommandApis "walletaccountant/accountmonth/commandapis"
-	accountMonthQueryApis "walletaccountant/accountmonth/queryapis"
-	accountMonthSaga "walletaccountant/accountmonth/saga"
+	"walletaccountant/accountmonthcommand"
+	"walletaccountant/accountmonthprojection"
+	"walletaccountant/accountmonthquery"
+	"walletaccountant/accountmonthreadmodel"
+	"walletaccountant/accountmonthsaga"
+	"walletaccountant/accountprojection"
+	"walletaccountant/accountquery"
+	"walletaccountant/accountreadmodel"
+	"walletaccountant/accountsaga"
 	"walletaccountant/api"
 	"walletaccountant/clock"
 	"walletaccountant/common/saga"
@@ -22,11 +26,15 @@ import (
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mongodb"
 	"walletaccountant/movementtype"
-	movementTypeCommandApis "walletaccountant/movementtype/commandapis"
-	movementTypequeryApis "walletaccountant/movementtype/queryapis"
+	"walletaccountant/movementtypecommand"
+	"walletaccountant/movementtypeprojection"
+	"walletaccountant/movementtypequery"
+	"walletaccountant/movementtypereadmodel"
 	"walletaccountant/tagcategory"
-	tagCategoryCommandApis "walletaccountant/tagcategory/commandapis"
-	tagCategoryQueryApis "walletaccountant/tagcategory/queryapis"
+	"walletaccountant/tagcategorycommand"
+	"walletaccountant/tagcategoryprojection"
+	"walletaccountant/tagcategoryquery"
+	"walletaccountant/tagcategoryreadmodel"
 	"walletaccountant/websocket"
 )
 
@@ -40,50 +48,50 @@ func main() {
 		),
 		fx.Provide(
 			// Command routes
-			definitions.AsRoute(accountCommandApis.NewRegisterNewAccountApi),
-			definitions.AsRoute(tagCategoryCommandApis.NewNewTagAndCategoryApi),
-			definitions.AsRoute(tagCategoryCommandApis.NewNewTagWithExistingCategoryApi),
-			definitions.AsRoute(movementTypeCommandApis.NewRegisterNewMovementTypeApi),
-			definitions.AsRoute(accountMonthCommandApis.NewAccountMonthRegisterNewMovementApi),
-			definitions.AsRoute(accountMonthCommandApis.NewEndAccountMonthApi),
+			definitions.AsRoute(accountcommand.NewRegisterNewAccountApi),
+			definitions.AsRoute(accountmonthcommand.NewAccountMonthRegisterNewMovementApi),
+			definitions.AsRoute(accountmonthcommand.NewEndAccountMonthApi),
+			definitions.AsRoute(movementtypecommand.NewRegisterNewMovementTypeApi),
+			definitions.AsRoute(tagcategorycommand.NewNewTagAndCategoryApi),
+			definitions.AsRoute(tagcategorycommand.NewNewTagWithExistingCategoryApi),
 		),
 		fx.Provide(
 			// Query routes
-			definitions.AsRoute(accountQueryApis.NewReadAllAccountsApi),
-			definitions.AsRoute(accountQueryApis.NewReadAccountsApi),
-			definitions.AsRoute(tagCategoryQueryApis.NewReadAllTagsApi),
-			definitions.AsRoute(movementTypequeryApis.NewReadAllMovementTypesApi),
-			definitions.AsRoute(movementTypequeryApis.NewReadMovementTypeApi),
-			definitions.AsRoute(movementTypequeryApis.NewReadMovementTypeByAccountApi),
-			definitions.AsRoute(accountMonthQueryApis.NewReadCurrentAccountMonthApi),
+			definitions.AsRoute(accountquery.NewReadAllAccountsApi),
+			definitions.AsRoute(accountquery.NewReadAccountsApi),
+			definitions.AsRoute(accountmonthquery.NewReadCurrentAccountMonthApi),
+			definitions.AsRoute(movementtypequery.NewReadAllMovementTypesApi),
+			definitions.AsRoute(movementtypequery.NewReadMovementTypeApi),
+			definitions.AsRoute(movementtypequery.NewReadMovementTypeByAccountApi),
+			definitions.AsRoute(tagcategoryquery.NewReadAllTagsApi),
 		),
 		fx.Provide(
 			// CommandMediator
-			fx.Annotate(account.NewCommandMediator, fx.As(new(account.CommandMediatorer))),
-			fx.Annotate(tagcategory.NewCommandMediator, fx.As(new(tagcategory.CommandMediatorer))),
-			fx.Annotate(movementtype.NewCommandMediator, fx.As(new(movementtype.CommandMediatorer))),
-			fx.Annotate(accountmonth.NewCommandMediator, fx.As(new(accountmonth.CommandMediatorer))),
+			fx.Annotate(accountcommand.NewCommandMediator, fx.As(new(accountcommand.CommandMediatorer))),
+			fx.Annotate(tagcategorycommand.NewCommandMediator, fx.As(new(tagcategorycommand.CommandMediatorer))),
+			fx.Annotate(movementtypecommand.NewCommandMediator, fx.As(new(movementtypecommand.CommandMediatorer))),
+			fx.Annotate(accountmonthcommand.NewCommandMediator, fx.As(new(accountmonthcommand.CommandMediatorer))),
 		),
 		fx.Provide(
 			// QueryMediator
-			fx.Annotate(account.NewQueryMediator, fx.As(new(account.QueryMediatorer))),
-			fx.Annotate(tagcategory.NewQueryMediator, fx.As(new(tagcategory.QueryMediatorer))),
-			fx.Annotate(movementtype.NewQueryMediator, fx.As(new(movementtype.QueryMediatorer))),
-			fx.Annotate(accountmonth.NewQueryMediator, fx.As(new(accountmonth.QueryMediatorer))),
+			fx.Annotate(accountquery.NewQueryMediator, fx.As(new(accountquery.QueryMediatorer))),
+			fx.Annotate(accountmonthquery.NewQueryMediator, fx.As(new(accountmonthquery.QueryMediatorer))),
+			fx.Annotate(movementtypequery.NewQueryMediator, fx.As(new(movementtypequery.QueryMediatorer))),
+			fx.Annotate(tagcategoryquery.NewQueryMediator, fx.As(new(tagcategoryquery.QueryMediatorer))),
 		),
 		fx.Provide(
 			// Aggregate factory
 			definitions.AsAggregateFactory(account.NewFactory),
-			definitions.AsAggregateFactory(tagcategory.NewFactory),
-			definitions.AsAggregateFactory(movementtype.NewFactory),
 			definitions.AsAggregateFactory(accountmonth.NewFactory),
+			definitions.AsAggregateFactory(movementtype.NewFactory),
+			definitions.AsAggregateFactory(tagcategory.NewFactory),
 		),
 		fx.Provide(
 			// Event data registers
 			definitions.AsEventDataRegister(account.NewEventRegister),
-			definitions.AsEventDataRegister(tagcategory.NewEventRegister),
-			definitions.AsEventDataRegister(movementtype.NewEventRegister),
 			definitions.AsEventDataRegister(accountmonth.NewEventRegister),
+			definitions.AsEventDataRegister(movementtype.NewEventRegister),
+			definitions.AsEventDataRegister(tagcategory.NewEventRegister),
 		),
 		fx.Provide(
 			// Event Store DB
@@ -97,14 +105,14 @@ func main() {
 				eventhandler.NewProjectionRegistry,
 				fx.ParamTags(`group:"projectionProviders"`),
 			),
-			definitions.AsProjectionProvider(account.NewProjectionConfig),
-			fx.Annotate(account.NewProjection, fx.As(new(account.ReadModelProjection))),
-			definitions.AsProjectionProvider(tagcategory.NewProjectionConfig),
-			fx.Annotate(tagcategory.NewProjection, fx.As(new(tagcategory.ReadModelProjection))),
-			definitions.AsProjectionProvider(movementtype.NewProjectionConfig),
-			fx.Annotate(movementtype.NewProjection, fx.As(new(movementtype.ReadModelProjection))),
-			definitions.AsProjectionProvider(accountmonth.NewProjectionConfig),
-			fx.Annotate(accountmonth.NewProjection, fx.As(new(accountmonth.ReadModelProjection))),
+			definitions.AsProjectionProvider(accountprojection.NewProjectionConfig),
+			definitions.AsProjectionProvider(accountmonthprojection.NewProjectionConfig),
+			definitions.AsProjectionProvider(movementtypeprojection.NewProjectionConfig),
+			definitions.AsProjectionProvider(tagcategoryprojection.NewProjectionConfig),
+			fx.Annotate(accountprojection.NewProjection, fx.As(new(accountprojection.ReadModelProjection))),
+			fx.Annotate(accountmonthprojection.NewProjection, fx.As(new(accountmonthprojection.ReadModelProjection))),
+			fx.Annotate(movementtypeprojection.NewProjection, fx.As(new(movementtypeprojection.ReadModelProjection))),
+			fx.Annotate(tagcategoryprojection.NewProjection, fx.As(new(tagcategoryprojection.ReadModelProjection))),
 		),
 		fx.Provide(
 			// Sagas
@@ -112,15 +120,15 @@ func main() {
 				eventhandler.NewSagaRegistry,
 				fx.ParamTags(`group:"sagaProviders"`),
 			),
-			definitions.AsSagaProvider(accountSaga.NewAccountRegisterSaga),
-			definitions.AsSagaProvider(accountMonthSaga.NewAccountMonthEndedSaga),
+			definitions.AsSagaProvider(accountsaga.NewAccountRegisterSaga),
+			definitions.AsSagaProvider(accountmonthsaga.NewAccountMonthEndedSaga),
 		),
 		fx.Provide(
 			// Read model repositories
-			fx.Annotate(account.NewReadModelRepository, fx.As(new(account.ReadModeler))),
-			fx.Annotate(tagcategory.NewReadModelRepository, fx.As(new(tagcategory.ReadModeler))),
-			fx.Annotate(movementtype.NewReadModelRepository, fx.As(new(movementtype.ReadModeler))),
-			fx.Annotate(accountmonth.NewReadModelRepository, fx.As(new(accountmonth.ReadModeler))),
+			fx.Annotate(accountreadmodel.NewReadModelRepository, fx.As(new(accountreadmodel.ReadModeler))),
+			fx.Annotate(accountmonthreadmodel.NewReadModelRepository, fx.As(new(accountmonthreadmodel.ReadModeler))),
+			fx.Annotate(movementtypereadmodel.NewReadModelRepository, fx.As(new(movementtypereadmodel.ReadModeler))),
+			fx.Annotate(tagcategoryreadmodel.NewReadModelRepository, fx.As(new(tagcategoryreadmodel.ReadModeler))),
 		),
 		fx.Provide(
 			// Event horizon stuff
@@ -145,15 +153,15 @@ func main() {
 
 		// Command handler
 		fx.Invoke(account.RegisterCommandHandler),
-		fx.Invoke(tagcategory.RegisterCommandHandler),
-		fx.Invoke(movementtype.RegisterCommandHandler),
 		fx.Invoke(accountmonth.RegisterCommandHandler),
+		fx.Invoke(movementtype.RegisterCommandHandler),
+		fx.Invoke(tagcategory.RegisterCommandHandler),
 
 		// Projection event stream subscriptions
-		fx.Invoke(account.ProjectionSubscribeEventStream),
-		fx.Invoke(tagcategory.ProjectionSubscribeEventStream),
-		fx.Invoke(movementtype.ProjectionSubscribeEventStream),
-		fx.Invoke(accountmonth.ProjectionSubscribeEventStream),
+		fx.Invoke(accountprojection.ProjectionSubscribeEventStream),
+		fx.Invoke(accountmonthprojection.ProjectionSubscribeEventStream),
+		fx.Invoke(movementtypeprojection.ProjectionSubscribeEventStream),
+		fx.Invoke(tagcategoryprojection.ProjectionSubscribeEventStream),
 
 		// Saga event stream subscriptions
 		fx.Invoke(saga.AccountRegisterSagaSubscribeEventStream),
