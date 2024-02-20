@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/mongodb"
 )
@@ -36,7 +37,7 @@ type ReadModelWriter interface {
 
 type ReadModelReader interface {
 	GetByAccountMonthId(ctx context.Context, accountMonthId *Id) (*Entity, error)
-	GetByAccountActiveMonth(ctx context.Context, account *account.Entity) (*Entity, error)
+	GetByAccountActiveMonth(ctx context.Context, account *accountreadmodel.Entity) (*Entity, error)
 }
 
 type ReadModeler interface {
@@ -149,7 +150,7 @@ func (repository *ReadModelRepository) GetByAccountMonthId(ctx context.Context, 
 
 func (repository *ReadModelRepository) GetByAccountActiveMonth(
 	ctx context.Context,
-	account *account.Entity,
+	account *accountreadmodel.Entity,
 ) (*Entity, error) {
 	accountMonthId, err := GenerateAccountMonthId(
 		account.AccountId,

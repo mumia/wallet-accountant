@@ -5,6 +5,7 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
@@ -50,7 +51,7 @@ var accountMonthEntityEnded = accountmonth.Entity{
 	MonthEnded: true,
 }
 
-var accountEntity = account.Entity{
+var accountEntity = accountreadmodel.Entity{
 	AccountId:           &accountId1,
 	BankName:            "",
 	Name:                "",
@@ -59,13 +60,13 @@ var accountEntity = account.Entity{
 	StartingBalanceDate: time.Time{},
 	Currency:            "",
 	Notes:               nil,
-	ActiveMonth: account.EntityActiveMonth{
+	ActiveMonth: accountreadmodel.EntityActiveMonth{
 		Month: month,
 		Year:  year,
 	},
 }
 
-var accountEntity2 = account.Entity{
+var accountEntity2 = accountreadmodel.Entity{
 	AccountId:           &accountId1,
 	BankName:            "",
 	Name:                "",
@@ -74,7 +75,7 @@ var accountEntity2 = account.Entity{
 	StartingBalanceDate: time.Time{},
 	Currency:            "",
 	Notes:               nil,
-	ActiveMonth: account.EntityActiveMonth{
+	ActiveMonth: accountreadmodel.EntityActiveMonth{
 		Month: month2,
 		Year:  year,
 	},

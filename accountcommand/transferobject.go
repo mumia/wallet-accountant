@@ -1,4 +1,4 @@
-package account
+package accountcommand
 
 import "time"
 

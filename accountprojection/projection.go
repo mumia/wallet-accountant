@@ -1,9 +1,11 @@
-package account
+package accountprojection
 
 import (
 	"context"
 	"github.com/looplab/eventhorizon"
 	"go.uber.org/zap"
+	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/definitions"
 	"walletaccountant/websocket"
 )
@@ -17,12 +19,12 @@ type ReadModelProjection interface {
 }
 
 type Projection struct {
-	repository    ReadModeler
+	repository    accountreadmodel.ReadModeler
 	updateChannel chan websocket.ModelUpdated
 	log           *zap.Logger
 }
 
-func NewProjection(repository ReadModeler, log *zap.Logger) *Projection {
+func NewProjection(repository accountreadmodel.ReadModeler, log *zap.Logger) *Projection {
 	return &Projection{
 		repository:    repository,
 		updateChannel: make(chan websocket.ModelUpdated),
@@ -31,16 +33,16 @@ func NewProjection(repository ReadModeler, log *zap.Logger) *Projection {
 }
 
 func (projection *Projection) HandlerType() eventhorizon.EventHandlerType {
-	return eventhorizon.EventHandlerType(AggregateType.String())
+	return eventhorizon.EventHandlerType(account.AggregateType.String())
 }
 
 func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizon.Event) error {
 	var err error
 	switch event.EventType() {
-	case NewAccountRegistered:
+	case account.NewAccountRegistered:
 		err = projection.handleNewAccountRegistered(ctx, event)
 
-	case NextMonthStarted:
+	case account.NextMonthStarted:
 		err = projection.handleNextMonthStarted(ctx, event)
 	}
 
@@ -52,7 +54,7 @@ func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizo
 }
 
 func (projection *Projection) UpdatedAggregate() eventhorizon.AggregateType {
-	return AggregateType
+	return account.AggregateType
 }
 
 func (projection *Projection) UpdateChannel() chan websocket.ModelUpdated {
@@ -60,12 +62,12 @@ func (projection *Projection) UpdateChannel() chan websocket.ModelUpdated {
 }
 
 func (projection *Projection) handleNewAccountRegistered(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*NewAccountRegisteredData)
+	eventData, ok := event.Data().(*account.NewAccountRegisteredData)
 	if !ok {
-		return definitions.EventDataTypeError(NewAccountRegistered, event.EventType())
+		return definitions.EventDataTypeError(account.NewAccountRegistered, event.EventType())
 	}
 
-	account := Entity{
+	account := accountreadmodel.Entity{
 		AccountId:           eventData.AccountId,
 		BankName:            eventData.BankName,
 		Name:                eventData.Name,
@@ -74,7 +76,7 @@ func (projection *Projection) handleNewAccountRegistered(ctx context.Context, ev
 		StartingBalanceDate: eventData.StartingBalanceDate,
 		Currency:            eventData.Currency,
 		Notes:               eventData.Notes,
-		ActiveMonth: EntityActiveMonth{
+		ActiveMonth: accountreadmodel.EntityActiveMonth{
 			Month: eventData.ActiveMonth,
 			Year:  eventData.ActiveYear,
 		},
@@ -84,17 +86,17 @@ func (projection *Projection) handleNewAccountRegistered(ctx context.Context, ev
 }
 
 func (projection *Projection) handleNextMonthStarted(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*NextMonthStartedData)
+	eventData, ok := event.Data().(*account.NextMonthStartedData)
 	if !ok {
-		return definitions.EventDataTypeError(NextMonthStarted, event.EventType())
+		return definitions.EventDataTypeError(account.NextMonthStarted, event.EventType())
 	}
 
-	id := Id(event.AggregateID())
+	id := account.Id(event.AggregateID())
 
 	return projection.repository.UpdateActiveMonth(
 		ctx,
 		&id,
-		EntityActiveMonth{
+		accountreadmodel.EntityActiveMonth{
 			Month: eventData.NextMonth,
 			Year:  eventData.NextYear,
 		},

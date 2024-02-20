@@ -1,7 +1,8 @@
-package account
+package accountprojection
 
 import (
 	"github.com/looplab/eventhorizon"
+	"walletaccountant/account"
 	"walletaccountant/definitions"
 )
 
@@ -17,8 +18,8 @@ func NewProjectionConfig(projection ReadModelProjection) *ProjectionConfig {
 
 func (p ProjectionConfig) Matcher() eventhorizon.MatchEvents {
 	return eventhorizon.MatchEvents{
-		NewAccountRegistered,
-		NextMonthStarted,
+		account.NewAccountRegistered,
+		account.NextMonthStarted,
 	}
 }
 

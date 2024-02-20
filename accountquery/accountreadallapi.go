@@ -1,21 +1,21 @@
-package queryapis
+package accountquery
 
 import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
-	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/definitions"
 )
 
 var _ definitions.Route = &ReadAllAccountsApi{}
 
 type ReadAllAccountsApi struct {
-	mediator account.QueryMediatorer
+	mediator QueryMediatorer
 	log      *zap.Logger
 }
 
-func NewReadAllAccountsApi(mediator account.QueryMediatorer, log *zap.Logger) *ReadAllAccountsApi {
+func NewReadAllAccountsApi(mediator QueryMediatorer, log *zap.Logger) *ReadAllAccountsApi {
 	return &ReadAllAccountsApi{mediator: mediator, log: log}
 }
 
@@ -35,7 +35,7 @@ func (api *ReadAllAccountsApi) Handle(ctx *gin.Context) {
 	}
 
 	if accounts == nil {
-		accounts = make([]*account.Entity, 0)
+		accounts = make([]*accountreadmodel.Entity, 0)
 	}
 
 	ctx.AsciiJSON(http.StatusOK, accounts)

@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
@@ -29,7 +30,7 @@ type CommandMediatorer interface {
 type CommandMediator struct {
 	commandHandler         eventhorizon.CommandHandler
 	repository             ReadModeler
-	accountRepository      account.ReadModeler
+	accountRepository      accountreadmodel.ReadModeler
 	movementTypeRepository movementtype.ReadModeler
 	idCreator              eventstoredb.IdGenerator
 }
@@ -37,7 +38,7 @@ type CommandMediator struct {
 func NewCommandMediator(
 	commandHandler eventhorizon.CommandHandler,
 	repository ReadModeler,
-	accountRepository account.ReadModeler,
+	accountRepository accountreadmodel.ReadModeler,
 	movementTypeRepository movementtype.ReadModeler,
 	idCreator eventstoredb.IdGenerator,
 ) *CommandMediator {
@@ -206,7 +207,7 @@ func (mediator CommandMediator) validateAccount(
 	movementTypeId *movementtype.Id,
 	month time.Month,
 	year uint,
-) (*account.Entity, *definitions.WalletAccountantError) {
+) (*accountreadmodel.Entity, *definitions.WalletAccountantError) {
 	foundAccount, err := mediator.accountRepository.GetByAccountId(ctx, accountId)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return nil, definitions.GenericError(err, definitions.ErrorContext{"accountId": accountId})
@@ -266,7 +267,7 @@ func (mediator CommandMediator) validateMovementType(
 
 func (mediator CommandMediator) validateMovementTypeAccountMatch(
 	movementType *movementtype.Entity,
-	foundAccount *account.Entity,
+	foundAccount *accountreadmodel.Entity,
 	transferObject RegisterNewAccountMovementTransferObject,
 ) *definitions.WalletAccountantError {
 	if movementType == nil {

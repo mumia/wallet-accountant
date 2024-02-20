@@ -1,4 +1,4 @@
-package saga_test
+package accountsaga_test
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
-	"walletaccountant/account/saga"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountsaga"
 	"walletaccountant/common"
 	"walletaccountant/mocks"
 )
@@ -23,7 +23,7 @@ var accountMonthId = accountmonth.Id(uuid.MustParse(accountMonthUUIDString))
 var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
 
 func TestAccountRegisterSaga_Matcher(t *testing.T) {
-	sagaSubject := saga.NewAccountRegisterSaga()
+	sagaSubject := accountsaga.NewAccountRegisterSaga()
 
 	assert.Equal(
 		t,
@@ -78,7 +78,7 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 		},
 	}
 
-	sagaSubject := saga.NewAccountRegisterSaga()
+	sagaSubject := accountsaga.NewAccountRegisterSaga()
 	err := sagaSubject.RunSaga(context.Background(), newAccountRegisteredEvent, &commandHandler)
 	requires.NoError(err)
 

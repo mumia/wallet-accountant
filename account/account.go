@@ -36,6 +36,13 @@ type ActiveMonth struct {
 	year  uint
 }
 
+func NewActiveMonth(month time.Month, year uint) ActiveMonth {
+	return ActiveMonth{
+		month: month,
+		year:  year,
+	}
+}
+
 type Account struct {
 	*events.AggregateBase
 	clock *clock.Clock

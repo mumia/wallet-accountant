@@ -1,4 +1,4 @@
-package saga
+package accountsaga
 
 import (
 	"context"

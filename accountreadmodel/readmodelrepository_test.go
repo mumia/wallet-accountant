@@ -1,4 +1,4 @@
-package account_test
+package accountreadmodel_test
 
 import (
 	"context"
@@ -11,17 +11,18 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/mongodb"
 )
 
 var expectedAccountId1 = account.Id(uuid.New())
-var expectedActiveMonth = account.EntityActiveMonth{
+var expectedActiveMonth = accountreadmodel.EntityActiveMonth{
 	Month: time.August,
 	Year:  2023,
 }
 var notes1 = "a set of notes"
-var expectedAccountEntity1 = account.Entity{
+var expectedAccountEntity1 = accountreadmodel.Entity{
 	AccountId:           &expectedAccountId1,
 	BankName:            account.BankName("a bank name"),
 	Name:                "an account name",
@@ -54,7 +55,7 @@ var accountBson1 = bson.D{
 
 var expectedAccountId2 = account.Id(uuid.New())
 var notes2 = "another set of notes"
-var expectedAccountEntity2 = account.Entity{
+var expectedAccountEntity2 = accountreadmodel.Entity{
 	AccountId:           &expectedAccountId1,
 	BankName:            account.BankName("another bank name"),
 	Name:                "annother account name",
@@ -63,7 +64,7 @@ var expectedAccountEntity2 = account.Entity{
 	StartingBalanceDate: time.Now().Add(1 * time.Minute),
 	Currency:            account.USD,
 	Notes:               &notes2,
-	ActiveMonth: account.EntityActiveMonth{
+	ActiveMonth: accountreadmodel.EntityActiveMonth{
 		Month: time.April,
 		Year:  2022,
 	},
@@ -76,7 +77,7 @@ func TestReadModelRepository_Create(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successful create", func(mt *mtest.T) {
-		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -88,7 +89,7 @@ func TestReadModelRepository_Create(t *testing.T) {
 	})
 
 	mt.Run("test failure to create", func(mt *mtest.T) {
-		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(
@@ -115,7 +116,7 @@ func TestReadModelRepository_UpdateActiveMonth(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successful update active month", func(mt *mtest.T) {
-		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -127,7 +128,7 @@ func TestReadModelRepository_UpdateActiveMonth(t *testing.T) {
 	})
 
 	mt.Run("test failure when updating active month", func(mt *mtest.T) {
-		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(
@@ -156,7 +157,7 @@ func TestReadModelRepository_GetAll(t *testing.T) {
 	mt.Run("successfully get all accounts", func(t *mtest.T) {
 		t.Skip("runtime error: invalid memory address or nil pointer dereference on AddMockResponses")
 
-		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		//first := mtest.CreateCursorResponse(0, "foo.bar", mtest.FirstBatch, accountBson1)
 		//getMore := mtest.CreateCursorResponse(1, "foo.bar", mtest.NextBatch, accountBson2)
@@ -175,7 +176,7 @@ func TestReadModelRepository_GetAll(t *testing.T) {
 	mt.Run("fails to get all accounts", func(t *mtest.T) {
 		t.Skip("runtime error: invalid memory address or nil pointer dereference on AddMockResponses")
 
-		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(
@@ -202,7 +203,7 @@ func TestReadModelRepository_GetByAccountId(t *testing.T) {
 	mt.Run("successfully get all accounts", func(t *mtest.T) {
 		t.Skip("runtime error: invalid memory address or nil pointer dereference on AddMockResponses")
 
-		readModelRepository := account.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateCursorResponse(1, "foo.bar", mtest.FirstBatch, accountBson1))
 

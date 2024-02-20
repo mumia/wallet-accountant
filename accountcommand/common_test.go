@@ -1,4 +1,4 @@
-package commandapis_test
+package accountcommand_test
 
 import (
 	"encoding/json"

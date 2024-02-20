@@ -1,4 +1,4 @@
-package queryapis_test
+package accountquery_test
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"walletaccountant/account"
-	"walletaccountant/account/queryapis"
+	"walletaccountant/accountquery"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 )
@@ -33,13 +33,13 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	accountsCalled := 0
-	mediator := account.QueryMediatorMock{
-		AccountsFn: func(ctx *gin.Context) ([]*account.Entity, *definitions.WalletAccountantError) {
+	mediator := accountquery.QueryMediatorMock{
+		AccountsFn: func(ctx *gin.Context) ([]*accountreadmodel.Entity, *definitions.WalletAccountantError) {
 			accountsCalled++
 
 			switch accountsCalled {
 			case 1:
-				return []*account.Entity{&accountEntity1, &accountEntity2}, nil
+				return []*accountreadmodel.Entity{&accountEntity1, &accountEntity2}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -52,7 +52,7 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis.NewReadAllAccountsApi(&mediator, logger)},
+		[]definitions.Route{accountquery.NewReadAllAccountsApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -66,7 +66,7 @@ func TestReadAllAccountsApi_Handle(t *testing.T) {
 
 		router.ServeHTTP(w, request)
 
-		expectedAccountsResponse, err := json.Marshal([]account.Entity{accountEntity1, accountEntity2})
+		expectedAccountsResponse, err := json.Marshal([]accountreadmodel.Entity{accountEntity1, accountEntity2})
 		requires.NoError(err)
 
 		asserts.Equal(http.StatusOK, w.Code)

@@ -1,4 +1,4 @@
-package account_test
+package accountprojection_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountprojection"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 	"walletaccountant/subscription"
@@ -111,7 +112,7 @@ func TestSubscribeEventStream(t *testing.T) {
 		eventhorizon.EventHandlerType(account.AggregateType),
 		true,
 		persistentSubscriptionMock,
-		account.NewProjectionConfig(eventHandler),
+		accountprojection.NewProjectionConfig(eventHandler),
 		subscriptionReceiveChannel,
 	)
 

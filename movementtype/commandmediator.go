@@ -6,6 +6,7 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
@@ -23,14 +24,14 @@ type CommandMediatorer interface {
 
 type CommandMediator struct {
 	commandHandler        eventhorizon.CommandHandler
-	accountRepository     account.ReadModeler
+	accountRepository     accountreadmodel.ReadModeler
 	tagCategoryRepository tagcategory.ReadModeler
 	idCreator             eventstoredb.IdGenerator
 }
 
 func NewCommandMediator(
 	commandHandler eventhorizon.CommandHandler,
-	accountRepository account.ReadModeler,
+	accountRepository accountreadmodel.ReadModeler,
 	tagCategoryRepository tagcategory.ReadModeler,
 	idCreator eventstoredb.IdGenerator,
 ) *CommandMediator {

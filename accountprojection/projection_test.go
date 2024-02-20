@@ -1,4 +1,4 @@
-package account_test
+package accountprojection_test
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountprojection"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 )
 
@@ -30,7 +32,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		ActiveYear:          2022,
 	}
 
-	expectedAccountEntity := account.Entity{
+	expectedAccountEntity := accountreadmodel.Entity{
 		AccountId:           newAccountRegisteredData.AccountId,
 		BankName:            newAccountRegisteredData.BankName,
 		Name:                newAccountRegisteredData.Name,
@@ -39,7 +41,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		StartingBalanceDate: newAccountRegisteredData.StartingBalanceDate,
 		Currency:            newAccountRegisteredData.Currency,
 		Notes:               newAccountRegisteredData.Notes,
-		ActiveMonth: account.EntityActiveMonth{
+		ActiveMonth: accountreadmodel.EntityActiveMonth{
 			Month: newAccountRegisteredData.ActiveMonth,
 			Year:  newAccountRegisteredData.ActiveYear,
 		},
@@ -50,15 +52,15 @@ func TestProjection_HandleEvent(t *testing.T) {
 		NextYear:  2023,
 	}
 
-	expectedActiveMonthEntity := account.EntityActiveMonth{
+	expectedActiveMonthEntity := accountreadmodel.EntityActiveMonth{
 		Month: nextMonthStartedData.NextMonth,
 		Year:  nextMonthStartedData.NextYear,
 	}
 
 	createCallCount := 0
 	updateActiveMonthCallCount := 0
-	repository := &account.ReadModelRepositoryMock{
-		CreateFn: func(ctx context.Context, actualAccount account.Entity) error {
+	repository := &accountreadmodel.ReadModelRepositoryMock{
+		CreateFn: func(ctx context.Context, actualAccount accountreadmodel.Entity) error {
 			createCallCount++
 
 			asserts.Equal(expectedAccountEntity, actualAccount)
@@ -68,7 +70,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		UpdateActiveMonthFn: func(
 			ctx context.Context,
 			accountId *account.Id,
-			activeMonth account.EntityActiveMonth,
+			activeMonth accountreadmodel.EntityActiveMonth,
 		) error {
 			updateActiveMonthCallCount++
 
@@ -79,7 +81,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 	}
 	logger := zaptest.NewLogger(t)
 
-	projector := account.NewProjection(repository, logger)
+	projector := accountprojection.NewProjection(repository, logger)
 
 	newAccountRegisteredEvent := eventhorizon.NewEvent(
 		account.NewAccountRegistered,

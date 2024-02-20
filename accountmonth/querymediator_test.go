@@ -8,6 +8,7 @@ import (
 	"testing"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountreadmodel"
 )
 
 func TestQueryMediator_AccountMonth(t *testing.T) {
@@ -15,8 +16,8 @@ func TestQueryMediator_AccountMonth(t *testing.T) {
 	requires := require.New(t)
 
 	accountTimesCalled := 0
-	accountRepositoryMock := account.ReadModelRepositoryMock{
-		GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+	accountRepositoryMock := accountreadmodel.ReadModelRepositoryMock{
+		GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 			accountTimesCalled++
 
 			return &accountEntity, nil
@@ -25,7 +26,7 @@ func TestQueryMediator_AccountMonth(t *testing.T) {
 
 	timesCalled := 0
 	repositoryMock := accountmonth.ReadModelRepositoryMock{
-		GetByAccountActiveMonthFn: func(ctx context.Context, account *account.Entity) (*accountmonth.Entity, error) {
+		GetByAccountActiveMonthFn: func(ctx context.Context, account *accountreadmodel.Entity) (*accountmonth.Entity, error) {
 			timesCalled++
 
 			return &accountMonthEntity, nil

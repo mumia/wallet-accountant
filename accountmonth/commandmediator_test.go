@@ -10,6 +10,7 @@ import (
 	"testing"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
@@ -76,13 +77,13 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 	var movementTypeByIdCalled int
 	successTestCases := [...]struct {
 		testName                        string
-		accountReadModelRepository      *account.ReadModelRepositoryMock
+		accountReadModelRepository      *accountreadmodel.ReadModelRepositoryMock
 		movementTypeReadModelRepository *movementtype.ReadModelRepositoryMock
 	}{
 		{
 			testName: "correctly handles register new account movement",
-			accountReadModelRepository: &account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			accountReadModelRepository: &accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					requires.GreaterOrEqual(1, accountByIdCalled)
@@ -160,7 +161,7 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 		transferObject                  accountmonth.RegisterNewAccountMovementTransferObject
 		expectedErrorReason             definitions.ErrorReason
 		readModelRepository             *accountmonth.ReadModelRepositoryMock
-		accountReadModelRepository      *account.ReadModelRepositoryMock
+		accountReadModelRepository      *accountreadmodel.ReadModelRepositoryMock
 		movementTypeReadModelRepository *movementtype.ReadModelRepositoryMock
 	}{
 		{
@@ -170,8 +171,8 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 			transferObject,
 			accountmonth.NonExistentAccount,
 			&accountmonth.ReadModelRepositoryMock{},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					return nil, nil
@@ -195,8 +196,8 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 			transferObject,
 			accountmonth.MismatchedActiveMonth,
 			&accountmonth.ReadModelRepositoryMock{},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					return &accountEntity2, nil
@@ -220,8 +221,8 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 			transferObject,
 			accountmonth.NonExistentMovementType,
 			&accountmonth.ReadModelRepositoryMock{},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					return &accountEntity, nil
@@ -245,8 +246,8 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 			transferObject,
 			accountmonth.MismatchedAccountId,
 			&accountmonth.ReadModelRepositoryMock{},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					return &accountEntity, nil
@@ -375,15 +376,15 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			&accountmonth.ReadModelRepositoryMock{
 				GetByAccountActiveMonthFn: func(
 					ctx context.Context,
-					account *account.Entity,
+					account *accountreadmodel.Entity,
 				) (*accountmonth.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
 					return &accountMonthEntity, nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					requires.GreaterOrEqual(1, accountByIdCalled)
@@ -422,7 +423,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 		transferObject                          accountmonth.EndAccountMonthTransferObject
 		expectedErrorReason                     definitions.ErrorReason
 		readModelRepository                     *accountmonth.ReadModelRepositoryMock
-		accountReadModelRepository              *account.ReadModelRepositoryMock
+		accountReadModelRepository              *accountreadmodel.ReadModelRepositoryMock
 	}{
 		{
 			"fails to handle end account month, because account does not exist",
@@ -433,15 +434,15 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			&accountmonth.ReadModelRepositoryMock{
 				GetByAccountActiveMonthFn: func(
 					ctx context.Context,
-					account *account.Entity,
+					account *accountreadmodel.Entity,
 				) (*accountmonth.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
 					return nil, nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					asserts.Equal(accountId1, *accountId)
@@ -459,15 +460,15 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			&accountmonth.ReadModelRepositoryMock{
 				GetByAccountActiveMonthFn: func(
 					ctx context.Context,
-					account *account.Entity,
+					account *accountreadmodel.Entity,
 				) (*accountmonth.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
 					return nil, nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					asserts.Equal(accountId1, *accountId)
@@ -485,7 +486,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			&accountmonth.ReadModelRepositoryMock{
 				GetByAccountActiveMonthFn: func(
 					ctx context.Context,
-					account *account.Entity,
+					account *accountreadmodel.Entity,
 				) (*accountmonth.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
@@ -494,8 +495,8 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 					return nil, nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					asserts.Equal(accountId1, *accountId)
@@ -513,7 +514,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			&accountmonth.ReadModelRepositoryMock{
 				GetByAccountActiveMonthFn: func(
 					ctx context.Context,
-					account *account.Entity,
+					account *accountreadmodel.Entity,
 				) (*accountmonth.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
@@ -522,8 +523,8 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 					return &accountMonthEntityEnded, nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					asserts.Equal(accountId1, *accountId)
@@ -541,7 +542,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 			&accountmonth.ReadModelRepositoryMock{
 				GetByAccountActiveMonthFn: func(
 					ctx context.Context,
-					account *account.Entity,
+					account *accountreadmodel.Entity,
 				) (*accountmonth.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
@@ -550,8 +551,8 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 					return &accountMonthEntity, nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					asserts.Equal(accountId1, *accountId)

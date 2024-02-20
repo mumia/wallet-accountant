@@ -1,4 +1,4 @@
-package account_test
+package accountquery_test
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountquery"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 )
 
@@ -18,7 +20,7 @@ func TestQueryMediator_Account(t *testing.T) {
 
 	expectedAccountId := account.Id(uuid.New())
 	notes := "some notes"
-	expectedAccountEntity := account.Entity{
+	expectedAccountEntity := accountreadmodel.Entity{
 		AccountId:           &expectedAccountId,
 		BankName:            "bank name",
 		Name:                "account name",
@@ -27,22 +29,22 @@ func TestQueryMediator_Account(t *testing.T) {
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
 		Notes:               &notes,
-		ActiveMonth: account.EntityActiveMonth{
+		ActiveMonth: accountreadmodel.EntityActiveMonth{
 			Month: time.March,
 			Year:  2023,
 		},
 	}
 
 	timesCalled := 0
-	repositoryMock := account.ReadModelRepositoryMock{
-		GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+	repositoryMock := accountreadmodel.ReadModelRepositoryMock{
+		GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 			timesCalled++
 
 			return &expectedAccountEntity, nil
 		},
 	}
 
-	queryMediator := account.NewQueryMediator(&repositoryMock)
+	queryMediator := accountquery.NewQueryMediator(&repositoryMock)
 
 	ctx := gin.Context{}
 	actualAccount, err := queryMediator.Account(&ctx, &expectedAccountId)
@@ -59,7 +61,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 
 	expectedAccountId1 := account.Id(uuid.New())
 	notes1 := "some notes"
-	expectedAccountEntity1 := account.Entity{
+	expectedAccountEntity1 := accountreadmodel.Entity{
 		AccountId:           &expectedAccountId1,
 		BankName:            "bank name",
 		Name:                "account name",
@@ -68,7 +70,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
 		Notes:               &notes1,
-		ActiveMonth: account.EntityActiveMonth{
+		ActiveMonth: accountreadmodel.EntityActiveMonth{
 			Month: time.March,
 			Year:  2023,
 		},
@@ -76,7 +78,7 @@ func TestQueryMediator_Accounts(t *testing.T) {
 
 	expectedAccountId2 := account.Id(uuid.New())
 	notes2 := "some notes 2"
-	expectedAccountEntity2 := account.Entity{
+	expectedAccountEntity2 := accountreadmodel.Entity{
 		AccountId:           &expectedAccountId2,
 		BankName:            "bank name2",
 		Name:                "account name2",
@@ -85,25 +87,25 @@ func TestQueryMediator_Accounts(t *testing.T) {
 		StartingBalanceDate: time.Now(),
 		Currency:            account.USD,
 		Notes:               &notes2,
-		ActiveMonth: account.EntityActiveMonth{
+		ActiveMonth: accountreadmodel.EntityActiveMonth{
 			Month: time.April,
 			Year:  2022,
 		},
 	}
 
 	timesCalled := 0
-	repositoryMock := account.ReadModelRepositoryMock{
-		GetAllFn: func(ctx context.Context) ([]*account.Entity, error) {
+	repositoryMock := accountreadmodel.ReadModelRepositoryMock{
+		GetAllFn: func(ctx context.Context) ([]*accountreadmodel.Entity, error) {
 			timesCalled++
 
-			return []*account.Entity{
+			return []*accountreadmodel.Entity{
 				&expectedAccountEntity1,
 				&expectedAccountEntity2,
 			}, nil
 		},
 	}
 
-	queryMediator := account.NewQueryMediator(&repositoryMock)
+	queryMediator := accountquery.NewQueryMediator(&repositoryMock)
 
 	ctx := gin.Context{}
 	actualAccounts, err := queryMediator.Accounts(&ctx)

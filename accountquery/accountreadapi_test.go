@@ -1,4 +1,4 @@
-package queryapis_test
+package accountquery_test
 
 import (
 	"context"
@@ -13,7 +13,8 @@ import (
 	"os"
 	"testing"
 	"walletaccountant/account"
-	"walletaccountant/account/queryapis"
+	"walletaccountant/accountquery"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 )
@@ -32,8 +33,8 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	accountCalled := 0
-	mediator := account.QueryMediatorMock{
-		AccountFn: func(ctx *gin.Context, accountId *account.Id) (*account.Entity, *definitions.WalletAccountantError) {
+	mediator := accountquery.QueryMediatorMock{
+		AccountFn: func(ctx *gin.Context, accountId *account.Id) (*accountreadmodel.Entity, *definitions.WalletAccountantError) {
 			accountCalled++
 
 			asserts.Equal(&accountId1, accountId)
@@ -57,7 +58,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis.NewReadAccountsApi(&mediator, logger)},
+		[]definitions.Route{accountquery.NewReadAccountsApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,

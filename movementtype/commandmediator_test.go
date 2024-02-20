@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"testing"
 	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
@@ -69,18 +70,18 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 
 	var accountByIdCalled int
 	var tagExistsByIdCalled int
-	accountEntity := account.Entity{}
+	accountEntity := accountreadmodel.Entity{}
 	successTestCases := [...]struct {
 		testName                       string
 		movementTypeId                 *movementtype.Id
-		accountReadModelRepository     *account.ReadModelRepositoryMock
+		accountReadModelRepository     *accountreadmodel.ReadModelRepositoryMock
 		tagCategoryReadModelRepository *tagcategory.ReadModelRepositoryMock
 	}{
 		{
 			testName:       "correctly handles register new movement type",
 			movementTypeId: &movementTypeId1,
-			accountReadModelRepository: &account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			accountReadModelRepository: &accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					requires.GreaterOrEqual(1, accountByIdCalled)
@@ -105,8 +106,8 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		{
 			testName:       "correctly handles register new movement type, with source account",
 			movementTypeId: &movementTypeId2,
-			accountReadModelRepository: &account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			accountReadModelRepository: &accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					requires.GreaterOrEqual(2, accountByIdCalled)
@@ -182,7 +183,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		transferObject                 movementtype.RegisterNewMovementTypeTransferObject
 		expectedErrorReason            definitions.ErrorReason
 		commandHandler                 *mocks.CommandHandlerMock
-		accountReadModelRepository     *account.ReadModelRepositoryMock
+		accountReadModelRepository     *accountreadmodel.ReadModelRepositoryMock
 		tagCategoryReadModelRepository *tagcategory.ReadModelRepositoryMock
 		idCreator                      *eventstoredb.IdCreatorMock
 	}{
@@ -200,8 +201,8 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					return nil, nil
@@ -234,8 +235,8 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
 					return nil, mongo.ErrNoDocuments
@@ -268,11 +269,11 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return nil
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
-					return &account.Entity{}, nil
+					return &accountreadmodel.Entity{}, nil
 				},
 			},
 			&tagcategory.ReadModelRepositoryMock{
@@ -304,11 +305,11 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return fmt.Errorf("an error")
 				},
 			},
-			&account.ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*account.Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
-					return &account.Entity{}, nil
+					return &accountreadmodel.Entity{}, nil
 				},
 			},
 			&tagcategory.ReadModelRepositoryMock{

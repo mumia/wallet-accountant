@@ -1,10 +1,11 @@
-package account
+package accountreadmodel
 
 import (
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"walletaccountant/account"
 	"walletaccountant/mongodb"
 )
 
@@ -14,14 +15,14 @@ type ReadModelWriter interface {
 	Create(ctx context.Context, account Entity) error
 	UpdateActiveMonth(
 		ctx context.Context,
-		accountId *Id,
+		accountId *account.Id,
 		activeMonth EntityActiveMonth,
 	) error
 }
 
 type ReadModelReader interface {
 	GetAll(ctx context.Context) ([]*Entity, error)
-	GetByAccountId(ctx context.Context, accountId *Id) (*Entity, error)
+	GetByAccountId(ctx context.Context, accountId *account.Id) (*Entity, error)
 	GetByName(ctx context.Context, name string) (*Entity, error)
 }
 
@@ -51,7 +52,7 @@ func (repository *ReadModelRepository) Create(ctx context.Context, account Entit
 
 func (repository *ReadModelRepository) UpdateActiveMonth(
 	ctx context.Context,
-	accountId *Id,
+	accountId *account.Id,
 	activeMonth EntityActiveMonth,
 ) error {
 	_, err := repository.collection().UpdateOne(
@@ -88,7 +89,7 @@ func (repository *ReadModelRepository) GetAll(ctx context.Context) ([]*Entity, e
 	return entities, nil
 }
 
-func (repository *ReadModelRepository) GetByAccountId(ctx context.Context, accountId *Id) (*Entity, error) {
+func (repository *ReadModelRepository) GetByAccountId(ctx context.Context, accountId *account.Id) (*Entity, error) {
 	var entity *Entity
 
 	err := repository.collection().FindOne(ctx, bson.M{"_id": accountId}).Decode(&entity)
@@ -111,5 +112,5 @@ func (repository *ReadModelRepository) GetByName(ctx context.Context, name strin
 }
 
 func (repository *ReadModelRepository) collection() *mongo.Collection {
-	return repository.client.Collection(AggregateType.String())
+	return repository.client.Collection(account.AggregateType.String())
 }

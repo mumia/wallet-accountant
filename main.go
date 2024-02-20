@@ -7,13 +7,15 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"walletaccountant/account"
-	accountCommandApis "walletaccountant/account/commandapis"
-	accountQueryApis "walletaccountant/account/queryapis"
-	accountSaga "walletaccountant/account/saga"
+	"walletaccountant/accountcommand"
 	"walletaccountant/accountmonth"
 	accountMonthCommandApis "walletaccountant/accountmonth/commandapis"
 	accountMonthQueryApis "walletaccountant/accountmonth/queryapis"
 	accountMonthSaga "walletaccountant/accountmonth/saga"
+	"walletaccountant/accountprojection"
+	"walletaccountant/accountquery"
+	"walletaccountant/accountreadmodel"
+	"walletaccountant/accountsaga"
 	"walletaccountant/api"
 	"walletaccountant/clock"
 	"walletaccountant/common/saga"
@@ -40,7 +42,7 @@ func main() {
 		),
 		fx.Provide(
 			// Command routes
-			definitions.AsRoute(accountCommandApis.NewRegisterNewAccountApi),
+			definitions.AsRoute(accountcommand.NewRegisterNewAccountApi),
 			definitions.AsRoute(tagCategoryCommandApis.NewNewTagAndCategoryApi),
 			definitions.AsRoute(tagCategoryCommandApis.NewNewTagWithExistingCategoryApi),
 			definitions.AsRoute(movementTypeCommandApis.NewRegisterNewMovementTypeApi),
@@ -49,8 +51,8 @@ func main() {
 		),
 		fx.Provide(
 			// Query routes
-			definitions.AsRoute(accountQueryApis.NewReadAllAccountsApi),
-			definitions.AsRoute(accountQueryApis.NewReadAccountsApi),
+			definitions.AsRoute(accountquery.NewReadAllAccountsApi),
+			definitions.AsRoute(accountquery.NewReadAccountsApi),
 			definitions.AsRoute(tagCategoryQueryApis.NewReadAllTagsApi),
 			definitions.AsRoute(movementTypequeryApis.NewReadAllMovementTypesApi),
 			definitions.AsRoute(movementTypequeryApis.NewReadMovementTypeApi),
@@ -59,14 +61,14 @@ func main() {
 		),
 		fx.Provide(
 			// CommandMediator
-			fx.Annotate(account.NewCommandMediator, fx.As(new(account.CommandMediatorer))),
+			fx.Annotate(accountcommand.NewCommandMediator, fx.As(new(accountcommand.CommandMediatorer))),
 			fx.Annotate(tagcategory.NewCommandMediator, fx.As(new(tagcategory.CommandMediatorer))),
 			fx.Annotate(movementtype.NewCommandMediator, fx.As(new(movementtype.CommandMediatorer))),
 			fx.Annotate(accountmonth.NewCommandMediator, fx.As(new(accountmonth.CommandMediatorer))),
 		),
 		fx.Provide(
 			// QueryMediator
-			fx.Annotate(account.NewQueryMediator, fx.As(new(account.QueryMediatorer))),
+			fx.Annotate(accountquery.NewQueryMediator, fx.As(new(accountquery.QueryMediatorer))),
 			fx.Annotate(tagcategory.NewQueryMediator, fx.As(new(tagcategory.QueryMediatorer))),
 			fx.Annotate(movementtype.NewQueryMediator, fx.As(new(movementtype.QueryMediatorer))),
 			fx.Annotate(accountmonth.NewQueryMediator, fx.As(new(accountmonth.QueryMediatorer))),
@@ -97,8 +99,8 @@ func main() {
 				eventhandler.NewProjectionRegistry,
 				fx.ParamTags(`group:"projectionProviders"`),
 			),
-			definitions.AsProjectionProvider(account.NewProjectionConfig),
-			fx.Annotate(account.NewProjection, fx.As(new(account.ReadModelProjection))),
+			definitions.AsProjectionProvider(accountprojection.NewProjectionConfig),
+			fx.Annotate(accountprojection.NewProjection, fx.As(new(accountprojection.ReadModelProjection))),
 			definitions.AsProjectionProvider(tagcategory.NewProjectionConfig),
 			fx.Annotate(tagcategory.NewProjection, fx.As(new(tagcategory.ReadModelProjection))),
 			definitions.AsProjectionProvider(movementtype.NewProjectionConfig),
@@ -112,12 +114,12 @@ func main() {
 				eventhandler.NewSagaRegistry,
 				fx.ParamTags(`group:"sagaProviders"`),
 			),
-			definitions.AsSagaProvider(accountSaga.NewAccountRegisterSaga),
+			definitions.AsSagaProvider(accountsaga.NewAccountRegisterSaga),
 			definitions.AsSagaProvider(accountMonthSaga.NewAccountMonthEndedSaga),
 		),
 		fx.Provide(
 			// Read model repositories
-			fx.Annotate(account.NewReadModelRepository, fx.As(new(account.ReadModeler))),
+			fx.Annotate(accountreadmodel.NewReadModelRepository, fx.As(new(accountreadmodel.ReadModeler))),
 			fx.Annotate(tagcategory.NewReadModelRepository, fx.As(new(tagcategory.ReadModeler))),
 			fx.Annotate(movementtype.NewReadModelRepository, fx.As(new(movementtype.ReadModeler))),
 			fx.Annotate(accountmonth.NewReadModelRepository, fx.As(new(accountmonth.ReadModeler))),
@@ -150,7 +152,7 @@ func main() {
 		fx.Invoke(accountmonth.RegisterCommandHandler),
 
 		// Projection event stream subscriptions
-		fx.Invoke(account.ProjectionSubscribeEventStream),
+		fx.Invoke(accountprojection.ProjectionSubscribeEventStream),
 		fx.Invoke(tagcategory.ProjectionSubscribeEventStream),
 		fx.Invoke(movementtype.ProjectionSubscribeEventStream),
 		fx.Invoke(accountmonth.ProjectionSubscribeEventStream),

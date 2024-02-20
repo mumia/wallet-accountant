@@ -1,21 +1,20 @@
-package commandapis
+package accountcommand
 
 import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
-	"walletaccountant/account"
 	"walletaccountant/definitions"
 )
 
 var _ definitions.Route = &RegisterNewAccountApi{}
 
 type RegisterNewAccountApi struct {
-	mediator account.CommandMediatorer
+	mediator CommandMediatorer
 	log      *zap.Logger
 }
 
-func NewRegisterNewAccountApi(mediator account.CommandMediatorer, log *zap.Logger) *RegisterNewAccountApi {
+func NewRegisterNewAccountApi(mediator CommandMediatorer, log *zap.Logger) *RegisterNewAccountApi {
 	log.With(zap.String("struct", "RegisterNewAccountApi"))
 
 	return &RegisterNewAccountApi{mediator: mediator, log: log}
@@ -26,7 +25,7 @@ func (api *RegisterNewAccountApi) Configuration() (string, string) {
 }
 
 func (api *RegisterNewAccountApi) Handle(ctx *gin.Context) {
-	var transferObject account.RegisterNewAccountTransferObject
+	var transferObject RegisterNewAccountTransferObject
 
 	if err := ctx.ShouldBind(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))

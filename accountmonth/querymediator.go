@@ -3,6 +3,7 @@ package accountmonth
 import (
 	"github.com/gin-gonic/gin"
 	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/definitions"
 )
 
@@ -14,10 +15,10 @@ type QueryMediatorer interface {
 
 type QueryMediator struct {
 	repository        ReadModeler
-	accountRepository account.ReadModeler
+	accountRepository accountreadmodel.ReadModeler
 }
 
-func NewQueryMediator(repository ReadModeler, accountRepository account.ReadModeler) *QueryMediator {
+func NewQueryMediator(repository ReadModeler, accountRepository accountreadmodel.ReadModeler) *QueryMediator {
 	return &QueryMediator{repository: repository, accountRepository: accountRepository}
 }
 

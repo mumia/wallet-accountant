@@ -1,4 +1,4 @@
-package account
+package accountcommand
 
 import (
 	"context"
@@ -10,25 +10,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+	"walletaccountant/account"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 )
 
 var newId = uuid.New()
-var expectedAccountId = Id(newId)
-var bankName = BankName("my bank name")
+var expectedAccountId = account.Id(newId)
+var bankName = account.BankName("my bank name")
 var name = "account name"
 var accountType = common.Checking
 var startingBalance = float32(1269)
 var startingBalanceDate = time.Now()
-var currency = Currency(USD)
+var currency = account.Currency(account.USD)
 var notes = "my account notes"
 
 func setupCommandMediatorTest() {
 	commands := []func() eventhorizon.Command{
-		func() eventhorizon.Command { return &RegisterNewAccount{} },
-		func() eventhorizon.Command { return &StartNextMonth{} },
+		func() eventhorizon.Command { return &account.RegisterNewAccount{} },
+		func() eventhorizon.Command { return &account.StartNextMonth{} },
 	}
 
 	for _, command := range commands {
@@ -37,8 +39,8 @@ func setupCommandMediatorTest() {
 }
 
 func tearDownCommandMediatorTest() {
-	eventhorizon.UnregisterCommand(RegisterNewAccountCommand)
-	eventhorizon.UnregisterCommand(StartNextMonthCommand)
+	eventhorizon.UnregisterCommand(account.RegisterNewAccountCommand)
+	eventhorizon.UnregisterCommand(account.StartNextMonthCommand)
 }
 
 func TestCommandMediator_RegisterNewAccount(t *testing.T) {
@@ -59,7 +61,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 	}
 
 	t.Run("correctly handles register new account", func(t *testing.T) {
-		expectedCommand := &RegisterNewAccount{
+		expectedCommand := &account.RegisterNewAccount{
 			AccountId:           expectedAccountId,
 			BankName:            bankName,
 			Name:                name,
@@ -77,8 +79,8 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 				return nil
 			},
 		}
-		readModelRepository := &ReadModelRepositoryMock{
-			GetByNameFn: func(ctx context.Context, name string) (*Entity, error) {
+		readModelRepository := &accountreadmodel.ReadModelRepositoryMock{
+			GetByNameFn: func(ctx context.Context, name string) (*accountreadmodel.Entity, error) {
 				return nil, nil
 			},
 		}
@@ -100,7 +102,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 	failureTestCases := [...]struct {
 		testName            string
 		commandHandler      *mocks.CommandHandlerMock
-		readModelRepository *ReadModelRepositoryMock
+		readModelRepository *accountreadmodel.ReadModelRepositoryMock
 		idCreator           *eventstoredb.IdCreatorMock
 	}{
 		{
@@ -112,9 +114,9 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 					return nil
 				},
 			},
-			&ReadModelRepositoryMock{
-				GetByNameFn: func(ctx context.Context, name string) (*Entity, error) {
-					return &Entity{
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByNameFn: func(ctx context.Context, name string) (*accountreadmodel.Entity, error) {
+					return &accountreadmodel.Entity{
 						AccountId:           &expectedAccountId,
 						BankName:            bankName,
 						Name:                name,
@@ -123,7 +125,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 						StartingBalanceDate: startingBalanceDate,
 						Currency:            currency,
 						Notes:               &notes,
-						ActiveMonth:         EntityActiveMonth{},
+						ActiveMonth:         accountreadmodel.EntityActiveMonth{},
 					}, nil
 				},
 			},
@@ -144,8 +146,8 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 					return fmt.Errorf("an error")
 				},
 			},
-			&ReadModelRepositoryMock{
-				GetByNameFn: func(ctx context.Context, name string) (*Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByNameFn: func(ctx context.Context, name string) (*accountreadmodel.Entity, error) {
 					return nil, nil
 				},
 			},
@@ -180,7 +182,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 	requires := require.New(t)
 
 	t.Run("successfully starts next month on account", func(t *testing.T) {
-		expectedCommand := &StartNextMonth{AccountId: expectedAccountId}
+		expectedCommand := &account.StartNextMonth{AccountId: expectedAccountId}
 
 		commandHandler := &mocks.CommandHandlerMock{
 			HandleCommandFn: func(ctx context.Context, command eventhorizon.Command) error {
@@ -190,11 +192,11 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 			},
 		}
 
-		readModelRepository := &ReadModelRepositoryMock{
-			GetByAccountIdFn: func(ctx context.Context, accountId *Id) (*Entity, error) {
+		readModelRepository := &accountreadmodel.ReadModelRepositoryMock{
+			GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 				asserts.Equal(&expectedAccountId, accountId)
 
-				return &Entity{
+				return &accountreadmodel.Entity{
 					AccountId:           accountId,
 					BankName:            bankName,
 					Name:                name,
@@ -203,7 +205,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 					StartingBalanceDate: startingBalanceDate,
 					Currency:            currency,
 					Notes:               &notes,
-					ActiveMonth:         EntityActiveMonth{},
+					ActiveMonth:         accountreadmodel.EntityActiveMonth{},
 				}, nil
 			},
 		}
@@ -217,7 +219,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 	failureTestCases := [...]struct {
 		testName            string
 		commandHandler      *mocks.CommandHandlerMock
-		readModelRepository *ReadModelRepositoryMock
+		readModelRepository *accountreadmodel.ReadModelRepositoryMock
 		idCreator           *eventstoredb.IdCreatorMock
 	}{
 		{
@@ -229,8 +231,8 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 					return nil
 				},
 			},
-			&ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *Id) (*Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					asserts.Equal(&expectedAccountId, accountId)
 
 					return nil, nil
@@ -253,11 +255,11 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 					return fmt.Errorf("an error")
 				},
 			},
-			&ReadModelRepositoryMock{
-				GetByAccountIdFn: func(ctx context.Context, accountId *Id) (*Entity, error) {
+			&accountreadmodel.ReadModelRepositoryMock{
+				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					asserts.Equal(&expectedAccountId, accountId)
 
-					return &Entity{
+					return &accountreadmodel.Entity{
 						AccountId:           accountId,
 						BankName:            bankName,
 						Name:                name,
@@ -266,7 +268,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 						StartingBalanceDate: startingBalanceDate,
 						Currency:            currency,
 						Notes:               &notes,
-						ActiveMonth:         EntityActiveMonth{},
+						ActiveMonth:         accountreadmodel.EntityActiveMonth{},
 					}, nil
 				},
 			},

@@ -1,4 +1,4 @@
-package commandapis_test
+package accountcommand_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
-	"walletaccountant/account/commandapis"
+	"walletaccountant/accountcommand"
 	"walletaccountant/api"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
@@ -53,7 +53,7 @@ var accountBody3 = `{
 
 var expectedAccountId = uuid.New()
 var notes1 = "some notes of the account"
-var expectedTransferObject1 = account.RegisterNewAccountTransferObject{
+var expectedTransferObject1 = accountcommand.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
 	AccountType:         string(common.Savings),
@@ -64,7 +64,7 @@ var expectedTransferObject1 = account.RegisterNewAccountTransferObject{
 }
 
 var notes2 = ""
-var expectedTransferObject2 = account.RegisterNewAccountTransferObject{
+var expectedTransferObject2 = accountcommand.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
 	AccountType:         string(common.Savings),
@@ -74,7 +74,7 @@ var expectedTransferObject2 = account.RegisterNewAccountTransferObject{
 	Notes:               &notes2,
 }
 
-var expectedTransferObject3 = account.RegisterNewAccountTransferObject{
+var expectedTransferObject3 = accountcommand.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
 	AccountType:         string(common.Savings),
@@ -98,10 +98,10 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	registerCalled := 0
-	mediator := account.CommandMediatorMock{
+	mediator := accountcommand.CommandMediatorMock{
 		RegisterNewAccountFn: func(
 			ctx *gin.Context,
-			transferObject account.RegisterNewAccountTransferObject,
+			transferObject accountcommand.RegisterNewAccountTransferObject,
 		) (*account.Id, *definitions.WalletAccountantError) {
 			registerCalled++
 
@@ -130,7 +130,7 @@ func TestRegisterNewAccountApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewRegisterNewAccountApi(&mediator, logger)},
+		[]definitions.Route{accountcommand.NewRegisterNewAccountApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
