@@ -1,4 +1,4 @@
-package queryapis
+package accountmonthquery
 
 import (
 	"github.com/gin-gonic/gin"
@@ -16,11 +16,11 @@ type currentAccountMonthRequest struct {
 }
 
 type ReadCurrentAccountMonthApi struct {
-	mediator accountmonth.QueryMediatorer
+	mediator QueryMediatorer
 	log      *zap.Logger
 }
 
-func NewReadCurrentAccountMonthApi(mediator accountmonth.QueryMediatorer, log *zap.Logger) *ReadCurrentAccountMonthApi {
+func NewReadCurrentAccountMonthApi(mediator QueryMediatorer, log *zap.Logger) *ReadCurrentAccountMonthApi {
 	return &ReadCurrentAccountMonthApi{mediator: mediator, log: log}
 }
 

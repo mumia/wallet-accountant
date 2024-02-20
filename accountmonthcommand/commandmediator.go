@@ -1,4 +1,4 @@
-package accountmonth
+package accountmonthcommand
 
 import (
 	"context"
@@ -9,11 +9,14 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonthreadmodel"
 	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/movementtype"
+	"walletaccountant/movementtypereadmodel"
 	"walletaccountant/tagcategory"
 )
 
@@ -29,17 +32,17 @@ type CommandMediatorer interface {
 
 type CommandMediator struct {
 	commandHandler         eventhorizon.CommandHandler
-	repository             ReadModeler
+	repository             accountmonthreadmodel.ReadModeler
 	accountRepository      accountreadmodel.ReadModeler
-	movementTypeRepository movementtype.ReadModeler
+	movementTypeRepository movementtypereadmodel.ReadModeler
 	idCreator              eventstoredb.IdGenerator
 }
 
 func NewCommandMediator(
 	commandHandler eventhorizon.CommandHandler,
-	repository ReadModeler,
+	repository accountmonthreadmodel.ReadModeler,
 	accountRepository accountreadmodel.ReadModeler,
-	movementTypeRepository movementtype.ReadModeler,
+	movementTypeRepository movementtypereadmodel.ReadModeler,
 	idCreator eventstoredb.IdGenerator,
 ) *CommandMediator {
 	return &CommandMediator{
@@ -80,24 +83,24 @@ func (mediator CommandMediator) RegisterNewAccountMovement(
 		return waErr
 	}
 
-	command, err := eventhorizon.CreateCommand(RegisterNewAccountMovementCommand)
+	command, err := eventhorizon.CreateCommand(accountmonth.RegisterNewAccountMovementCommand)
 	if err != nil {
 		return definitions.GenericError(err, nil)
 	}
 
-	registerNewAccountMovementCommand, ok := command.(*RegisterNewAccountMovement)
+	registerNewAccountMovementCommand, ok := command.(*accountmonth.RegisterNewAccountMovement)
 	if !ok {
-		return definitions.InvalidCommandError(RegisterNewAccountMovementCommand, command.CommandType())
+		return definitions.InvalidCommandError(accountmonth.RegisterNewAccountMovementCommand, command.CommandType())
 	}
 
-	accountMonthId, err := GenerateAccountMonthId(
+	accountMonthId, err := accountmonth.GenerateAccountMonthId(
 		&accountId,
 		transferObject.Date.Month(),
 		uint(transferObject.Date.Year()),
 	)
 
 	registerNewAccountMovementCommand.AccountMonthId = *accountMonthId
-	registerNewAccountMovementCommand.AccountMovementId = AccountMovementId(mediator.idCreator.New())
+	registerNewAccountMovementCommand.AccountMovementId = accountmonth.AccountMovementId(mediator.idCreator.New())
 	if movementType != nil {
 		registerNewAccountMovementCommand.MovementTypeId = movementType.MovementTypeId
 	}
@@ -144,7 +147,7 @@ func (mediator CommandMediator) EndAccountMonth(
 	}
 
 	if accountMonth == nil {
-		return NonExistentAccountMonthError(
+		return accountmonth.NonExistentAccountMonthError(
 			transferObject.AccountId,
 			"",
 			int(transferObject.Month),
@@ -153,7 +156,7 @@ func (mediator CommandMediator) EndAccountMonth(
 	}
 
 	if accountMonth.MonthEnded {
-		return AlreadyEndedError(
+		return accountmonth.AlreadyEndedError(
 			accountMonth.AccountMonthId.String(),
 			foundAccount.AccountId.String(),
 			int(accountMonth.ActiveMonth.Month),
@@ -162,7 +165,7 @@ func (mediator CommandMediator) EndAccountMonth(
 	}
 
 	if accountMonth.Balance != *transferObject.EndBalance {
-		return MismatchedEndBalanceError(
+		return accountmonth.MismatchedEndBalanceError(
 			accountMonth.AccountMonthId.String(),
 			accountMonth.Balance,
 			*transferObject.EndBalance,
@@ -171,7 +174,7 @@ func (mediator CommandMediator) EndAccountMonth(
 		)
 	}
 
-	command, err := eventhorizon.CreateCommand(EndAccountMonthCommand)
+	command, err := eventhorizon.CreateCommand(accountmonth.EndAccountMonthCommand)
 	if err != nil {
 		return definitions.GenericError(
 			err,
@@ -179,9 +182,9 @@ func (mediator CommandMediator) EndAccountMonth(
 		)
 	}
 
-	endAccountMonthCommand, ok := command.(*EndAccountMonth)
+	endAccountMonthCommand, ok := command.(*accountmonth.EndAccountMonth)
 	if !ok {
-		return definitions.InvalidCommandError(EndAccountMonthCommand, command.CommandType())
+		return definitions.InvalidCommandError(accountmonth.EndAccountMonthCommand, command.CommandType())
 	}
 
 	endAccountMonthCommand.AccountMonthId = *accountMonth.AccountMonthId
@@ -214,7 +217,7 @@ func (mediator CommandMediator) validateAccount(
 	}
 
 	if foundAccount == nil {
-		return nil, NonExistentAccountError(accountId.String(), int(month), int(year))
+		return nil, accountmonth.NonExistentAccountError(accountId.String(), int(month), int(year))
 	}
 
 	if month != foundAccount.ActiveMonth.Month || year != foundAccount.ActiveMonth.Year {
@@ -223,7 +226,7 @@ func (mediator CommandMediator) validateAccount(
 			movementTypeIdString = movementTypeId.String()
 		}
 
-		return nil, MismatchedActiveMonthError(
+		return nil, accountmonth.MismatchedActiveMonthError(
 			accountId.String(),
 			movementTypeIdString,
 			int(foundAccount.ActiveMonth.Month),
@@ -240,7 +243,7 @@ func (mediator CommandMediator) validateMovementType(
 	ctx context.Context,
 	movementTypeId *movementtype.Id,
 	transferObject RegisterNewAccountMovementTransferObject,
-) (*movementtype.Entity, *definitions.WalletAccountantError) {
+) (*movementtypereadmodel.Entity, *definitions.WalletAccountantError) {
 	month := transferObject.Date.Month()
 	year := uint(transferObject.Date.Year())
 
@@ -254,7 +257,7 @@ func (mediator CommandMediator) validateMovementType(
 	}
 
 	if movementType == nil {
-		return nil, NonExistentMovementTypeError(
+		return nil, accountmonth.NonExistentMovementTypeError(
 			transferObject.AccountId,
 			transferObject.MovementTypeId,
 			int(month),
@@ -266,7 +269,7 @@ func (mediator CommandMediator) validateMovementType(
 }
 
 func (mediator CommandMediator) validateMovementTypeAccountMatch(
-	movementType *movementtype.Entity,
+	movementType *movementtypereadmodel.Entity,
 	foundAccount *accountreadmodel.Entity,
 	transferObject RegisterNewAccountMovementTransferObject,
 ) *definitions.WalletAccountantError {
@@ -275,7 +278,7 @@ func (mediator CommandMediator) validateMovementTypeAccountMatch(
 	}
 
 	if movementType.AccountId.String() != foundAccount.AccountId.String() {
-		return MismatchedAccountIdError(
+		return accountmonth.MismatchedAccountIdError(
 			foundAccount.AccountId.String(),
 			movementType.MovementTypeId.String(),
 			int(transferObject.Date.Month()),

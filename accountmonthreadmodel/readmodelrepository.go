@@ -1,4 +1,4 @@
-package accountmonth
+package accountmonthreadmodel
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountmonth"
 	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/mongodb"
@@ -18,7 +19,7 @@ var _ ReadModeler = &ReadModelRepository{}
 type ReadModelWriter interface {
 	StartMonth(
 		ctx context.Context,
-		accountMonthId *Id,
+		accountMonthId *accountmonth.Id,
 		accountId *account.Id,
 		startBalance float32,
 		month time.Month,
@@ -26,17 +27,17 @@ type ReadModelWriter interface {
 	) error
 	EndMonth(
 		ctx context.Context,
-		accountMonthId *Id,
+		accountMonthId *accountmonth.Id,
 	) error
 	RegisterAccountMovement(
 		ctx context.Context,
-		accountMonthId *Id,
-		eventData *NewAccountMovementRegisteredData,
+		accountMonthId *accountmonth.Id,
+		eventData *accountmonth.NewAccountMovementRegisteredData,
 	) error
 }
 
 type ReadModelReader interface {
-	GetByAccountMonthId(ctx context.Context, accountMonthId *Id) (*Entity, error)
+	GetByAccountMonthId(ctx context.Context, accountMonthId *accountmonth.Id) (*Entity, error)
 	GetByAccountActiveMonth(ctx context.Context, account *accountreadmodel.Entity) (*Entity, error)
 }
 
@@ -55,7 +56,7 @@ func NewReadModelRepository(client *mongodb.MongoClient) *ReadModelRepository {
 
 func (repository *ReadModelRepository) StartMonth(
 	ctx context.Context,
-	accountMonthId *Id,
+	accountMonthId *accountmonth.Id,
 	accountId *account.Id,
 	startBalance float32,
 	month time.Month,
@@ -80,7 +81,7 @@ func (repository *ReadModelRepository) StartMonth(
 
 }
 
-func (repository *ReadModelRepository) EndMonth(ctx context.Context, accountMonthId *Id) error {
+func (repository *ReadModelRepository) EndMonth(ctx context.Context, accountMonthId *accountmonth.Id) error {
 	_, err := repository.collection().UpdateOne(
 		ctx,
 		bson.M{"_id": accountMonthId},
@@ -95,8 +96,8 @@ func (repository *ReadModelRepository) EndMonth(ctx context.Context, accountMont
 
 func (repository *ReadModelRepository) RegisterAccountMovement(
 	ctx context.Context,
-	accountMonthId *Id,
-	eventData *NewAccountMovementRegisteredData,
+	accountMonthId *accountmonth.Id,
+	eventData *accountmonth.NewAccountMovementRegisteredData,
 ) error {
 	newMovementTypeEntity := EntityMovement{
 		MovementTypeId:  eventData.MovementTypeId,
@@ -126,7 +127,7 @@ func (repository *ReadModelRepository) RegisterAccountMovement(
 	return err
 }
 
-func (repository *ReadModelRepository) GetByAccountMonthId(ctx context.Context, accountMonthId *Id) (*Entity, error) {
+func (repository *ReadModelRepository) GetByAccountMonthId(ctx context.Context, accountMonthId *accountmonth.Id) (*Entity, error) {
 	var entity *Entity
 
 	err := repository.collection().
@@ -152,7 +153,7 @@ func (repository *ReadModelRepository) GetByAccountActiveMonth(
 	ctx context.Context,
 	account *accountreadmodel.Entity,
 ) (*Entity, error) {
-	accountMonthId, err := GenerateAccountMonthId(
+	accountMonthId, err := accountmonth.GenerateAccountMonthId(
 		account.AccountId,
 		account.ActiveMonth.Month,
 		account.ActiveMonth.Year,
@@ -165,5 +166,5 @@ func (repository *ReadModelRepository) GetByAccountActiveMonth(
 }
 
 func (repository *ReadModelRepository) collection() *mongo.Collection {
-	return repository.client.Collection(AggregateType.String())
+	return repository.client.Collection(accountmonth.AggregateType.String())
 }

@@ -1,4 +1,4 @@
-package accountmonth
+package accountmonthcommand
 
 import (
 	"time"

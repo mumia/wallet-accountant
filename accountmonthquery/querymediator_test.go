@@ -1,4 +1,4 @@
-package accountmonth_test
+package accountmonthquery_test
 
 import (
 	"context"
@@ -7,7 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	"walletaccountant/account"
-	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonthquery"
+	"walletaccountant/accountmonthreadmodel"
 	"walletaccountant/accountreadmodel"
 )
 
@@ -25,15 +26,15 @@ func TestQueryMediator_AccountMonth(t *testing.T) {
 	}
 
 	timesCalled := 0
-	repositoryMock := accountmonth.ReadModelRepositoryMock{
-		GetByAccountActiveMonthFn: func(ctx context.Context, account *accountreadmodel.Entity) (*accountmonth.Entity, error) {
+	repositoryMock := accountmonthreadmodel.ReadModelRepositoryMock{
+		GetByAccountActiveMonthFn: func(ctx context.Context, account *accountreadmodel.Entity) (*accountmonthreadmodel.Entity, error) {
 			timesCalled++
 
 			return &accountMonthEntity, nil
 		},
 	}
 
-	queryMediator := accountmonth.NewQueryMediator(&repositoryMock, &accountRepositoryMock)
+	queryMediator := accountmonthquery.NewQueryMediator(&repositoryMock, &accountRepositoryMock)
 
 	ctx := gin.Context{}
 	actualAccount, err := queryMediator.AccountMonth(&ctx, &accountId1)

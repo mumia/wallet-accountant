@@ -1,4 +1,4 @@
-package accountmonth_test
+package accountmonthprojection_test
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonthprojection"
+	"walletaccountant/accountmonthreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/tagcategory"
 )
@@ -31,7 +33,7 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 
 	expectedRegisterAccountMonthId := &accountMonthId
 
-	expectedRegisterMovement := accountmonth.EntityMovement{
+	expectedRegisterMovement := accountmonthreadmodel.EntityMovement{
 		MovementTypeId:  &movementTypeId1,
 		Action:          common.Debit,
 		Amount:          1040.20,
@@ -44,7 +46,7 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 
 	registerCallCount := 0
 	getByAccountMonthIdCallCount := 0
-	repository := &accountmonth.ReadModelRepositoryMock{
+	repository := &accountmonthreadmodel.ReadModelRepositoryMock{
 		RegisterAccountMovementFn: func(
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
@@ -67,14 +69,14 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 		GetByAccountMonthIdFn: func(
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
-		) (*accountmonth.Entity, error) {
+		) (*accountmonthreadmodel.Entity, error) {
 			getByAccountMonthIdCallCount++
 
 			return &accountMonthEntity, nil
 		},
 	}
 
-	projector, err := accountmonth.NewProjection(repository)
+	projector, err := accountmonthprojection.NewProjection(repository)
 	requires.NoError(err)
 
 	newMovementTypeRegisteredEvent := eventhorizon.NewEvent(
@@ -105,7 +107,7 @@ func TestProjection_HandleEvent_MonthStarted(t *testing.T) {
 
 	startMonthCallCount := 0
 	getByAccountMonthIdCallCount := 0
-	repository := &accountmonth.ReadModelRepositoryMock{
+	repository := &accountmonthreadmodel.ReadModelRepositoryMock{
 		StartMonthFn: func(
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
@@ -127,14 +129,14 @@ func TestProjection_HandleEvent_MonthStarted(t *testing.T) {
 		GetByAccountMonthIdFn: func(
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
-		) (*accountmonth.Entity, error) {
+		) (*accountmonthreadmodel.Entity, error) {
 			getByAccountMonthIdCallCount++
 
 			return nil, nil
 		},
 	}
 
-	projector, err := accountmonth.NewProjection(repository)
+	projector, err := accountmonthprojection.NewProjection(repository)
 	requires.NoError(err)
 
 	monthStartedEvent := eventhorizon.NewEvent(
@@ -165,7 +167,7 @@ func TestProjection_HandleEvent_MonthEnded(t *testing.T) {
 
 	endMonthCallCount := 0
 	getByAccountMonthIdCallCount := 0
-	repository := &accountmonth.ReadModelRepositoryMock{
+	repository := &accountmonthreadmodel.ReadModelRepositoryMock{
 		EndMonthFn: func(ctx context.Context, accountMonthId *accountmonth.Id) error {
 			endMonthCallCount++
 
@@ -176,14 +178,14 @@ func TestProjection_HandleEvent_MonthEnded(t *testing.T) {
 		GetByAccountMonthIdFn: func(
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
-		) (*accountmonth.Entity, error) {
+		) (*accountmonthreadmodel.Entity, error) {
 			getByAccountMonthIdCallCount++
 
 			return nil, nil
 		},
 	}
 
-	projector, err := accountmonth.NewProjection(repository)
+	projector, err := accountmonthprojection.NewProjection(repository)
 	requires.NoError(err)
 
 	endMonthEvent := eventhorizon.NewEvent(

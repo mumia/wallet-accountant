@@ -1,15 +1,16 @@
-package accountmonth
+package accountmonthreadmodel
 
 import (
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountmonth"
 	"walletaccountant/common"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
 )
 
 type Entity struct {
-	AccountMonthId *Id                `json:"accountMonthId" bson:"_id"`
+	AccountMonthId *accountmonth.Id   `json:"accountMonthId" bson:"_id"`
 	AccountId      *account.Id        `json:"accountId" bson:"account_id"`
 	ActiveMonth    *EntityActiveMonth `json:"activeMonth" bson:"active_month"`
 	Movements      []*EntityMovement  `json:"movements" bson:"movements"`

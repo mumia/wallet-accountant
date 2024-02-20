@@ -1,4 +1,4 @@
-package commandapis_test
+package accountmonthcommand_test
 
 import (
 	"context"
@@ -15,44 +15,32 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/accountmonth"
-	commandapis2 "walletaccountant/accountmonth/commandapis"
+	commandapis2 "walletaccountant/accountmonthcommand"
 	"walletaccountant/api"
-	"walletaccountant/common"
 	"walletaccountant/definitions"
 )
 
-var registerNewMovementBody = `{
+var endMonthBody = `{
 	"accountId": "aeea307f-3c57-467c-8954-5f541aef6772",
-	"action": "credit",
-	"movementTypeId": "72a196bc-d9b1-4c57-a916-3eabf1bf167b",
-	"amount": 200,
-	"date": "2023-01-01T01:00:00Z",
-	"description": "mov type desc",
-    "notes": "mov type notes",
-    "tagIds": ["b6e4fa72-a603-4226-857f-1f11d2af9f44", "99a2b571-152e-65f4-c9ef-0bd08751519c"]
+	"endBalance": 10069.5,
+	"month": 1,
+	"year": 2023
 }`
 
-var expectedRegisterNewMovementTransferObject = accountmonth.RegisterNewAccountMovementTransferObject{
-	AccountId:      accountId1.String(),
-	Action:         string(common.Credit),
-	MovementTypeId: stringPtr(movementTypeId1.String()),
-	Amount:         200,
-	Date:           time.Date(2023, time.January, 1, 1, 0, 0, 0, time.UTC),
-	Description:    "mov type desc",
-	Notes:          stringPtr("mov type notes"),
-	TagIds:         []string{tagId1.String(), tagId2.String()},
+var endBalance = float32(10069.5)
+var expectedEndAccountMonthTransferObject = commandapis2.EndAccountMonthTransferObject{
+	AccountId:  accountId1.String(),
+	EndBalance: &endBalance,
+	Month:      time.January,
+	Year:       2023,
 }
 
-func stringPtr(value string) *string {
-	return &value
-}
-
-func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
+func TestEndAccountMonthApi_Handle(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 	ctx := context.Background()
 
-	err := os.Setenv("PORT", "59605")
+	err := os.Setenv("PORT", "59604")
 	requires.NoError(err)
 	err = os.Setenv("FRONTEND_URL", "http://localhost")
 	requires.NoError(err)
@@ -60,17 +48,17 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	lifecycle := fxtest.NewLifecycle(t)
 
-	registerNewAccountMovementCalled := 0
-	mediator := accountmonth.CommandMediatorMock{
-		RegisterNewAccountMovementFn: func(
+	endMonthCalled := 0
+	mediator := commandapis2.CommandMediatorMock{
+		EndAccountMonthFn: func(
 			ctx *gin.Context,
-			transferObject accountmonth.RegisterNewAccountMovementTransferObject,
+			transferObject commandapis2.EndAccountMonthTransferObject,
 		) *definitions.WalletAccountantError {
-			registerNewAccountMovementCalled++
+			endMonthCalled++
 
-			switch registerNewAccountMovementCalled {
+			switch endMonthCalled {
 			case 1:
-				asserts.Equal(expectedRegisterNewMovementTransferObject, transferObject)
+				asserts.Equal(expectedEndAccountMonthTransferObject, transferObject)
 
 				return nil
 			case 2:
@@ -94,17 +82,26 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 				)
 
 			case 5:
-				return accountmonth.NonExistentMovementTypeError(
+				return accountmonth.NonExistentAccountMonthError(
 					accountId1.String(),
-					stringPtr(movementTypeId1.String()),
+					movementTypeId1.String(),
 					1,
 					2023,
 				)
 
 			case 6:
-				return accountmonth.MismatchedAccountIdError(
+				return accountmonth.AlreadyEndedError(
+					accountMonthId1.String(),
 					accountId1.String(),
-					movementTypeId1.String(),
+					1,
+					2023,
+				)
+
+			case 7:
+				return accountmonth.MismatchedEndBalanceError(
+					accountMonthId1.String(),
+					1000,
+					10069.5,
 					1,
 					2023,
 				)
@@ -118,28 +115,28 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis2.NewAccountMonthRegisterNewMovementApi(&mediator, logger)},
+		[]definitions.Route{commandapis2.NewEndAccountMonthApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
 	)
 	requires.NoError(lifecycle.Start(ctx))
 
-	t.Run("successfully register new account movement", func(t *testing.T) {
+	t.Run("successfully end account month", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/account-month/account-movement", strings.NewReader(registerNewMovementBody))
+		request, err := http.NewRequest("PUT", "/account-month", strings.NewReader(endMonthBody))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
 		router.ServeHTTP(w, request)
 
-		asserts.Equal(http.StatusCreated, w.Code)
+		asserts.Equal(http.StatusNoContent, w.Code)
 		asserts.Equal("", w.Body.String())
 	})
 
-	t.Run("fails to register new account movement, because of invalid JSON body", func(t *testing.T) {
+	t.Run("fails to end account month, because of invalid JSON body", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/account-month/account-movement", strings.NewReader("{invalid"))
+		request, err := http.NewRequest("PUT", "/account-month", strings.NewReader("{invalid"))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
@@ -154,9 +151,9 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 		)
 	})
 
-	t.Run("fails to register new account movement, because of generic mediator error", func(t *testing.T) {
+	t.Run("fails to end account month, because of generic mediator error", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		request, err := http.NewRequest("POST", "/account-month/account-movement", strings.NewReader(registerNewMovementBody))
+		request, err := http.NewRequest("PUT", "/account-month", strings.NewReader(endMonthBody))
 		requires.NoError(err)
 
 		request.Header.Add("Content-Type", "application/json")
@@ -178,7 +175,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 		reason       string
 	}{
 		{
-			testName:  "fails to register new account movement, because of NonExistentAccountError",
+			testName:  "fails to end account month, because of NonExistentAccountError",
 			errorCode: accountmonth.NonExistentAccountErrorCode,
 			errorContext: &definitions.ErrorContext{
 				"accountId": accountId1.String(),
@@ -188,7 +185,7 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			reason: "Account for account month does not exist",
 		},
 		{
-			testName:  "fails to register new account movement, because of MismatchedActiveMonthError",
+			testName:  "fails to end account month, because of MismatchedActiveMonthError",
 			errorCode: accountmonth.MismatchedActiveMonthErrorCode,
 			errorContext: &definitions.ErrorContext{
 				"accountId":      accountId1.String(),
@@ -201,32 +198,44 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 			reason: "Active month is different",
 		},
 		{
-			testName:  "fails to register new account movement, because of NonExistentAccountMonthError",
-			errorCode: accountmonth.NonExistentMovementTypeErrorCode,
+			testName:  "fails to end account month, because of NonExistentAccountMonthError",
+			errorCode: accountmonth.NonExistentAccountMonthErrorCode,
 			errorContext: &definitions.ErrorContext{
 				"accountId":      accountId1.String(),
 				"movementTypeId": movementTypeId1.String(),
 				"month":          float64(1),
 				"year":           float64(2023),
 			},
-			reason: "Movement type for account movement does not exist",
+			reason: "Account month does not exist",
 		},
 		{
-			testName:  "fails to register new account movement, because of AlreadyEndedError",
-			errorCode: accountmonth.MismatchedAccountIdErrorCode,
+			testName:  "fails to end account month, because of AlreadyEndedError",
+			errorCode: accountmonth.AlreadyEndedErrorCode,
 			errorContext: &definitions.ErrorContext{
+				"accountMonthId": accountMonthId1.String(),
 				"accountId":      accountId1.String(),
-				"movementTypeId": movementTypeId1.String(),
 				"month":          float64(1),
 				"year":           float64(2023),
 			},
-			reason: "Movement type and account have different ids",
+			reason: "Account month already ended",
+		},
+		{
+			testName:  "fails to end account month, because of MismatchedEndBalanceError",
+			errorCode: accountmonth.MismatchedEndBalanceErrorCode,
+			errorContext: &definitions.ErrorContext{
+				"accountMonthId":      accountMonthId1.String(),
+				"accountMonthBalance": float64(1000),
+				"endMonthBalance":     float64(10069.5),
+				"month":               float64(1),
+				"year":                float64(2023),
+			},
+			reason: "Account month does not match end balance",
 		},
 	}
 	for _, testCase := range failureTestCases {
 		t.Run(testCase.testName, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			request, err := http.NewRequest("POST", "/account-month/account-movement", strings.NewReader(registerNewMovementBody))
+			request, err := http.NewRequest("PUT", "/account-month", strings.NewReader(endMonthBody))
 			requires.NoError(err)
 
 			request.Header.Add("Content-Type", "application/json")
@@ -244,5 +253,5 @@ func TestRegisterNewAccountMovementApi_Handle(t *testing.T) {
 		})
 	}
 
-	asserts.Equal(6, registerNewAccountMovementCalled)
+	asserts.Equal(7, endMonthCalled)
 }

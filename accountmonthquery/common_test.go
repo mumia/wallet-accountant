@@ -1,4 +1,4 @@
-package queryapis_test
+package accountmonthquery_test
 
 import (
 	"encoding/json"
@@ -12,6 +12,8 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonthreadmodel"
+	"walletaccountant/accountreadmodel"
 	"walletaccountant/definitions"
 )
 
@@ -20,16 +22,44 @@ var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772
 var month = time.January
 var year = uint(2023)
 var accountMonthUUIDString = "46e18992-7977-9f44-4fee-b192d8c5a746"
+
 var accountMonthId = accountmonth.Id(uuid.MustParse(accountMonthUUIDString))
 
-var accountMonthEntity1 = accountmonth.Entity{
+var accountMonthEntity = accountmonthreadmodel.Entity{
 	AccountMonthId: &accountMonthId,
 	AccountId:      &accountId1,
-	ActiveMonth: &accountmonth.EntityActiveMonth{
+	ActiveMonth: &accountmonthreadmodel.EntityActiveMonth{
 		Month: month,
 		Year:  year,
 	},
-	Movements:  []*accountmonth.EntityMovement{},
+	Movements:  []*accountmonthreadmodel.EntityMovement{},
+	Balance:    1030.56,
+	MonthEnded: false,
+}
+
+var accountEntity = accountreadmodel.Entity{
+	AccountId:           &accountId1,
+	BankName:            "",
+	Name:                "",
+	AccountType:         "checking",
+	StartingBalance:     0,
+	StartingBalanceDate: time.Time{},
+	Currency:            "",
+	Notes:               nil,
+	ActiveMonth: accountreadmodel.EntityActiveMonth{
+		Month: month,
+		Year:  year,
+	},
+}
+
+var accountMonthEntity1 = accountmonthreadmodel.Entity{
+	AccountMonthId: &accountMonthId,
+	AccountId:      &accountId1,
+	ActiveMonth: &accountmonthreadmodel.EntityActiveMonth{
+		Month: month,
+		Year:  year,
+	},
+	Movements:  []*accountmonthreadmodel.EntityMovement{},
 	Balance:    1000.45,
 	MonthEnded: false,
 }

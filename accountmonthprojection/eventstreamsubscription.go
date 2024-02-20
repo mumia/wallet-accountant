@@ -1,9 +1,10 @@
-package accountmonth
+package accountmonthprojection
 
 import (
 	"github.com/looplab/eventhorizon"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"walletaccountant/accountmonth"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/subscription"
@@ -16,8 +17,8 @@ func ProjectionSubscribeEventStream(
 	lifecycle fx.Lifecycle,
 ) error {
 	return subscription.SubscribeEventStreamForProjection(
-		AggregateType,
-		eventhorizon.EventHandlerType(AggregateType),
+		accountmonth.AggregateType,
+		eventhorizon.EventHandlerType(accountmonth.AggregateType),
 		client,
 		projections,
 		logger,

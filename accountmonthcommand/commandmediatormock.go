@@ -1,4 +1,4 @@
-package accountmonth
+package accountmonthcommand
 
 import (
 	"github.com/gin-gonic/gin"

@@ -1,8 +1,10 @@
-package accountmonth
+package accountmonthquery
 
 import (
 	"github.com/gin-gonic/gin"
 	"walletaccountant/account"
+	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonthreadmodel"
 	"walletaccountant/accountreadmodel"
 	"walletaccountant/definitions"
 )
@@ -10,29 +12,29 @@ import (
 var _ QueryMediatorer = &QueryMediator{}
 
 type QueryMediatorer interface {
-	AccountMonth(ctx *gin.Context, accountId *Id) (*Entity, *definitions.WalletAccountantError)
+	AccountMonth(ctx *gin.Context, accountId *accountmonth.Id) (*accountmonthreadmodel.Entity, *definitions.WalletAccountantError)
 }
 
 type QueryMediator struct {
-	repository        ReadModeler
+	repository        accountmonthreadmodel.ReadModeler
 	accountRepository accountreadmodel.ReadModeler
 }
 
-func NewQueryMediator(repository ReadModeler, accountRepository accountreadmodel.ReadModeler) *QueryMediator {
+func NewQueryMediator(repository accountmonthreadmodel.ReadModeler, accountRepository accountreadmodel.ReadModeler) *QueryMediator {
 	return &QueryMediator{repository: repository, accountRepository: accountRepository}
 }
 
 func (mediator QueryMediator) AccountMonth(
 	ctx *gin.Context,
 	accountId *account.Id,
-) (*Entity, *definitions.WalletAccountantError) {
+) (*accountmonthreadmodel.Entity, *definitions.WalletAccountantError) {
 	accountEntity, err := mediator.accountRepository.GetByAccountId(ctx, accountId)
 	if err != nil {
 		return nil, definitions.GenericError(err, definitions.ErrorContext{"accountId": accountId.String()})
 	}
 
 	if accountEntity == nil {
-		return nil, NonExistentAccountIdError(accountId.String())
+		return nil, accountmonth.NonExistentAccountIdError(accountId.String())
 	}
 
 	entity, err := mediator.repository.GetByAccountActiveMonth(ctx, accountEntity)
@@ -48,7 +50,7 @@ func (mediator QueryMediator) AccountMonth(
 	}
 
 	if entity == nil {
-		return nil, NonExistentAccountMonthError(
+		return nil, accountmonth.NonExistentAccountMonthError(
 			accountEntity.AccountId.String(),
 			"",
 			int(accountEntity.ActiveMonth.Month),

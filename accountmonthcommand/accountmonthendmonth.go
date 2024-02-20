@@ -1,4 +1,4 @@
-package commandapis
+package accountmonthcommand
 
 import (
 	"github.com/gin-gonic/gin"
@@ -11,12 +11,12 @@ import (
 var _ definitions.Route = &EndAccountMonthApi{}
 
 type EndAccountMonthApi struct {
-	mediator accountmonth.CommandMediatorer
+	mediator CommandMediatorer
 	log      *zap.Logger
 }
 
 func NewEndAccountMonthApi(
-	mediator accountmonth.CommandMediatorer,
+	mediator CommandMediatorer,
 	log *zap.Logger,
 ) *EndAccountMonthApi {
 	return &EndAccountMonthApi{
@@ -30,7 +30,7 @@ func (api *EndAccountMonthApi) Configuration() (string, string) {
 }
 
 func (api *EndAccountMonthApi) Handle(context *gin.Context) {
-	var transferObject accountmonth.EndAccountMonthTransferObject
+	var transferObject EndAccountMonthTransferObject
 
 	if err := context.ShouldBind(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))

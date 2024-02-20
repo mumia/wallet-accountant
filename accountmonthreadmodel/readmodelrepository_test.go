@@ -1,4 +1,4 @@
-package accountmonth_test
+package accountmonthreadmodel_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 	"testing"
 	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonthreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/mongodb"
 )
@@ -25,7 +26,7 @@ func TestReadModelRepository_StartMonth(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successful start account month", func(mt *mtest.T) {
-		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountmonthreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -43,7 +44,7 @@ func TestReadModelRepository_StartMonth(t *testing.T) {
 	})
 
 	mt.Run("test failure to start account month", func(mt *mtest.T) {
-		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountmonthreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(
@@ -76,7 +77,7 @@ func TestReadModelRepository_EndMonth(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successful end account month", func(mt *mtest.T) {
-		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountmonthreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -87,7 +88,7 @@ func TestReadModelRepository_EndMonth(t *testing.T) {
 	})
 
 	mt.Run("test failure to start account month", func(mt *mtest.T) {
-		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountmonthreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(
@@ -113,7 +114,7 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successful register account movement, debit", func(mt *mtest.T) {
-		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountmonthreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -136,7 +137,7 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 	})
 
 	mt.Run("test successful register account movement, credit", func(mt *mtest.T) {
-		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountmonthreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -159,7 +160,7 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 	})
 
 	mt.Run("test failure to start account month", func(mt *mtest.T) {
-		readModelRepository := accountmonth.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := accountmonthreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(

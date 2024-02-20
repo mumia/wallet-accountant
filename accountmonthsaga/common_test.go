@@ -1,4 +1,4 @@
-package saga_test
+package accountmonthsaga_test
 
 import (
 	"github.com/looplab/eventhorizon/uuid"

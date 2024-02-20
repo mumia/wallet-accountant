@@ -1,9 +1,11 @@
-package accountmonth
+package accountmonthprojection
 
 import (
 	"context"
 	"fmt"
 	"github.com/looplab/eventhorizon"
+	"walletaccountant/accountmonth"
+	"walletaccountant/accountmonthreadmodel"
 	"walletaccountant/definitions"
 )
 
@@ -15,26 +17,26 @@ type ReadModelProjection interface {
 }
 
 type Projection struct {
-	repository ReadModeler
+	repository accountmonthreadmodel.ReadModeler
 }
 
-func NewProjection(repository ReadModeler) (*Projection, error) {
+func NewProjection(repository accountmonthreadmodel.ReadModeler) (*Projection, error) {
 	return &Projection{repository: repository}, nil
 }
 
 func (projection Projection) HandlerType() eventhorizon.EventHandlerType {
-	return eventhorizon.EventHandlerType(AggregateType.String())
+	return eventhorizon.EventHandlerType(accountmonth.AggregateType.String())
 }
 
 func (projection Projection) HandleEvent(ctx context.Context, event eventhorizon.Event) error {
 	switch event.EventType() {
-	case NewAccountMovementRegistered:
+	case accountmonth.NewAccountMovementRegistered:
 		return projection.handleNewAccountMovementRegistered(ctx, event)
 
-	case MonthStarted:
+	case accountmonth.MonthStarted:
 		return projection.handleMonthStarted(ctx, event)
 
-	case MonthEnded:
+	case accountmonth.MonthEnded:
 		return projection.handleMonthEnded(ctx, event)
 	}
 
@@ -42,9 +44,9 @@ func (projection Projection) HandleEvent(ctx context.Context, event eventhorizon
 }
 
 func (projection Projection) handleNewAccountMovementRegistered(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*NewAccountMovementRegisteredData)
+	eventData, ok := event.Data().(*accountmonth.NewAccountMovementRegisteredData)
 	if !ok {
-		return definitions.EventDataTypeError(NewAccountMovementRegistered, event.EventType())
+		return definitions.EventDataTypeError(accountmonth.NewAccountMovementRegistered, event.EventType())
 	}
 
 	accountMonth, err := projection.repository.GetByAccountMonthId(ctx, eventData.AccountMonthId)
@@ -64,9 +66,9 @@ func (projection Projection) handleNewAccountMovementRegistered(ctx context.Cont
 }
 
 func (projection Projection) handleMonthStarted(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*MonthStartedData)
+	eventData, ok := event.Data().(*accountmonth.MonthStartedData)
 	if !ok {
-		return definitions.EventDataTypeError(MonthStarted, event.EventType())
+		return definitions.EventDataTypeError(accountmonth.MonthStarted, event.EventType())
 	}
 
 	return projection.repository.StartMonth(
@@ -80,9 +82,9 @@ func (projection Projection) handleMonthStarted(ctx context.Context, event event
 }
 
 func (projection Projection) handleMonthEnded(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*MonthEndedData)
+	eventData, ok := event.Data().(*accountmonth.MonthEndedData)
 	if !ok {
-		return definitions.EventDataTypeError(MonthEnded, event.EventType())
+		return definitions.EventDataTypeError(accountmonth.MonthEnded, event.EventType())
 	}
 
 	return projection.repository.EndMonth(ctx, eventData.AccountMonthId)

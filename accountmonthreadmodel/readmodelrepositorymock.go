@@ -1,9 +1,10 @@
-package accountmonth
+package accountmonthreadmodel
 
 import (
 	"context"
 	"time"
 	"walletaccountant/account"
+	"walletaccountant/accountmonth"
 	"walletaccountant/accountreadmodel"
 )
 
@@ -12,7 +13,7 @@ var _ ReadModeler = &ReadModelRepository{}
 type ReadModelRepositoryMock struct {
 	StartMonthFn func(
 		ctx context.Context,
-		accountMonthId *Id,
+		accountMonthId *accountmonth.Id,
 		accountId *account.Id,
 		startBalance float32,
 		month time.Month,
@@ -20,20 +21,20 @@ type ReadModelRepositoryMock struct {
 	) error
 	EndMonthFn func(
 		ctx context.Context,
-		accountMonthId *Id,
+		accountMonthId *accountmonth.Id,
 	) error
 	RegisterAccountMovementFn func(
 		ctx context.Context,
-		accountMonthId *Id,
-		eventData *NewAccountMovementRegisteredData,
+		accountMonthId *accountmonth.Id,
+		eventData *accountmonth.NewAccountMovementRegisteredData,
 	) error
-	GetByAccountMonthIdFn     func(ctx context.Context, accountMonthId *Id) (*Entity, error)
+	GetByAccountMonthIdFn     func(ctx context.Context, accountMonthId *accountmonth.Id) (*Entity, error)
 	GetByAccountActiveMonthFn func(ctx context.Context, account *accountreadmodel.Entity) (*Entity, error)
 }
 
 func (mock *ReadModelRepositoryMock) StartMonth(
 	ctx context.Context,
-	accountMonthId *Id,
+	accountMonthId *accountmonth.Id,
 	accountId *account.Id,
 	startBalance float32,
 	month time.Month,
@@ -48,7 +49,7 @@ func (mock *ReadModelRepositoryMock) StartMonth(
 
 func (mock *ReadModelRepositoryMock) EndMonth(
 	ctx context.Context,
-	accountMonthId *Id,
+	accountMonthId *accountmonth.Id,
 ) error {
 	if mock != nil && mock.EndMonthFn != nil {
 		return mock.EndMonthFn(ctx, accountMonthId)
@@ -58,8 +59,8 @@ func (mock *ReadModelRepositoryMock) EndMonth(
 }
 func (mock *ReadModelRepositoryMock) RegisterAccountMovement(
 	ctx context.Context,
-	accountMonthId *Id,
-	eventData *NewAccountMovementRegisteredData,
+	accountMonthId *accountmonth.Id,
+	eventData *accountmonth.NewAccountMovementRegisteredData,
 ) error {
 	if mock != nil && mock.RegisterAccountMovementFn != nil {
 		return mock.RegisterAccountMovementFn(ctx, accountMonthId, eventData)
@@ -67,7 +68,7 @@ func (mock *ReadModelRepositoryMock) RegisterAccountMovement(
 
 	return nil
 }
-func (mock *ReadModelRepositoryMock) GetByAccountMonthId(ctx context.Context, accountMonthId *Id) (*Entity, error) {
+func (mock *ReadModelRepositoryMock) GetByAccountMonthId(ctx context.Context, accountMonthId *accountmonth.Id) (*Entity, error) {
 	if mock != nil && mock.GetByAccountMonthIdFn != nil {
 		return mock.GetByAccountMonthIdFn(ctx, accountMonthId)
 	}

@@ -1,4 +1,4 @@
-package saga_test
+package accountmonthsaga_test
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 	"time"
 	"walletaccountant/account"
 	"walletaccountant/accountmonth"
-	"walletaccountant/accountmonth/saga"
+	"walletaccountant/accountmonthsaga"
 	"walletaccountant/common"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 )
 
 func TestAccountMonthEndedSaga_Matcher(t *testing.T) {
-	sagaSubject, err := saga.NewAccountMonthEndedSaga(
+	sagaSubject, err := accountmonthsaga.NewAccountMonthEndedSaga(
 		&eventstoredb.EventStoreFactoryMock{
 			CreateEventStoreFn: func(aggregateType eventhorizon.AggregateType, batchSize uint64) eventhorizon.EventStore {
 				return &eventstoredb.EventStoreMock{}
@@ -86,7 +86,7 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 	}
 
 	notes := "my account notes"
-	sagaSubject, err := saga.NewAccountMonthEndedSaga(
+	sagaSubject, err := accountmonthsaga.NewAccountMonthEndedSaga(
 		&eventstoredb.EventStoreFactoryMock{
 			CreateEventStoreFn: func(aggregateType eventhorizon.AggregateType, batchSize uint64) eventhorizon.EventStore {
 				return &eventstoredb.EventStoreMock{
