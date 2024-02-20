@@ -1,4 +1,4 @@
-package movementtype
+package movementtypecommand
 
 import (
 	"github.com/gin-gonic/gin"
@@ -10,6 +10,7 @@ import (
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
+	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
 )
 
@@ -19,7 +20,7 @@ type CommandMediatorer interface {
 	RegisterNewMovementType(
 		ctx *gin.Context,
 		transferObject RegisterNewMovementTypeTransferObject,
-	) (*Id, *definitions.WalletAccountantError)
+	) (*movementtype.Id, *definitions.WalletAccountantError)
 }
 
 type CommandMediator struct {
@@ -46,7 +47,7 @@ func NewCommandMediator(
 func (mediator *CommandMediator) RegisterNewMovementType(
 	ctx *gin.Context,
 	transferObject RegisterNewMovementTypeTransferObject,
-) (*Id, *definitions.WalletAccountantError) {
+) (*movementtype.Id, *definitions.WalletAccountantError) {
 	accountId := account.Id(uuid.MustParse(transferObject.AccountId))
 	var sourceAccountId *account.Id
 	if transferObject.SourceAccountId != nil {
@@ -55,20 +56,20 @@ func (mediator *CommandMediator) RegisterNewMovementType(
 	}
 
 	if transferObject.SourceAccountId != nil && transferObject.AccountId == *transferObject.SourceAccountId {
-		return nil, SameAccountAndSourceAccountError(&accountId, sourceAccountId)
+		return nil, movementtype.SameAccountAndSourceAccountError(&accountId, sourceAccountId)
 	}
 
-	command, err := eventhorizon.CreateCommand(RegisterNewMovementTypeCommand)
+	command, err := eventhorizon.CreateCommand(movementtype.RegisterNewMovementTypeCommand)
 	if err != nil {
 		return nil, definitions.GenericError(err, nil)
 	}
 
-	registerNewMovementTypeCommand, ok := command.(*RegisterNewMovementType)
+	registerNewMovementTypeCommand, ok := command.(*movementtype.RegisterNewMovementType)
 	if !ok {
-		return nil, definitions.InvalidCommandError(RegisterNewMovementTypeCommand, command.CommandType())
+		return nil, definitions.InvalidCommandError(movementtype.RegisterNewMovementTypeCommand, command.CommandType())
 	}
 
-	registerNewMovementTypeCommand.MovementTypeId = Id(mediator.idCreator.New())
+	registerNewMovementTypeCommand.MovementTypeId = movementtype.Id(mediator.idCreator.New())
 	registerNewMovementTypeCommand.Action = common.MovementAction(transferObject.Action)
 	registerNewMovementTypeCommand.Description = transferObject.Description
 	registerNewMovementTypeCommand.Notes = transferObject.Notes
@@ -78,7 +79,7 @@ func (mediator *CommandMediator) RegisterNewMovementType(
 		return nil, walletAccountantError
 	}
 	if !exists {
-		return nil, NonExistentMovementTypeAccountError(&accountId)
+		return nil, movementtype.NonExistentMovementTypeAccountError(&accountId)
 	}
 	registerNewMovementTypeCommand.AccountId = accountId
 
@@ -88,7 +89,7 @@ func (mediator *CommandMediator) RegisterNewMovementType(
 			return nil, walletAccountantError
 		}
 		if !exists {
-			return nil, NonExistentMovementTypeSourceAccountError(sourceAccountId)
+			return nil, movementtype.NonExistentMovementTypeSourceAccountError(sourceAccountId)
 		}
 	}
 	registerNewMovementTypeCommand.SourceAccountId = sourceAccountId
@@ -101,7 +102,7 @@ func (mediator *CommandMediator) RegisterNewMovementType(
 			return nil, walletAccountantError
 		}
 		if !exists {
-			return nil, NonExistentMovementTypeTagError(&tagId)
+			return nil, movementtype.NonExistentMovementTypeTagError(&tagId)
 		}
 
 		registerNewMovementTypeCommand.TagIds = append(registerNewMovementTypeCommand.TagIds, &tagId)

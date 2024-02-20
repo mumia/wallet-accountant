@@ -1,4 +1,4 @@
-package queryapis
+package movementtypequery
 
 import (
 	"github.com/gin-gonic/gin"
@@ -16,11 +16,11 @@ type movementTypeRequest struct {
 }
 
 type ReadMovementTypeApi struct {
-	mediator movementtype.QueryMediatorer
+	mediator QueryMediatorer
 	log      *zap.Logger
 }
 
-func NewReadMovementTypeApi(mediator movementtype.QueryMediatorer, log *zap.Logger) *ReadMovementTypeApi {
+func NewReadMovementTypeApi(mediator QueryMediatorer, log *zap.Logger) *ReadMovementTypeApi {
 	return &ReadMovementTypeApi{mediator: mediator, log: log}
 }
 

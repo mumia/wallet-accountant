@@ -1,8 +1,9 @@
-package movementtype
+package movementtypeprojection
 
 import (
 	"github.com/looplab/eventhorizon"
 	"walletaccountant/definitions"
+	"walletaccountant/movementtype"
 )
 
 var _ definitions.ProjectionProvider = &ProjectionConfig{}
@@ -16,7 +17,7 @@ func NewProjectionConfig(projection ReadModelProjection) *ProjectionConfig {
 }
 
 func (p ProjectionConfig) Matcher() eventhorizon.MatchEvents {
-	return eventhorizon.MatchEvents{NewMovementTypeRegistered}
+	return eventhorizon.MatchEvents{movementtype.NewMovementTypeRegistered}
 }
 
 func (p ProjectionConfig) Handler() eventhorizon.EventHandler {

@@ -1,4 +1,4 @@
-package movementtype_test
+package movementtypequery_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	"walletaccountant/movementtype"
+	"walletaccountant/movementtypequery"
+	"walletaccountant/movementtypereadmodel"
 )
 
 func TestQueryMediator_MovementType(t *testing.T) {
@@ -14,15 +16,15 @@ func TestQueryMediator_MovementType(t *testing.T) {
 	requires := require.New(t)
 
 	timesCalled := 0
-	repositoryMock := movementtype.ReadModelRepositoryMock{
-		GetByMovementTypeIdFn: func(ctx context.Context, accountId *movementtype.Id) (*movementtype.Entity, error) {
+	repositoryMock := movementtypereadmodel.ReadModelRepositoryMock{
+		GetByMovementTypeIdFn: func(ctx context.Context, accountId *movementtype.Id) (*movementtypereadmodel.Entity, error) {
 			timesCalled++
 
 			return &movementTypeEntity1, nil
 		},
 	}
 
-	queryMediator := movementtype.NewQueryMediator(&repositoryMock)
+	queryMediator := movementtypequery.NewQueryMediator(&repositoryMock)
 
 	ctx := gin.Context{}
 	actualAccount, err := queryMediator.MovementType(&ctx, &movementTypeId1)
@@ -38,18 +40,18 @@ func TestQueryMediator_MovementTypes(t *testing.T) {
 	requires := require.New(t)
 
 	timesCalled := 0
-	repositoryMock := movementtype.ReadModelRepositoryMock{
-		GetAllFn: func(ctx context.Context) ([]*movementtype.Entity, error) {
+	repositoryMock := movementtypereadmodel.ReadModelRepositoryMock{
+		GetAllFn: func(ctx context.Context) ([]*movementtypereadmodel.Entity, error) {
 			timesCalled++
 
-			return []*movementtype.Entity{
+			return []*movementtypereadmodel.Entity{
 				&movementTypeEntity1,
 				&movementTypeEntityWithSourceAccount,
 			}, nil
 		},
 	}
 
-	queryMediator := movementtype.NewQueryMediator(&repositoryMock)
+	queryMediator := movementtypequery.NewQueryMediator(&repositoryMock)
 
 	ctx := gin.Context{}
 	actualAccounts, err := queryMediator.MovementTypes(&ctx)

@@ -1,9 +1,11 @@
-package movementtype
+package movementtypeprojection
 
 import (
 	"context"
 	"github.com/looplab/eventhorizon"
 	"walletaccountant/definitions"
+	"walletaccountant/movementtype"
+	"walletaccountant/movementtypereadmodel"
 	"walletaccountant/websocket"
 )
 
@@ -16,11 +18,11 @@ type ReadModelProjection interface {
 }
 
 type Projection struct {
-	repository    ReadModeler
+	repository    movementtypereadmodel.ReadModeler
 	updateChannel chan websocket.ModelUpdated
 }
 
-func NewProjection(repository ReadModeler) (*Projection, error) {
+func NewProjection(repository movementtypereadmodel.ReadModeler) (*Projection, error) {
 	return &Projection{
 		repository:    repository,
 		updateChannel: make(chan websocket.ModelUpdated),
@@ -28,13 +30,13 @@ func NewProjection(repository ReadModeler) (*Projection, error) {
 }
 
 func (projection *Projection) HandlerType() eventhorizon.EventHandlerType {
-	return eventhorizon.EventHandlerType(AggregateType.String())
+	return eventhorizon.EventHandlerType(movementtype.AggregateType.String())
 }
 
 func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizon.Event) error {
 	var err error
 	switch event.EventType() {
-	case NewMovementTypeRegistered:
+	case movementtype.NewMovementTypeRegistered:
 		err = projection.handleNewMovementTypeRegistered(ctx, event)
 	}
 
@@ -46,7 +48,7 @@ func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizo
 }
 
 func (projection *Projection) UpdatedAggregate() eventhorizon.AggregateType {
-	return AggregateType
+	return movementtype.AggregateType
 }
 
 func (projection *Projection) UpdateChannel() chan websocket.ModelUpdated {
@@ -54,12 +56,12 @@ func (projection *Projection) UpdateChannel() chan websocket.ModelUpdated {
 }
 
 func (projection *Projection) handleNewMovementTypeRegistered(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*NewMovementTypeRegisteredData)
+	eventData, ok := event.Data().(*movementtype.NewMovementTypeRegisteredData)
 	if !ok {
-		return definitions.EventDataTypeError(NewMovementTypeRegistered, event.EventType())
+		return definitions.EventDataTypeError(movementtype.NewMovementTypeRegistered, event.EventType())
 	}
 
-	account := Entity{
+	account := movementtypereadmodel.Entity{
 		MovementTypeId:  eventData.MovementTypeId,
 		Action:          eventData.Action,
 		AccountId:       eventData.AccountId,

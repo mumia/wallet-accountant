@@ -1,4 +1,4 @@
-package movementtype
+package movementtypecommand
 
 type RegisterNewMovementTypeTransferObject struct {
 	Action          string   `json:"action" binding:"required"`

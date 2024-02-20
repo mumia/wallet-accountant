@@ -1,21 +1,21 @@
-package queryapis
+package movementtypequery
 
 import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
 	"walletaccountant/definitions"
-	"walletaccountant/movementtype"
+	"walletaccountant/movementtypereadmodel"
 )
 
 var _ definitions.Route = &ReadAllMovementTypeApi{}
 
 type ReadAllMovementTypeApi struct {
-	mediator movementtype.QueryMediatorer
+	mediator QueryMediatorer
 	log      *zap.Logger
 }
 
-func NewReadAllMovementTypesApi(mediator movementtype.QueryMediatorer, log *zap.Logger) *ReadAllMovementTypeApi {
+func NewReadAllMovementTypesApi(mediator QueryMediatorer, log *zap.Logger) *ReadAllMovementTypeApi {
 	return &ReadAllMovementTypeApi{mediator: mediator, log: log}
 }
 
@@ -35,7 +35,7 @@ func (api *ReadAllMovementTypeApi) Handle(ctx *gin.Context) {
 	}
 
 	if movementTypes == nil {
-		movementTypes = make([]*movementtype.Entity, 0)
+		movementTypes = make([]*movementtypereadmodel.Entity, 0)
 	}
 
 	ctx.AsciiJSON(http.StatusOK, movementTypes)

@@ -1,4 +1,4 @@
-package queryapis_test
+package movementtypequery_test
 
 import (
 	"context"
@@ -15,7 +15,8 @@ import (
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
-	"walletaccountant/movementtype/queryapis"
+	"walletaccountant/movementtypequery"
+	"walletaccountant/movementtypereadmodel"
 )
 
 func TestReadMovementTypeApi_Handle(t *testing.T) {
@@ -32,11 +33,11 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	movementTypeCalled := 0
-	mediator := movementtype.QueryMediatorMock{
+	mediator := movementtypequery.QueryMediatorMock{
 		MovementTypeFn: func(
 			ctx *gin.Context,
 			movementTypeId *movementtype.Id,
-		) (*movementtype.Entity, *definitions.WalletAccountantError) {
+		) (*movementtypereadmodel.Entity, *definitions.WalletAccountantError) {
 			movementTypeCalled++
 
 			switch movementTypeCalled {
@@ -62,7 +63,7 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis.NewReadMovementTypeApi(&mediator, logger)},
+		[]definitions.Route{movementtypequery.NewReadMovementTypeApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,

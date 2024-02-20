@@ -1,4 +1,4 @@
-package movementtype
+package movementtypeprojection
 
 import (
 	"github.com/looplab/eventhorizon"
@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
+	"walletaccountant/movementtype"
 	"walletaccountant/subscription"
 )
 
@@ -16,8 +17,8 @@ func ProjectionSubscribeEventStream(
 	lifecycle fx.Lifecycle,
 ) error {
 	return subscription.SubscribeEventStreamForProjection(
-		AggregateType,
-		eventhorizon.EventHandlerType(AggregateType),
+		movementtype.AggregateType,
+		eventhorizon.EventHandlerType(movementtype.AggregateType),
 		client,
 		projections,
 		logger,

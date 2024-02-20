@@ -1,4 +1,4 @@
-package queryapis_test
+package movementtypequery_test
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 	"testing"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
-	"walletaccountant/movementtype"
-	"walletaccountant/movementtype/queryapis"
+	"walletaccountant/movementtypequery"
+	"walletaccountant/movementtypereadmodel"
 )
 
 func TestReadAllMovementTypeApi_Handle(t *testing.T) {
@@ -33,13 +33,13 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	movementTypesCalled := 0
-	mediator := movementtype.QueryMediatorMock{
-		MovementTypesFn: func(ctx *gin.Context) ([]*movementtype.Entity, *definitions.WalletAccountantError) {
+	mediator := movementtypequery.QueryMediatorMock{
+		MovementTypesFn: func(ctx *gin.Context) ([]*movementtypereadmodel.Entity, *definitions.WalletAccountantError) {
 			movementTypesCalled++
 
 			switch movementTypesCalled {
 			case 1:
-				return []*movementtype.Entity{&movementTypeEntity1, &movementTypeWithSourceAccountEntity1}, nil
+				return []*movementtypereadmodel.Entity{&movementTypeEntity1, &movementTypeWithSourceAccountEntity1}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -52,7 +52,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis.NewReadAllMovementTypesApi(&mediator, logger)},
+		[]definitions.Route{movementtypequery.NewReadAllMovementTypesApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -67,7 +67,7 @@ func TestReadAllMovementTypeApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		expectedMovementTypesResponse, err := json.Marshal(
-			[]movementtype.Entity{movementTypeEntity1, movementTypeWithSourceAccountEntity1},
+			[]movementtypereadmodel.Entity{movementTypeEntity1, movementTypeWithSourceAccountEntity1},
 		)
 		requires.NoError(err)
 

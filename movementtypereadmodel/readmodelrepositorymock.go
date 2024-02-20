@@ -1,8 +1,9 @@
-package movementtype
+package movementtypereadmodel
 
 import (
 	"context"
 	"walletaccountant/account"
+	"walletaccountant/movementtype"
 )
 
 var _ ReadModeler = &ReadModelRepository{}
@@ -10,7 +11,7 @@ var _ ReadModeler = &ReadModelRepository{}
 type ReadModelRepositoryMock struct {
 	CreateFn              func(ctx context.Context, movementType *Entity) error
 	GetAllFn              func(ctx context.Context) ([]*Entity, error)
-	GetByMovementTypeIdFn func(ctx context.Context, movementTypeId *Id) (*Entity, error)
+	GetByMovementTypeIdFn func(ctx context.Context, movementTypeId *movementtype.Id) (*Entity, error)
 	GetByAccountIdFn      func(ctx context.Context, accountId *account.Id) ([]*Entity, error)
 }
 
@@ -30,7 +31,7 @@ func (mock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*Entity, err
 	return nil, nil
 }
 
-func (mock *ReadModelRepositoryMock) GetByMovementTypeId(ctx context.Context, movementTypeId *Id) (*Entity, error) {
+func (mock *ReadModelRepositoryMock) GetByMovementTypeId(ctx context.Context, movementTypeId *movementtype.Id) (*Entity, error) {
 	if mock != nil && mock.GetByMovementTypeIdFn != nil {
 		return mock.GetByMovementTypeIdFn(ctx, movementTypeId)
 	}

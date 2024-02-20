@@ -1,4 +1,4 @@
-package movementtype_test
+package movementtypeprojection_test
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"walletaccountant/account"
 	"walletaccountant/common"
 	"walletaccountant/movementtype"
+	"walletaccountant/movementtypeprojection"
+	"walletaccountant/movementtypereadmodel"
 	"walletaccountant/tagcategory"
 )
 
@@ -33,7 +35,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		TagIds:          []*tagcategory.TagId{&tagId1},
 	}
 
-	expectedMovementTypeEntity := movementtype.Entity{
+	expectedMovementTypeEntity := movementtypereadmodel.Entity{
 		MovementTypeId:  newMovementTypeRegisteredData.MovementTypeId,
 		Action:          newMovementTypeRegisteredData.Action,
 		AccountId:       newMovementTypeRegisteredData.AccountId,
@@ -44,8 +46,8 @@ func TestProjection_HandleEvent(t *testing.T) {
 	}
 
 	createCallCount := 0
-	repository := &movementtype.ReadModelRepositoryMock{
-		CreateFn: func(ctx context.Context, actualMovementType *movementtype.Entity) error {
+	repository := &movementtypereadmodel.ReadModelRepositoryMock{
+		CreateFn: func(ctx context.Context, actualMovementType *movementtypereadmodel.Entity) error {
 			createCallCount++
 
 			asserts.Equal(&expectedMovementTypeEntity, actualMovementType)
@@ -54,7 +56,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		},
 	}
 
-	projector, err := movementtype.NewProjection(repository)
+	projector, err := movementtypeprojection.NewProjection(repository)
 	requires.NoError(err)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())

@@ -1,4 +1,4 @@
-package movementtype_test
+package movementtypecommand_test
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 	"walletaccountant/movementtype"
+	"walletaccountant/movementtypecommand"
 	"walletaccountant/tagcategory"
 )
 
@@ -40,7 +41,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	transferObject := movementtype.RegisterNewMovementTypeTransferObject{
+	transferObject := movementtypecommand.RegisterNewMovementTypeTransferObject{
 		Action:          string(movementType),
 		AccountId:       accountId1.String(),
 		SourceAccountId: nil,
@@ -49,7 +50,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		TagIds:          []string{tagId1.String()},
 	}
 	accountId1String := accountId1.String()
-	transferObjectWithSameAccounts := movementtype.RegisterNewMovementTypeTransferObject{
+	transferObjectWithSameAccounts := movementtypecommand.RegisterNewMovementTypeTransferObject{
 		Action:          string(movementType),
 		AccountId:       accountId1.String(),
 		SourceAccountId: &accountId1String,
@@ -153,7 +154,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 				},
 			}
 
-			commandMediator := movementtype.NewCommandMediator(
+			commandMediator := movementtypecommand.NewCommandMediator(
 				commandHandler,
 				testCase.accountReadModelRepository,
 				testCase.tagCategoryReadModelRepository,
@@ -180,7 +181,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		expectedHandleCommandCalled    int
 		expectedAccountByIdCalled      int
 		expectedTagExistsByIdCalled    int
-		transferObject                 movementtype.RegisterNewMovementTypeTransferObject
+		transferObject                 movementtypecommand.RegisterNewMovementTypeTransferObject
 		expectedErrorReason            definitions.ErrorReason
 		commandHandler                 *mocks.CommandHandlerMock
 		accountReadModelRepository     *accountreadmodel.ReadModelRepositoryMock
@@ -333,7 +334,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 			accountByIdCalled = 0
 			tagExistsByIdCalled = 0
 
-			commandMediator := movementtype.NewCommandMediator(
+			commandMediator := movementtypecommand.NewCommandMediator(
 				testCase.commandHandler,
 				testCase.accountReadModelRepository,
 				testCase.tagCategoryReadModelRepository,

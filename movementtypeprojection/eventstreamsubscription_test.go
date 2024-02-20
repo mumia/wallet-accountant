@@ -1,4 +1,4 @@
-package movementtype_test
+package movementtypeprojection_test
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 	"walletaccountant/movementtype"
+	"walletaccountant/movementtypeprojection"
 	"walletaccountant/subscription"
 )
 
@@ -111,7 +112,7 @@ func TestSubscribeEventStream(t *testing.T) {
 		eventhorizon.EventHandlerType(movementtype.AggregateType),
 		true,
 		persistentSubscriptionMock,
-		movementtype.NewProjectionConfig(eventHandler),
+		movementtypeprojection.NewProjectionConfig(eventHandler),
 		subscriptionReceiveChannel,
 	)
 

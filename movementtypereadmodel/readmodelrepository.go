@@ -1,4 +1,4 @@
-package movementtype
+package movementtypereadmodel
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"walletaccountant/account"
 	"walletaccountant/mongodb"
+	"walletaccountant/movementtype"
 )
 
 var _ ReadModeler = &ReadModelRepository{}
@@ -16,7 +17,7 @@ type ReadModelWriter interface {
 
 type ReadModelReader interface {
 	GetAll(ctx context.Context) ([]*Entity, error)
-	GetByMovementTypeId(ctx context.Context, movementTypeId *Id) (*Entity, error)
+	GetByMovementTypeId(ctx context.Context, movementTypeId *movementtype.Id) (*Entity, error)
 	GetByAccountId(ctx context.Context, accountId *account.Id) ([]*Entity, error)
 }
 
@@ -64,7 +65,7 @@ func (repository *ReadModelRepository) GetAll(ctx context.Context) ([]*Entity, e
 	return entities, nil
 }
 
-func (repository *ReadModelRepository) GetByMovementTypeId(ctx context.Context, movementTypeId *Id) (*Entity, error) {
+func (repository *ReadModelRepository) GetByMovementTypeId(ctx context.Context, movementTypeId *movementtype.Id) (*Entity, error) {
 	var entity *Entity
 
 	err := repository.collection().FindOne(ctx, bson.M{"_id": movementTypeId}).Decode(&entity)
@@ -101,5 +102,5 @@ func (repository *ReadModelRepository) GetByAccountId(ctx context.Context, accou
 }
 
 func (repository *ReadModelRepository) collection() *mongo.Collection {
-	return repository.client.Collection(AggregateType.String())
+	return repository.client.Collection(movementtype.AggregateType.String())
 }

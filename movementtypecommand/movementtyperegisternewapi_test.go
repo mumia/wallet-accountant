@@ -1,4 +1,4 @@
-package commandapis_test
+package movementtypecommand_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 	"walletaccountant/movementtype"
-	"walletaccountant/movementtype/commandapis"
+	"walletaccountant/movementtypecommand"
 )
 
 var accountId2 = uuid.New()
@@ -45,7 +45,7 @@ var expectedMovementTypeId2 = uuid.New()
 var movNotes1 = "mov type notes"
 var movNotes2 = "mov type notes with source"
 
-var expectedMovementTypeTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
+var expectedMovementTypeTransferObject = movementtypecommand.RegisterNewMovementTypeTransferObject{
 	Action:          "credit",
 	AccountId:       accountId1.String(),
 	SourceAccountId: nil,
@@ -55,7 +55,7 @@ var expectedMovementTypeTransferObject = movementtype.RegisterNewMovementTypeTra
 }
 
 var sourceAccountIdString = accountId1.String()
-var expectedMovementTypeWithSourceTransferObject = movementtype.RegisterNewMovementTypeTransferObject{
+var expectedMovementTypeWithSourceTransferObject = movementtypecommand.RegisterNewMovementTypeTransferObject{
 	Action:          "debit",
 	AccountId:       accountId2.String(),
 	SourceAccountId: &sourceAccountIdString,
@@ -78,10 +78,10 @@ func TestRegisterNewMovementTypeApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	registerCalled := 0
-	mediator := movementtype.CommandMediatorMock{
+	mediator := movementtypecommand.CommandMediatorMock{
 		RegisterNewMovementTypeFn: func(
 			ctx *gin.Context,
-			transferObject movementtype.RegisterNewMovementTypeTransferObject,
+			transferObject movementtypecommand.RegisterNewMovementTypeTransferObject,
 		) (*movementtype.Id, *definitions.WalletAccountantError) {
 			registerCalled++
 
@@ -106,7 +106,7 @@ func TestRegisterNewMovementTypeApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewRegisterNewMovementTypeApi(&mediator, logger)},
+		[]definitions.Route{movementtypecommand.NewRegisterNewMovementTypeApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,

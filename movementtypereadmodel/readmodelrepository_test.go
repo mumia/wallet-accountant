@@ -1,4 +1,4 @@
-package movementtype_test
+package movementtypereadmodel_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"walletaccountant/common"
 	"walletaccountant/mongodb"
-	"walletaccountant/movementtype"
+	"walletaccountant/movementtypereadmodel"
 	"walletaccountant/tagcategory"
 )
 
@@ -21,7 +21,7 @@ func TestReadModelRepository_Create(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successfully register new movement type", func(mt *mtest.T) {
-		readModelRepository := movementtype.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := movementtypereadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -32,7 +32,7 @@ func TestReadModelRepository_Create(t *testing.T) {
 	})
 
 	mt.Run("test successfully register new movement type with source account", func(mt *mtest.T) {
-		readModelRepository := movementtype.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := movementtypereadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
@@ -43,7 +43,7 @@ func TestReadModelRepository_Create(t *testing.T) {
 	})
 
 	mt.Run("test failure add tag to new category", func(mt *mtest.T) {
-		readModelRepository := movementtype.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := movementtypereadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(

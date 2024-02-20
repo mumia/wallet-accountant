@@ -1,21 +1,20 @@
-package commandapis
+package movementtypecommand
 
 import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
 	"walletaccountant/definitions"
-	"walletaccountant/movementtype"
 )
 
 var _ definitions.Route = &RegisterNewMovementTypeApi{}
 
 type RegisterNewMovementTypeApi struct {
-	mediator movementtype.CommandMediatorer
+	mediator CommandMediatorer
 	log      *zap.Logger
 }
 
-func NewRegisterNewMovementTypeApi(mediator movementtype.CommandMediatorer, log *zap.Logger) *RegisterNewMovementTypeApi {
+func NewRegisterNewMovementTypeApi(mediator CommandMediatorer, log *zap.Logger) *RegisterNewMovementTypeApi {
 	return &RegisterNewMovementTypeApi{mediator: mediator, log: log}
 }
 
@@ -24,7 +23,7 @@ func (api *RegisterNewMovementTypeApi) Configuration() (string, string) {
 }
 
 func (api *RegisterNewMovementTypeApi) Handle(ctx *gin.Context) {
-	var transferObject movementtype.RegisterNewMovementTypeTransferObject
+	var transferObject RegisterNewMovementTypeTransferObject
 
 	if err := ctx.ShouldBind(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))
