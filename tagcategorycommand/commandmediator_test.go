@@ -1,4 +1,4 @@
-package tagcategory_test
+package tagcategorycommand_test
 
 import (
 	"context"
@@ -12,6 +12,8 @@ import (
 	"walletaccountant/eventstoredb"
 	"walletaccountant/mocks"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategorycommand"
+	"walletaccountant/tagcategoryreadmodel"
 )
 
 var expectedCommand = &tagcategory.AddNewTagToNewCategory{
@@ -48,7 +50,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	transferObject := tagcategory.AddNewTagToNewCategoryTransferObject{
+	transferObject := tagcategorycommand.AddNewTagToNewCategoryTransferObject{
 		CategoryName:  tagCategoryName,
 		CategoryNotes: &tagCategoryNotes,
 		TagName:       tagName,
@@ -63,7 +65,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 				return nil
 			},
 		}
-		readModelRepository := &tagcategory.ReadModelRepositoryMock{}
+		readModelRepository := &tagcategoryreadmodel.ReadModelRepositoryMock{}
 
 		idCreatorCalled := 0
 		idCreator := &eventstoredb.IdCreatorMock{
@@ -81,7 +83,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 			},
 		}
 
-		commandMediator := tagcategory.NewCommandMediator(commandHandler, readModelRepository, idCreator)
+		commandMediator := tagcategorycommand.NewCommandMediator(commandHandler, readModelRepository, idCreator)
 
 		tagId, tagCategoryId, err := commandMediator.AddNewTagToNewCategory(&gin.Context{}, transferObject)
 		requires.Nil(err)
@@ -93,7 +95,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 	failureTestCases := [...]struct {
 		testName            string
 		commandHandler      *mocks.CommandHandlerMock
-		readModelRepository *tagcategory.ReadModelRepositoryMock
+		readModelRepository *tagcategoryreadmodel.ReadModelRepositoryMock
 		idCreator           *eventstoredb.IdCreatorMock
 	}{
 		{
@@ -105,7 +107,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 					return nil
 				},
 			},
-			&tagcategory.ReadModelRepositoryMock{
+			&tagcategoryreadmodel.ReadModelRepositoryMock{
 				CategoryExistsByNameFn: func(ctx context.Context, name string) (bool, error) {
 					return true, nil
 				},
@@ -127,7 +129,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 					return nil
 				},
 			},
-			&tagcategory.ReadModelRepositoryMock{
+			&tagcategoryreadmodel.ReadModelRepositoryMock{
 				ExistsByNameFn: func(ctx context.Context, name string) (bool, error) {
 					return true, nil
 				},
@@ -147,7 +149,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 					return fmt.Errorf("an error")
 				},
 			},
-			&tagcategory.ReadModelRepositoryMock{},
+			&tagcategoryreadmodel.ReadModelRepositoryMock{},
 			&eventstoredb.IdCreatorMock{
 				NewFn: func() uuid.UUID {
 					return uuid.New()
@@ -158,7 +160,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 
 	for _, testCase := range failureTestCases {
 		t.Run(testCase.testName, func(t *testing.T) {
-			commandMediator := tagcategory.NewCommandMediator(
+			commandMediator := tagcategorycommand.NewCommandMediator(
 				testCase.commandHandler,
 				testCase.readModelRepository,
 				testCase.idCreator,

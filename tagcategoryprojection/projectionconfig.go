@@ -1,8 +1,9 @@
-package tagcategory
+package tagcategoryprojection
 
 import (
 	"github.com/looplab/eventhorizon"
 	"walletaccountant/definitions"
+	"walletaccountant/tagcategory"
 )
 
 var _ definitions.ProjectionProvider = &ProjectionConfig{}
@@ -17,8 +18,8 @@ func NewProjectionConfig(projection ReadModelProjection) *ProjectionConfig {
 
 func (p ProjectionConfig) Matcher() eventhorizon.MatchEvents {
 	return eventhorizon.MatchEvents{
-		NewTagAddedToNewCategory,
-		NewTagAddedToExistingCategory,
+		tagcategory.NewTagAddedToNewCategory,
+		tagcategory.NewTagAddedToExistingCategory,
 	}
 }
 

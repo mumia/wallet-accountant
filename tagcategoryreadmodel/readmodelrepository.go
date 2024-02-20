@@ -1,4 +1,4 @@
-package tagcategory
+package tagcategoryreadmodel
 
 import (
 	"context"
@@ -7,21 +7,22 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"walletaccountant/mongodb"
+	"walletaccountant/tagcategory"
 )
 
 var _ ReadModeler = &ReadModelRepository{}
 
 type ReadModelWriter interface {
 	AddNewTagAndCategory(ctx context.Context, newTagAndCategory *CategoryEntity) error
-	AddNewTagToCategory(ctx context.Context, categoryId *Id, newTag *Entity) error
+	AddNewTagToCategory(ctx context.Context, categoryId *tagcategory.Id, newTag *Entity) error
 }
 
 type ReadModelReader interface {
-	ExistsById(ctx context.Context, tagId *TagId) (bool, error)
+	ExistsById(ctx context.Context, tagId *tagcategory.TagId) (bool, error)
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	GetAll(ctx context.Context) ([]*CategoryEntity, error)
-	GetByTagIds(ctx context.Context, tagIds []TagId) ([]*CategoryEntity, error)
-	CategoryExistsById(ctx context.Context, id *Id) (bool, error)
+	GetByTagIds(ctx context.Context, tagIds []tagcategory.TagId) ([]*CategoryEntity, error)
+	CategoryExistsById(ctx context.Context, id *tagcategory.Id) (bool, error)
 	CategoryExistsByName(ctx context.Context, name string) (bool, error)
 }
 
@@ -52,7 +53,7 @@ func (repository *ReadModelRepository) AddNewTagAndCategory(
 
 func (repository *ReadModelRepository) AddNewTagToCategory(
 	ctx context.Context,
-	categoryId *Id,
+	categoryId *tagcategory.Id,
 	newTag *Entity,
 ) error {
 	_, err := repository.collection().UpdateOne(
@@ -67,7 +68,7 @@ func (repository *ReadModelRepository) AddNewTagToCategory(
 	return nil
 }
 
-func (repository *ReadModelRepository) ExistsById(ctx context.Context, tagId *TagId) (bool, error) {
+func (repository *ReadModelRepository) ExistsById(ctx context.Context, tagId *tagcategory.TagId) (bool, error) {
 	err := repository.collection().FindOne(ctx, bson.M{"tags._id": tagId}).Err()
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -118,7 +119,7 @@ func (repository *ReadModelRepository) GetAll(ctx context.Context) ([]*CategoryE
 	return entities, nil
 }
 
-func (repository *ReadModelRepository) GetByTagIds(ctx context.Context, tagIds []TagId) ([]*CategoryEntity, error) {
+func (repository *ReadModelRepository) GetByTagIds(ctx context.Context, tagIds []tagcategory.TagId) ([]*CategoryEntity, error) {
 	findOptions := &options.FindOptions{}
 
 	if len(tagIds) > 0 {
@@ -163,7 +164,7 @@ func (repository *ReadModelRepository) GetByTagIds(ctx context.Context, tagIds [
 	return entities, nil
 }
 
-func (repository *ReadModelRepository) CategoryExistsById(ctx context.Context, id *Id) (bool, error) {
+func (repository *ReadModelRepository) CategoryExistsById(ctx context.Context, id *tagcategory.Id) (bool, error) {
 	err := repository.collection().FindOne(ctx, bson.M{"_id": id}).Err()
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -190,5 +191,5 @@ func (repository *ReadModelRepository) CategoryExistsByName(ctx context.Context,
 }
 
 func (repository *ReadModelRepository) collection() *mongo.Collection {
-	return repository.client.Collection(AggregateType.String())
+	return repository.client.Collection(tagcategory.AggregateType.String())
 }

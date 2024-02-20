@@ -31,8 +31,10 @@ import (
 	"walletaccountant/movementtypequery"
 	"walletaccountant/movementtypereadmodel"
 	"walletaccountant/tagcategory"
-	tagCategoryCommandApis "walletaccountant/tagcategory/commandapis"
-	tagCategoryQueryApis "walletaccountant/tagcategory/queryapis"
+	"walletaccountant/tagcategorycommand"
+	"walletaccountant/tagcategoryprojection"
+	"walletaccountant/tagcategoryquery"
+	"walletaccountant/tagcategoryreadmodel"
 	"walletaccountant/websocket"
 )
 
@@ -50,8 +52,8 @@ func main() {
 			definitions.AsRoute(accountmonthcommand.NewAccountMonthRegisterNewMovementApi),
 			definitions.AsRoute(accountmonthcommand.NewEndAccountMonthApi),
 			definitions.AsRoute(movementtypecommand.NewRegisterNewMovementTypeApi),
-			definitions.AsRoute(tagCategoryCommandApis.NewNewTagAndCategoryApi),
-			definitions.AsRoute(tagCategoryCommandApis.NewNewTagWithExistingCategoryApi),
+			definitions.AsRoute(tagcategorycommand.NewNewTagAndCategoryApi),
+			definitions.AsRoute(tagcategorycommand.NewNewTagWithExistingCategoryApi),
 		),
 		fx.Provide(
 			// Query routes
@@ -61,12 +63,12 @@ func main() {
 			definitions.AsRoute(movementtypequery.NewReadAllMovementTypesApi),
 			definitions.AsRoute(movementtypequery.NewReadMovementTypeApi),
 			definitions.AsRoute(movementtypequery.NewReadMovementTypeByAccountApi),
-			definitions.AsRoute(tagCategoryQueryApis.NewReadAllTagsApi),
+			definitions.AsRoute(tagcategoryquery.NewReadAllTagsApi),
 		),
 		fx.Provide(
 			// CommandMediator
 			fx.Annotate(accountcommand.NewCommandMediator, fx.As(new(accountcommand.CommandMediatorer))),
-			fx.Annotate(tagcategory.NewCommandMediator, fx.As(new(tagcategory.CommandMediatorer))),
+			fx.Annotate(tagcategorycommand.NewCommandMediator, fx.As(new(tagcategorycommand.CommandMediatorer))),
 			fx.Annotate(movementtypecommand.NewCommandMediator, fx.As(new(movementtypecommand.CommandMediatorer))),
 			fx.Annotate(accountmonthcommand.NewCommandMediator, fx.As(new(accountmonthcommand.CommandMediatorer))),
 		),
@@ -75,7 +77,7 @@ func main() {
 			fx.Annotate(accountquery.NewQueryMediator, fx.As(new(accountquery.QueryMediatorer))),
 			fx.Annotate(accountmonthquery.NewQueryMediator, fx.As(new(accountmonthquery.QueryMediatorer))),
 			fx.Annotate(movementtypequery.NewQueryMediator, fx.As(new(movementtypequery.QueryMediatorer))),
-			fx.Annotate(tagcategory.NewQueryMediator, fx.As(new(tagcategory.QueryMediatorer))),
+			fx.Annotate(tagcategoryquery.NewQueryMediator, fx.As(new(tagcategoryquery.QueryMediatorer))),
 		),
 		fx.Provide(
 			// Aggregate factory
@@ -106,11 +108,11 @@ func main() {
 			definitions.AsProjectionProvider(accountprojection.NewProjectionConfig),
 			definitions.AsProjectionProvider(accountmonthprojection.NewProjectionConfig),
 			definitions.AsProjectionProvider(movementtypeprojection.NewProjectionConfig),
-			definitions.AsProjectionProvider(tagcategory.NewProjectionConfig),
+			definitions.AsProjectionProvider(tagcategoryprojection.NewProjectionConfig),
 			fx.Annotate(accountprojection.NewProjection, fx.As(new(accountprojection.ReadModelProjection))),
 			fx.Annotate(accountmonthprojection.NewProjection, fx.As(new(accountmonthprojection.ReadModelProjection))),
 			fx.Annotate(movementtypeprojection.NewProjection, fx.As(new(movementtypeprojection.ReadModelProjection))),
-			fx.Annotate(tagcategory.NewProjection, fx.As(new(tagcategory.ReadModelProjection))),
+			fx.Annotate(tagcategoryprojection.NewProjection, fx.As(new(tagcategoryprojection.ReadModelProjection))),
 		),
 		fx.Provide(
 			// Sagas
@@ -126,7 +128,7 @@ func main() {
 			fx.Annotate(accountreadmodel.NewReadModelRepository, fx.As(new(accountreadmodel.ReadModeler))),
 			fx.Annotate(accountmonthreadmodel.NewReadModelRepository, fx.As(new(accountmonthreadmodel.ReadModeler))),
 			fx.Annotate(movementtypereadmodel.NewReadModelRepository, fx.As(new(movementtypereadmodel.ReadModeler))),
-			fx.Annotate(tagcategory.NewReadModelRepository, fx.As(new(tagcategory.ReadModeler))),
+			fx.Annotate(tagcategoryreadmodel.NewReadModelRepository, fx.As(new(tagcategoryreadmodel.ReadModeler))),
 		),
 		fx.Provide(
 			// Event horizon stuff
@@ -159,7 +161,7 @@ func main() {
 		fx.Invoke(accountprojection.ProjectionSubscribeEventStream),
 		fx.Invoke(accountmonthprojection.ProjectionSubscribeEventStream),
 		fx.Invoke(movementtypeprojection.ProjectionSubscribeEventStream),
-		fx.Invoke(tagcategory.ProjectionSubscribeEventStream),
+		fx.Invoke(tagcategoryprojection.ProjectionSubscribeEventStream),
 
 		// Saga event stream subscriptions
 		fx.Invoke(saga.AccountRegisterSagaSubscribeEventStream),

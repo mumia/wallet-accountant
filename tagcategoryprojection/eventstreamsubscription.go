@@ -1,4 +1,4 @@
-package tagcategory
+package tagcategoryprojection
 
 import (
 	"github.com/looplab/eventhorizon"
@@ -7,6 +7,7 @@ import (
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/subscription"
+	"walletaccountant/tagcategory"
 )
 
 func ProjectionSubscribeEventStream(
@@ -16,8 +17,8 @@ func ProjectionSubscribeEventStream(
 	lifecycle fx.Lifecycle,
 ) error {
 	return subscription.SubscribeEventStreamForProjection(
-		AggregateType,
-		eventhorizon.EventHandlerType(AggregateType),
+		tagcategory.AggregateType,
+		eventhorizon.EventHandlerType(tagcategory.AggregateType),
 		client,
 		projections,
 		logger,

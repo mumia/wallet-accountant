@@ -12,6 +12,7 @@ import (
 	"walletaccountant/eventstoredb"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategoryreadmodel"
 )
 
 var _ CommandMediatorer = &CommandMediator{}
@@ -26,14 +27,14 @@ type CommandMediatorer interface {
 type CommandMediator struct {
 	commandHandler        eventhorizon.CommandHandler
 	accountRepository     accountreadmodel.ReadModeler
-	tagCategoryRepository tagcategory.ReadModeler
+	tagCategoryRepository tagcategoryreadmodel.ReadModeler
 	idCreator             eventstoredb.IdGenerator
 }
 
 func NewCommandMediator(
 	commandHandler eventhorizon.CommandHandler,
 	accountRepository accountreadmodel.ReadModeler,
-	tagCategoryRepository tagcategory.ReadModeler,
+	tagCategoryRepository tagcategoryreadmodel.ReadModeler,
 	idCreator eventstoredb.IdGenerator,
 ) *CommandMediator {
 	return &CommandMediator{

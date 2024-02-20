@@ -1,4 +1,4 @@
-package commandapis_test
+package tagcategorycommand_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"walletaccountant/api"
 	"walletaccountant/definitions"
 	"walletaccountant/tagcategory"
-	"walletaccountant/tagcategory/commandapis"
+	"walletaccountant/tagcategorycommand"
 )
 
 var tagWithCategoryBody = `{
@@ -29,7 +29,7 @@ var tagWithCategoryBody = `{
 
 var expectedTagWithCategoryCategoryNotes = "Category notes"
 var expectedTagWithCategoryTagNotes = "Tag notes"
-var expectedTagWithCategoryTransferObject = tagcategory.AddNewTagToNewCategoryTransferObject{
+var expectedTagWithCategoryTransferObject = tagcategorycommand.AddNewTagToNewCategoryTransferObject{
 	CategoryName:  "Category name",
 	CategoryNotes: &expectedTagWithCategoryCategoryNotes,
 	TagName:       "Tag name",
@@ -50,10 +50,10 @@ func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	addFunctionCalled := 0
-	mediator := tagcategory.CommandMediatorMock{
+	mediator := tagcategorycommand.CommandMediatorMock{
 		AddNewTagToNewCategoryFn: func(
 			ctx *gin.Context,
-			transferObject tagcategory.AddNewTagToNewCategoryTransferObject,
+			transferObject tagcategorycommand.AddNewTagToNewCategoryTransferObject,
 		) (*tagcategory.TagId, *tagcategory.Id, *definitions.WalletAccountantError) {
 			addFunctionCalled++
 
@@ -74,7 +74,7 @@ func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{commandapis.NewNewTagAndCategoryApi(&mediator, logger)},
+		[]definitions.Route{tagcategorycommand.NewNewTagAndCategoryApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,

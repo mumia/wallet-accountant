@@ -1,4 +1,4 @@
-package tagcategory_test
+package tagcategoryprojection_test
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategoryprojection"
+	"walletaccountant/tagcategoryreadmodel"
 )
 
 func TestProjection_HandleEvent_NewTagAddedToNewCategory(t *testing.T) {
@@ -23,11 +25,11 @@ func TestProjection_HandleEvent_NewTagAddedToNewCategory(t *testing.T) {
 		TagNotes:         &tagNotes,
 	}
 
-	expectedTagCategoryEntity := tagcategory.CategoryEntity{
+	expectedTagCategoryEntity := tagcategoryreadmodel.CategoryEntity{
 		TagCategoryId: &expectedTagCategoryId,
 		Name:          tagCategoryName,
 		Notes:         &tagCategoryNotes,
-		Tags: []*tagcategory.Entity{
+		Tags: []*tagcategoryreadmodel.Entity{
 			{
 				TagId: &expectedTagId,
 				Name:  tagName,
@@ -37,8 +39,8 @@ func TestProjection_HandleEvent_NewTagAddedToNewCategory(t *testing.T) {
 	}
 
 	createCallCount := 0
-	repository := &tagcategory.ReadModelRepositoryMock{
-		AddNewTagAndCategoryFn: func(ctx context.Context, newTagAndCategory *tagcategory.CategoryEntity) error {
+	repository := &tagcategoryreadmodel.ReadModelRepositoryMock{
+		AddNewTagAndCategoryFn: func(ctx context.Context, newTagAndCategory *tagcategoryreadmodel.CategoryEntity) error {
 			createCallCount++
 
 			asserts.Equal(&expectedTagCategoryEntity, newTagAndCategory)
@@ -47,7 +49,7 @@ func TestProjection_HandleEvent_NewTagAddedToNewCategory(t *testing.T) {
 		},
 	}
 
-	projector, err := tagcategory.NewProjection(repository)
+	projector, err := tagcategoryprojection.NewProjection(repository)
 	asserts.NoError(err)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -99,15 +101,15 @@ func TestProjection_HandleEvent_NewTagAddedToExistingCategory(t *testing.T) {
 		Notes:         &tagNotes,
 	}
 
-	expectedTagEntity := tagcategory.Entity{
+	expectedTagEntity := tagcategoryreadmodel.Entity{
 		TagId: &expectedTagId,
 		Name:  tagName,
 		Notes: &tagNotes,
 	}
 
 	updateCallCount := 0
-	repository := &tagcategory.ReadModelRepositoryMock{
-		AddNewTagToCategoryFn: func(ctx context.Context, categoryId *tagcategory.Id, newTag *tagcategory.Entity) error {
+	repository := &tagcategoryreadmodel.ReadModelRepositoryMock{
+		AddNewTagToCategoryFn: func(ctx context.Context, categoryId *tagcategory.Id, newTag *tagcategoryreadmodel.Entity) error {
 			updateCallCount++
 
 			asserts.Equal(&expectedTagCategoryId, categoryId)
@@ -117,7 +119,7 @@ func TestProjection_HandleEvent_NewTagAddedToExistingCategory(t *testing.T) {
 		},
 	}
 
-	projector, err := tagcategory.NewProjection(repository)
+	projector, err := tagcategoryprojection.NewProjection(repository)
 	asserts.NoError(err)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())

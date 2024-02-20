@@ -1,4 +1,4 @@
-package tagcategory_test
+package tagcategoryreadmodel_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"testing"
 	"walletaccountant/mongodb"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategoryreadmodel"
 )
 
 //var tagCategoryIdBson1, _ = bson.Marshal(expectedTagCategoryId)
@@ -72,18 +73,18 @@ func TestReadModelRepository_AddNewTagAndCategory(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successful add tag to new category", func(mt *mtest.T) {
-		readModelRepository := tagcategory.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := tagcategoryreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-		err := readModelRepository.AddNewTagAndCategory(context.Background(), &tagCategory1)
+		err := readModelRepository.AddNewTagAndCategory(context.Background(), &tagcategory.tagCategory1)
 		requires.NoError(err)
 
 		assertAddNewTagAndCategory(assertEventsForInsert(mt, asserts, requires), asserts)
 	})
 
 	mt.Run("test failure add tag to new category", func(mt *mtest.T) {
-		readModelRepository := tagcategory.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := tagcategoryreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(
@@ -95,7 +96,7 @@ func TestReadModelRepository_AddNewTagAndCategory(t *testing.T) {
 			),
 		)
 
-		err := readModelRepository.AddNewTagAndCategory(context.Background(), &tagCategory1)
+		err := readModelRepository.AddNewTagAndCategory(context.Background(), &tagcategory.tagCategory1)
 		requires.Error(err)
 
 		assertAddNewTagAndCategory(assertEventsForInsert(mt, asserts, requires), asserts)
@@ -109,18 +110,18 @@ func TestReadModelRepository_AddNewTagToCategory(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("test successful add tag to existing category", func(mt *mtest.T) {
-		readModelRepository := tagcategory.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := tagcategoryreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-		err := readModelRepository.AddNewTagAndCategory(context.Background(), &tagCategory1)
+		err := readModelRepository.AddNewTagAndCategory(context.Background(), &tagcategory.tagCategory1)
 		requires.NoError(err)
 
 		assertAddNewTagAndCategory(assertEventsForInsert(mt, asserts, requires), asserts)
 	})
 
 	mt.Run("test failure add tag to existing category", func(mt *mtest.T) {
-		readModelRepository := tagcategory.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
+		readModelRepository := tagcategoryreadmodel.NewReadModelRepository(&mongodb.MongoClient{Client: mt.Client})
 
 		mt.AddMockResponses(
 			mtest.CreateWriteErrorsResponse(
@@ -132,7 +133,7 @@ func TestReadModelRepository_AddNewTagToCategory(t *testing.T) {
 			),
 		)
 
-		err := readModelRepository.AddNewTagToCategory(context.Background(), &expectedTagCategoryId, &tag1)
+		err := readModelRepository.AddNewTagToCategory(context.Background(), &tagcategory.expectedTagCategoryId, &tagcategory.tag1)
 		requires.Error(err)
 
 		assertAddNewTagToCategory(assertEventsForUpdate(mt, asserts, requires), asserts)
@@ -203,7 +204,7 @@ func assertEventsForUpdate(mt *mtest.T, asserts *assert.Assertions, requires *re
 			asserts.Equal(mongodb.DatabaseName, element.Value().StringValue())
 		case "updates":
 			filter := element.Value().Array().Lookup("0").Document().Lookup("q").Document()
-			assertBinaryId(filter.Lookup("_id"), expectedTagCategoryId.String(), asserts)
+			assertBinaryId(filter.Lookup("_id"), tagcategory.expectedTagCategoryId.String(), asserts)
 
 			update = element.Value().Array().Lookup("0").Document().Lookup("u").Document()
 		}
@@ -222,27 +223,27 @@ func assertBinaryId(idValue bson.RawValue, expectedId string, asserts *assert.As
 }
 
 func assertAddNewTagAndCategory(command bson.Raw, asserts *assert.Assertions) {
-	assertBinaryId(command.Lookup("_id"), expectedTagCategoryId.String(), asserts)
+	assertBinaryId(command.Lookup("_id"), tagcategory.expectedTagCategoryId.String(), asserts)
 
-	asserts.Equal(tagCategoryName, command.Lookup("name").StringValue())
-	asserts.Equal(tagCategoryNotes, command.Lookup("notes").StringValue())
+	asserts.Equal(tagcategory.tagCategoryName, command.Lookup("name").StringValue())
+	asserts.Equal(tagcategory.tagCategoryNotes, command.Lookup("notes").StringValue())
 	assertTags(command.Lookup("tags"), asserts)
 }
 
 func assertAddNewTagToCategory(command bson.Raw, asserts *assert.Assertions) {
 	command = command.Lookup("$addToSet").Document().Lookup("tags").Document()
 
-	assertBinaryId(command.Lookup("_id"), expectedTagId.String(), asserts)
+	assertBinaryId(command.Lookup("_id"), tagcategory.expectedTagId.String(), asserts)
 
-	asserts.Equal(tagName, command.Lookup("name").StringValue())
-	asserts.Equal(tagNotes, command.Lookup("notes").StringValue())
+	asserts.Equal(tagcategory.tagName, command.Lookup("name").StringValue())
+	asserts.Equal(tagcategory.tagNotes, command.Lookup("notes").StringValue())
 }
 
 func assertTags(tags bson.RawValue, asserts *assert.Assertions) {
 	tag := tags.Array().Index(0).Value().Document()
 
-	assertBinaryId(tag.Lookup("_id"), expectedTagId.String(), asserts)
+	assertBinaryId(tag.Lookup("_id"), tagcategory.expectedTagId.String(), asserts)
 
-	asserts.Equal(tagName, tag.Lookup("name").StringValue())
-	asserts.Equal(tagNotes, tag.Lookup("notes").StringValue())
+	asserts.Equal(tagcategory.tagName, tag.Lookup("name").StringValue())
+	asserts.Equal(tagcategory.tagNotes, tag.Lookup("notes").StringValue())
 }

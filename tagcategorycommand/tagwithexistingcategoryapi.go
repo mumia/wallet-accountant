@@ -1,4 +1,4 @@
-package commandapis
+package tagcategorycommand
 
 import (
 	"github.com/gin-gonic/gin"
@@ -11,12 +11,12 @@ import (
 var _ definitions.Route = &NewTagWithExistingCategoryApi{}
 
 type NewTagWithExistingCategoryApi struct {
-	mediator tagcategory.CommandMediatorer
+	mediator CommandMediatorer
 	log      *zap.Logger
 }
 
 func NewNewTagWithExistingCategoryApi(
-	mediator tagcategory.CommandMediatorer,
+	mediator CommandMediatorer,
 	log *zap.Logger,
 ) *NewTagWithExistingCategoryApi {
 	return &NewTagWithExistingCategoryApi{mediator: mediator, log: log}
@@ -27,7 +27,7 @@ func (api *NewTagWithExistingCategoryApi) Configuration() (string, string) {
 }
 
 func (api *NewTagWithExistingCategoryApi) Handle(ctx *gin.Context) {
-	var transferObject tagcategory.AddNewTagToExistingCategoryTransferObject
+	var transferObject AddNewTagToExistingCategoryTransferObject
 
 	if err := ctx.ShouldBind(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))

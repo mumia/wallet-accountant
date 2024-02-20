@@ -1,8 +1,9 @@
-package tagcategory
+package tagcategorycommand
 
 import (
 	"github.com/gin-gonic/gin"
 	"walletaccountant/definitions"
+	"walletaccountant/tagcategory"
 )
 
 var _ CommandMediatorer = &CommandMediatorMock{}
@@ -11,18 +12,18 @@ type CommandMediatorMock struct {
 	AddNewTagToNewCategoryFn func(
 		ctx *gin.Context,
 		transferObject AddNewTagToNewCategoryTransferObject,
-	) (*TagId, *Id, *definitions.WalletAccountantError)
+	) (*tagcategory.TagId, *tagcategory.Id, *definitions.WalletAccountantError)
 
 	AddNewTagToExistingCategoryFn func(
 		ctx *gin.Context,
 		transferObject AddNewTagToExistingCategoryTransferObject,
-	) (*TagId, *definitions.WalletAccountantError)
+	) (*tagcategory.TagId, *definitions.WalletAccountantError)
 }
 
 func (mock *CommandMediatorMock) AddNewTagToNewCategory(
 	ctx *gin.Context,
 	transferObject AddNewTagToNewCategoryTransferObject,
-) (*TagId, *Id, *definitions.WalletAccountantError) {
+) (*tagcategory.TagId, *tagcategory.Id, *definitions.WalletAccountantError) {
 	if mock != nil && mock.AddNewTagToNewCategoryFn != nil {
 		return mock.AddNewTagToNewCategoryFn(ctx, transferObject)
 	}
@@ -33,7 +34,7 @@ func (mock *CommandMediatorMock) AddNewTagToNewCategory(
 func (mock *CommandMediatorMock) AddNewTagToExistingCategory(
 	ctx *gin.Context,
 	transferObject AddNewTagToExistingCategoryTransferObject,
-) (*TagId, *definitions.WalletAccountantError) {
+) (*tagcategory.TagId, *definitions.WalletAccountantError) {
 	if mock != nil && mock.AddNewTagToExistingCategoryFn != nil {
 		return mock.AddNewTagToExistingCategoryFn(ctx, transferObject)
 	}

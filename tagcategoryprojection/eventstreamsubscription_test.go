@@ -1,4 +1,4 @@
-package tagcategory_test
+package tagcategoryprojection_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"walletaccountant/mocks"
 	"walletaccountant/subscription"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategoryprojection"
 )
 
 func TestSubscribeEventStream(t *testing.T) {
@@ -143,7 +144,7 @@ func TestSubscribeEventStream(t *testing.T) {
 		eventhorizon.EventHandlerType(tagcategory.AggregateType),
 		true,
 		persistentSubscriptionMock,
-		tagcategory.NewProjectionConfig(eventHandler),
+		tagcategoryprojection.NewProjectionConfig(eventHandler),
 		subscriptionReceiveChannel,
 	)
 

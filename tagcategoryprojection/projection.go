@@ -1,9 +1,11 @@
-package tagcategory
+package tagcategoryprojection
 
 import (
 	"context"
 	"github.com/looplab/eventhorizon"
 	"walletaccountant/definitions"
+	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategoryreadmodel"
 	"walletaccountant/websocket"
 )
 
@@ -16,11 +18,11 @@ type ReadModelProjection interface {
 }
 
 type Projection struct {
-	repository    ReadModeler
+	repository    tagcategoryreadmodel.ReadModeler
 	updateChannel chan websocket.ModelUpdated
 }
 
-func NewProjection(repository ReadModeler) (*Projection, error) {
+func NewProjection(repository tagcategoryreadmodel.ReadModeler) (*Projection, error) {
 	return &Projection{
 		repository:    repository,
 		updateChannel: make(chan websocket.ModelUpdated),
@@ -28,16 +30,16 @@ func NewProjection(repository ReadModeler) (*Projection, error) {
 }
 
 func (projection *Projection) HandlerType() eventhorizon.EventHandlerType {
-	return eventhorizon.EventHandlerType(AggregateType.String())
+	return eventhorizon.EventHandlerType(tagcategory.AggregateType.String())
 }
 
 func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizon.Event) error {
 	var err error
 	switch event.EventType() {
-	case NewTagAddedToNewCategory:
+	case tagcategory.NewTagAddedToNewCategory:
 		err = projection.handleNewTagAddedToNewCategory(ctx, event)
 
-	case NewTagAddedToExistingCategory:
+	case tagcategory.NewTagAddedToExistingCategory:
 		err = projection.handleNewTagAddedToExistingCategory(ctx, event)
 	}
 
@@ -49,7 +51,7 @@ func (projection *Projection) HandleEvent(ctx context.Context, event eventhorizo
 }
 
 func (projection *Projection) UpdatedAggregate() eventhorizon.AggregateType {
-	return AggregateType
+	return tagcategory.AggregateType
 }
 
 func (projection *Projection) UpdateChannel() chan websocket.ModelUpdated {
@@ -57,16 +59,16 @@ func (projection *Projection) UpdateChannel() chan websocket.ModelUpdated {
 }
 
 func (projection *Projection) handleNewTagAddedToNewCategory(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*NewTagAddedToNewCategoryData)
+	eventData, ok := event.Data().(*tagcategory.NewTagAddedToNewCategoryData)
 	if !ok {
-		return definitions.EventDataTypeError(NewTagAddedToNewCategory, event.EventType())
+		return definitions.EventDataTypeError(tagcategory.NewTagAddedToNewCategory, event.EventType())
 	}
 
-	newTagAndCategory := &CategoryEntity{
+	newTagAndCategory := &tagcategoryreadmodel.CategoryEntity{
 		TagCategoryId: eventData.TagCategoryId,
 		Name:          eventData.TagCategoryName,
 		Notes:         eventData.TagCategoryNotes,
-		Tags: []*Entity{
+		Tags: []*tagcategoryreadmodel.Entity{
 			{
 				TagId: eventData.TagId,
 				Name:  eventData.TagName,
@@ -79,15 +81,15 @@ func (projection *Projection) handleNewTagAddedToNewCategory(ctx context.Context
 }
 
 func (projection *Projection) handleNewTagAddedToExistingCategory(ctx context.Context, event eventhorizon.Event) error {
-	eventData, ok := event.Data().(*NewTagAddedToExistingCategoryData)
+	eventData, ok := event.Data().(*tagcategory.NewTagAddedToExistingCategoryData)
 	if !ok {
-		return definitions.EventDataTypeError(NewTagAddedToExistingCategory, event.EventType())
+		return definitions.EventDataTypeError(tagcategory.NewTagAddedToExistingCategory, event.EventType())
 	}
 
 	return projection.repository.AddNewTagToCategory(
 		ctx,
 		eventData.TagCategoryId,
-		&Entity{
+		&tagcategoryreadmodel.Entity{
 			TagId: eventData.TagId,
 			Name:  eventData.Name,
 			Notes: eventData.Notes,

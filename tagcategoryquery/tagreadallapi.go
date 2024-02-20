@@ -1,21 +1,22 @@
-package queryapis
+package tagcategoryquery
 
 import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
 	"walletaccountant/definitions"
-	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategorycommand"
+	"walletaccountant/tagcategoryreadmodel"
 )
 
 var _ definitions.Route = &ReadAllTagsApi{}
 
 type ReadAllTagsApi struct {
-	mediator tagcategory.QueryMediatorer
+	mediator QueryMediatorer
 	log      *zap.Logger
 }
 
-func NewReadAllTagsApi(mediator tagcategory.QueryMediatorer, log *zap.Logger) *ReadAllTagsApi {
+func NewReadAllTagsApi(mediator QueryMediatorer, log *zap.Logger) *ReadAllTagsApi {
 	return &ReadAllTagsApi{mediator: mediator, log: log}
 }
 
@@ -24,7 +25,7 @@ func (api *ReadAllTagsApi) Configuration() (string, string) {
 }
 
 func (api *ReadAllTagsApi) Handle(ctx *gin.Context) {
-	var transferObject tagcategory.FiltersTransferObject
+	var transferObject tagcategorycommand.FiltersTransferObject
 
 	if err := ctx.ShouldBindQuery(&transferObject); err != nil {
 		api.log.Error("Failed to bind request", zap.Error(err))
@@ -44,7 +45,7 @@ func (api *ReadAllTagsApi) Handle(ctx *gin.Context) {
 	}
 
 	if tags == nil {
-		tags = make([]*tagcategory.CategoryEntity, 0)
+		tags = make([]*tagcategoryreadmodel.CategoryEntity, 0)
 	}
 
 	ctx.AsciiJSON(http.StatusOK, tags)

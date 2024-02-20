@@ -1,4 +1,4 @@
-package tagcategory
+package tagcategorycommand
 
 type AddNewTagToNewCategoryTransferObject struct {
 	CategoryName  string  `json:"categoryName" binding:"required"`

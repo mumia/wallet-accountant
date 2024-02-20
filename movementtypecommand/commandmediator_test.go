@@ -18,6 +18,7 @@ import (
 	"walletaccountant/movementtype"
 	"walletaccountant/movementtypecommand"
 	"walletaccountant/tagcategory"
+	"walletaccountant/tagcategoryreadmodel"
 )
 
 func setupCommandMediatorTest() {
@@ -76,7 +77,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		testName                       string
 		movementTypeId                 *movementtype.Id
 		accountReadModelRepository     *accountreadmodel.ReadModelRepositoryMock
-		tagCategoryReadModelRepository *tagcategory.ReadModelRepositoryMock
+		tagCategoryReadModelRepository *tagcategoryreadmodel.ReadModelRepositoryMock
 	}{
 		{
 			testName:       "correctly handles register new movement type",
@@ -92,7 +93,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return &accountEntity, nil
 				},
 			},
-			tagCategoryReadModelRepository: &tagcategory.ReadModelRepositoryMock{
+			tagCategoryReadModelRepository: &tagcategoryreadmodel.ReadModelRepositoryMock{
 				ExistsByIdFn: func(ctx context.Context, tagId *tagcategory.TagId) (bool, error) {
 					tagExistsByIdCalled++
 
@@ -122,7 +123,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return &accountEntity, nil
 				},
 			},
-			tagCategoryReadModelRepository: &tagcategory.ReadModelRepositoryMock{
+			tagCategoryReadModelRepository: &tagcategoryreadmodel.ReadModelRepositoryMock{
 				ExistsByIdFn: func(ctx context.Context, tagId *tagcategory.TagId) (bool, error) {
 					tagExistsByIdCalled++
 
@@ -185,7 +186,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		expectedErrorReason            definitions.ErrorReason
 		commandHandler                 *mocks.CommandHandlerMock
 		accountReadModelRepository     *accountreadmodel.ReadModelRepositoryMock
-		tagCategoryReadModelRepository *tagcategory.ReadModelRepositoryMock
+		tagCategoryReadModelRepository *tagcategoryreadmodel.ReadModelRepositoryMock
 		idCreator                      *eventstoredb.IdCreatorMock
 	}{
 		{
@@ -209,7 +210,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return nil, nil
 				},
 			},
-			&tagcategory.ReadModelRepositoryMock{
+			&tagcategoryreadmodel.ReadModelRepositoryMock{
 				ExistsByIdFn: func(ctx context.Context, tagId *tagcategory.TagId) (bool, error) {
 					tagExistsByIdCalled++
 
@@ -243,7 +244,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return nil, mongo.ErrNoDocuments
 				},
 			},
-			&tagcategory.ReadModelRepositoryMock{
+			&tagcategoryreadmodel.ReadModelRepositoryMock{
 				ExistsByIdFn: func(ctx context.Context, tagId *tagcategory.TagId) (bool, error) {
 					tagExistsByIdCalled++
 
@@ -277,7 +278,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return &accountreadmodel.Entity{}, nil
 				},
 			},
-			&tagcategory.ReadModelRepositoryMock{
+			&tagcategoryreadmodel.ReadModelRepositoryMock{
 				ExistsByIdFn: func(ctx context.Context, tagId *tagcategory.TagId) (bool, error) {
 					tagExistsByIdCalled++
 
@@ -313,7 +314,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 					return &accountreadmodel.Entity{}, nil
 				},
 			},
-			&tagcategory.ReadModelRepositoryMock{
+			&tagcategoryreadmodel.ReadModelRepositoryMock{
 				ExistsByIdFn: func(ctx context.Context, tagId *tagcategory.TagId) (bool, error) {
 					tagExistsByIdCalled++
 

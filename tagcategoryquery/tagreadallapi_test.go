@@ -1,4 +1,4 @@
-package queryapis_test
+package tagcategoryquery_test
 
 import (
 	"context"
@@ -15,8 +15,9 @@ import (
 	"testing"
 	"walletaccountant/api"
 	"walletaccountant/definitions"
-	"walletaccountant/tagcategory"
-	"walletaccountant/tagcategory/queryapis"
+	"walletaccountant/tagcategorycommand"
+	"walletaccountant/tagcategoryquery"
+	"walletaccountant/tagcategoryreadmodel"
 )
 
 func TestReadAllTagsApi_Handle(t *testing.T) {
@@ -33,13 +34,13 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 
 	tagsCalled := 0
-	mediator := tagcategory.QueryMediatorMock{
-		TagsFn: func(ctx *gin.Context, filters tagcategory.FiltersTransferObject) ([]*tagcategory.CategoryEntity, *definitions.WalletAccountantError) {
+	mediator := tagcategoryquery.QueryMediatorMock{
+		TagsFn: func(ctx *gin.Context, filters tagcategorycommand.FiltersTransferObject) ([]*tagcategoryreadmodel.CategoryEntity, *definitions.WalletAccountantError) {
 			tagsCalled++
 
 			switch tagsCalled {
 			case 1:
-				return []*tagcategory.CategoryEntity{&tagCategoryEntity1, &tagCategoryEntity2}, nil
+				return []*tagcategoryreadmodel.CategoryEntity{&tagCategoryEntity1, &tagCategoryEntity2}, nil
 			case 2:
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 			}
@@ -52,7 +53,7 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 	}
 
 	router := api.NewServer(
-		[]definitions.Route{queryapis.NewReadAllTagsApi(&mediator, logger)},
+		[]definitions.Route{tagcategoryquery.NewReadAllTagsApi(&mediator, logger)},
 		[]definitions.AggregateFactory{},
 		logger,
 		lifecycle,
@@ -67,7 +68,7 @@ func TestReadAllTagsApi_Handle(t *testing.T) {
 		router.ServeHTTP(w, request)
 
 		expectedTagsResponse, err := json.Marshal(
-			[]tagcategory.CategoryEntity{tagCategoryEntity1, tagCategoryEntity2},
+			[]tagcategoryreadmodel.CategoryEntity{tagCategoryEntity1, tagCategoryEntity2},
 		)
 		requires.NoError(err)
 
