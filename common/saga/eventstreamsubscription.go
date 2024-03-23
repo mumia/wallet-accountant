@@ -9,8 +9,6 @@ import (
 	"walletaccountant/accountsaga"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
-	"walletaccountant/importfile"
-	"walletaccountant/importfilesaga"
 	"walletaccountant/subscription"
 )
 
@@ -39,22 +37,6 @@ func AccountMonthEndedSagaSubscribeEventStream(
 	return subscription.SubscribeEventStreamForSaga(
 		accountmonth.AggregateType,
 		subscription.HandlerTypeForSaga(accountmonthsaga.AccountMonthEndedSagaType.String()),
-		client,
-		sagas,
-		logger,
-		lifecycle,
-	)
-}
-
-func ImportFileDataRowVerifiedSagaSubscribeEventStream(
-	client eventstoredb.EventStorerer,
-	sagas *eventhandler.SagaRegistry,
-	logger *zap.Logger,
-	lifecycle fx.Lifecycle,
-) error {
-	return subscription.SubscribeEventStreamForSaga(
-		importfile.AggregateType,
-		subscription.HandlerTypeForSaga(importfilesaga.ImportFileDataRowVerifiedSagaType.String()),
 		client,
 		sagas,
 		logger,
