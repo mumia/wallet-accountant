@@ -58,17 +58,16 @@ func (mediator CommandMediator) RegisterNewAccountMovement(
 	ctx *gin.Context,
 	transferObject RegisterNewAccountMovementTransferObject,
 ) *definitions.WalletAccountantError {
-	accountId := account.Id(uuid.MustParse(transferObject.AccountId))
+	accountId := account.IdFromUUIDString(transferObject.AccountId)
 	month := transferObject.Date.Month()
 	year := uint(transferObject.Date.Year())
 
 	var movementTypeId = new(movementtype.Id)
 	if transferObject.MovementTypeId != nil {
-		parsedId := movementtype.Id(uuid.MustParse(*transferObject.MovementTypeId))
-		movementTypeId = &parsedId
+		movementTypeId = movementtype.IdFromUUIDString(*transferObject.MovementTypeId)
 	}
 
-	foundAccount, waErr := mediator.validateAccount(ctx, &accountId, movementTypeId, month, year)
+	foundAccount, waErr := mediator.validateAccount(ctx, accountId, movementTypeId, month, year)
 	if waErr != nil {
 		return waErr
 	}
@@ -93,14 +92,16 @@ func (mediator CommandMediator) RegisterNewAccountMovement(
 		return definitions.InvalidCommandError(accountmonth.RegisterNewAccountMovementCommand, command.CommandType())
 	}
 
-	accountMonthId, err := accountmonth.GenerateAccountMonthId(
-		&accountId,
+	accountMonthId, err := accountmonth.IdGenerate(
+		accountId,
 		transferObject.Date.Month(),
 		uint(transferObject.Date.Year()),
 	)
 
 	registerNewAccountMovementCommand.AccountMonthId = *accountMonthId
-	registerNewAccountMovementCommand.AccountMovementId = accountmonth.AccountMovementId(mediator.idCreator.New())
+	registerNewAccountMovementCommand.AccountMovementId = *accountmonth.AccountMovementIdFromUUID(
+		mediator.idCreator.New(),
+	)
 	if movementType != nil {
 		registerNewAccountMovementCommand.MovementTypeId = movementType.MovementTypeId
 	}
@@ -108,13 +109,13 @@ func (mediator CommandMediator) RegisterNewAccountMovement(
 	registerNewAccountMovementCommand.Amount = transferObject.Amount
 	registerNewAccountMovementCommand.Date = transferObject.Date
 	if transferObject.SourceAccountId != nil {
-		registerNewAccountMovementCommand.SourceAccountId = account.IdBuilder(
+		registerNewAccountMovementCommand.SourceAccountId = account.IdFromUUID(
 			uuid.MustParse(*transferObject.SourceAccountId),
 		)
 	}
 	registerNewAccountMovementCommand.Description = transferObject.Description
 	registerNewAccountMovementCommand.Notes = transferObject.Notes
-	registerNewAccountMovementCommand.TagIds = tagcategory.TagIdsFromStrings(transferObject.TagIds)
+	registerNewAccountMovementCommand.TagIds = tagcategory.TagIdsFromUUIDStrings(transferObject.TagIds)
 
 	err = mediator.commandHandler.HandleCommand(ctx, registerNewAccountMovementCommand)
 	if err != nil {
@@ -128,11 +129,11 @@ func (mediator CommandMediator) EndAccountMonth(
 	ctx *gin.Context,
 	transferObject EndAccountMonthTransferObject,
 ) *definitions.WalletAccountantError {
-	accountId := account.Id(uuid.MustParse(transferObject.AccountId))
+	accountId := account.IdFromUUIDString(transferObject.AccountId)
 
 	foundAccount, waErr := mediator.validateAccount(
 		ctx,
-		&accountId,
+		accountId,
 		nil,
 		transferObject.Month,
 		transferObject.Year,
@@ -164,11 +165,12 @@ func (mediator CommandMediator) EndAccountMonth(
 		)
 	}
 
-	if accountMonth.Balance != *transferObject.EndBalance {
+	endBalance := *transferObject.EndBalance
+	if accountMonth.Balance != endBalance {
 		return accountmonth.MismatchedEndBalanceError(
 			accountMonth.AccountMonthId.String(),
 			accountMonth.Balance,
-			*transferObject.EndBalance,
+			endBalance,
 			int(accountMonth.ActiveMonth.Month),
 			int(accountMonth.ActiveMonth.Year),
 		)
@@ -188,7 +190,7 @@ func (mediator CommandMediator) EndAccountMonth(
 	}
 
 	endAccountMonthCommand.AccountMonthId = *accountMonth.AccountMonthId
-	endAccountMonthCommand.AccountId = accountId
+	endAccountMonthCommand.AccountId = *accountId
 	endAccountMonthCommand.EndBalance = *transferObject.EndBalance
 	endAccountMonthCommand.Month = transferObject.Month
 	endAccountMonthCommand.Year = transferObject.Year

@@ -61,9 +61,9 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 	}
 
 	expectedCommand := &movementtype.RegisterNewMovementType{
-		MovementTypeId:  movementTypeId1,
+		MovementTypeId:  *movementTypeId1,
 		Action:          movementType,
-		AccountId:       accountId1,
+		AccountId:       *accountId1,
 		SourceAccountId: nil,
 		Description:     description,
 		Notes:           &notes,
@@ -81,7 +81,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 	}{
 		{
 			testName:       "correctly handles register new movement type",
-			movementTypeId: &movementTypeId1,
+			movementTypeId: movementTypeId1,
 			accountReadModelRepository: &accountreadmodel.ReadModelRepositoryMock{
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
@@ -107,7 +107,7 @@ func TestCommandMediator_RegisterNewMovementType(t *testing.T) {
 		},
 		{
 			testName:       "correctly handles register new movement type, with source account",
-			movementTypeId: &movementTypeId2,
+			movementTypeId: movementTypeId2,
 			accountReadModelRepository: &accountreadmodel.ReadModelRepositoryMock{
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++

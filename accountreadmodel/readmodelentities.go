@@ -12,7 +12,7 @@ type Entity struct {
 	BankNameExtra       *string            `json:"bankNameExtra,omitempty" bson:"bank_name_extra"`
 	Name                string             `json:"name" bson:"name"`
 	AccountType         common.AccountType `json:"accountType" bson:"account_type"`
-	StartingBalance     float32            `json:"startingBalance" bson:"starting_balance"`
+	StartingBalance     int64              `json:"startingBalance" bson:"starting_balance"`
 	StartingBalanceDate time.Time          `json:"startingBalanceDate" bson:"starting_balance_date"`
 	Currency            account.Currency   `json:"currency" bson:"currency"`
 	Notes               *string            `json:"notes,omitempty" bson:"notes,omitempty"`

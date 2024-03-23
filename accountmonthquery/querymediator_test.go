@@ -37,7 +37,7 @@ func TestQueryMediator_AccountMonth(t *testing.T) {
 	queryMediator := accountmonthquery.NewQueryMediator(&repositoryMock, &accountRepositoryMock)
 
 	ctx := gin.Context{}
-	actualAccount, err := queryMediator.AccountMonth(&ctx, &accountId1)
+	actualAccount, err := queryMediator.AccountMonth(&ctx, accountId1)
 	requires.Nil(err)
 
 	asserts.Equal(&accountMonthEntity, actualAccount)

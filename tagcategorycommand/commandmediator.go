@@ -3,7 +3,6 @@ package tagcategorycommand
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/looplab/eventhorizon"
-	"github.com/looplab/eventhorizon/uuid"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/tagcategory"
@@ -66,11 +65,11 @@ func (mediator CommandMediator) AddNewTagToNewCategory(
 		return nil, nil, definitions.InvalidCommandError(tagcategory.AddNewTagToNewCategoryCommand, command.CommandType())
 	}
 
-	addNewTagToNewCategoryCommand.TagCategoryId = tagcategory.Id(mediator.idCreator.New())
+	addNewTagToNewCategoryCommand.TagCategoryId = *tagcategory.IdFromUUID(mediator.idCreator.New())
 	addNewTagToNewCategoryCommand.Name = transferObject.CategoryName
 	addNewTagToNewCategoryCommand.Notes = transferObject.CategoryNotes
 	addNewTagToNewCategoryCommand.Tag = tagcategory.NewTag{
-		TagId: tagcategory.TagId(mediator.idCreator.New()),
+		TagId: *tagcategory.TagIdFromUUID(mediator.idCreator.New()),
 		Name:  transferObject.TagName,
 		Notes: transferObject.TagNotes,
 	}
@@ -87,10 +86,9 @@ func (mediator CommandMediator) AddNewTagToExistingCategory(
 	ctx *gin.Context,
 	transferObject AddNewTagToExistingCategoryTransferObject,
 ) (*tagcategory.TagId, *definitions.WalletAccountantError) {
-	tagCategoryIdUUID, err := uuid.Parse(transferObject.TagCategoryId)
-	tagCategoryId := tagcategory.Id(tagCategoryIdUUID)
+	tagCategoryId := tagcategory.IdFromUUIDString(transferObject.TagCategoryId)
 
-	responseErr := mediator.tagCategoryIdExists(ctx, &tagCategoryId)
+	responseErr := mediator.tagCategoryIdExists(ctx, tagCategoryId)
 	if responseErr != nil {
 		return nil, responseErr
 	}
@@ -110,8 +108,8 @@ func (mediator CommandMediator) AddNewTagToExistingCategory(
 		return nil, definitions.InvalidCommandError(tagcategory.AddNewTagToExistingCategoryCommand, command.CommandType())
 	}
 
-	addNewTagToExistingCategoryCommand.TagId = tagcategory.TagId(mediator.idCreator.New())
-	addNewTagToExistingCategoryCommand.TagCategoryId = tagCategoryId
+	addNewTagToExistingCategoryCommand.TagId = *tagcategory.TagIdFromUUID(mediator.idCreator.New())
+	addNewTagToExistingCategoryCommand.TagCategoryId = *tagCategoryId
 	addNewTagToExistingCategoryCommand.Name = transferObject.TagName
 	addNewTagToExistingCategoryCommand.Notes = transferObject.TagNotes
 

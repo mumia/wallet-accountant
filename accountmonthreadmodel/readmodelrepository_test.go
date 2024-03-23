@@ -2,7 +2,6 @@ package accountmonthreadmodel_test
 
 import (
 	"context"
-	"fmt"
 	googleUUID "github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +14,8 @@ import (
 	"walletaccountant/mongodb"
 )
 
-func setupBalance() float32 {
-	return 1070.60
+func setupBalance() int64 {
+	return 107060
 }
 
 func TestReadModelRepository_StartMonth(t *testing.T) {
@@ -32,8 +31,8 @@ func TestReadModelRepository_StartMonth(t *testing.T) {
 
 		err := readModelRepository.StartMonth(
 			context.Background(),
-			&accountMonthId,
-			&accountId1,
+			accountMonthId,
+			accountId1,
 			setupBalance(),
 			month,
 			year,
@@ -58,8 +57,8 @@ func TestReadModelRepository_StartMonth(t *testing.T) {
 
 		err := readModelRepository.StartMonth(
 			context.Background(),
-			&accountMonthId,
-			&accountId1,
+			accountMonthId,
+			accountId1,
 			setupBalance(),
 			month,
 			year,
@@ -81,7 +80,7 @@ func TestReadModelRepository_EndMonth(t *testing.T) {
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-		err := readModelRepository.EndMonth(context.Background(), &accountMonthId)
+		err := readModelRepository.EndMonth(context.Background(), accountMonthId)
 		requires.NoError(err)
 
 		assertEndMonth(assertEventsForUpdate(mt, asserts, requires), asserts)
@@ -100,7 +99,7 @@ func TestReadModelRepository_EndMonth(t *testing.T) {
 			),
 		)
 
-		err := readModelRepository.EndMonth(context.Background(), &accountMonthId)
+		err := readModelRepository.EndMonth(context.Background(), accountMonthId)
 		requires.Error(err)
 
 		assertEndMonth(assertEventsForUpdate(mt, asserts, requires), asserts)
@@ -119,8 +118,8 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
 		eventData := accountmonth.NewAccountMovementRegisteredData{
-			AccountMonthId:  &accountMonthId,
-			MovementTypeId:  &movementTypeId1,
+			AccountMonthId:  accountMonthId,
+			MovementTypeId:  movementTypeId1,
 			Action:          common.Debit,
 			Amount:          setupBalance(),
 			Date:            date,
@@ -130,7 +129,7 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 			TagIds:          nil,
 		}
 
-		err := readModelRepository.RegisterAccountMovement(context.Background(), &accountMonthId, &eventData)
+		err := readModelRepository.RegisterAccountMovement(context.Background(), accountMonthId, &eventData)
 		requires.NoError(err)
 
 		assertRegisterAccountMovement(common.Debit, assertEventsForUpdate(mt, asserts, requires), asserts)
@@ -142,8 +141,8 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
 		eventData := accountmonth.NewAccountMovementRegisteredData{
-			AccountMonthId:  &accountMonthId,
-			MovementTypeId:  &movementTypeId1,
+			AccountMonthId:  accountMonthId,
+			MovementTypeId:  movementTypeId1,
 			Action:          common.Credit,
 			Amount:          setupBalance(),
 			Date:            date,
@@ -153,7 +152,7 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 			TagIds:          nil,
 		}
 
-		err := readModelRepository.RegisterAccountMovement(context.Background(), &accountMonthId, &eventData)
+		err := readModelRepository.RegisterAccountMovement(context.Background(), accountMonthId, &eventData)
 		requires.NoError(err)
 
 		assertRegisterAccountMovement(common.Credit, assertEventsForUpdate(mt, asserts, requires), asserts)
@@ -173,8 +172,8 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 		)
 
 		eventData := accountmonth.NewAccountMovementRegisteredData{
-			AccountMonthId:  &accountMonthId,
-			MovementTypeId:  &movementTypeId1,
+			AccountMonthId:  accountMonthId,
+			MovementTypeId:  movementTypeId1,
 			Action:          common.Debit,
 			Amount:          setupBalance(),
 			Date:            date,
@@ -184,7 +183,7 @@ func TestReadModelRepository_RegisterAccountMovement(t *testing.T) {
 			TagIds:          nil,
 		}
 
-		err := readModelRepository.RegisterAccountMovement(context.Background(), &accountMonthId, &eventData)
+		err := readModelRepository.RegisterAccountMovement(context.Background(), accountMonthId, &eventData)
 		requires.Error(err)
 
 		assertRegisterAccountMovement(common.Debit, assertEventsForUpdate(mt, asserts, requires), asserts)
@@ -264,7 +263,7 @@ func assertStartMonth(command bson.Raw, asserts *assert.Assertions) {
 	asserts.Equal(int32(1), activeMonth.Lookup("month").Int32())
 	asserts.Equal(int64(2023), activeMonth.Lookup("year").Int64())
 
-	assertFloat(1070.60, command.Lookup("balance").Double(), asserts)
+	assertInt64(107060, command.Lookup("balance").Int64(), asserts)
 
 	asserts.False(command.Lookup("month_ended").Boolean())
 
@@ -281,15 +280,15 @@ func assertRegisterAccountMovement(movementAction common.MovementAction, command
 		balanceChange = balanceChange * -1
 	}
 
-	assertFloat(
-		float64(balanceChange),
-		command.Lookup("$inc").Document().Lookup("balance").Double(),
+	assertInt64(
+		balanceChange,
+		command.Lookup("$inc").Document().Lookup("balance").Int64(),
 		asserts,
 	)
 
 	movementAdded := command.Lookup("$push").Document().Lookup("movements").Document()
 	assertBinaryId(movementAdded.Lookup("movement_type_id"), movementTypeId1.String(), asserts)
-	assertFloat(float64(setupBalance()), movementAdded.Lookup("amount").Double(), asserts)
+	assertInt64(setupBalance(), movementAdded.Lookup("amount").Int64(), asserts)
 	asserts.Equal(date.UnixMilli(), movementAdded.Lookup("date").DateTime())
 }
 
@@ -302,9 +301,6 @@ func assertBinaryId(idValue bson.RawValue, expectedId string, asserts *assert.As
 	asserts.Equal(expectedId, actualUuid.String())
 }
 
-func assertFloat(expected float64, actual float64, asserts *assert.Assertions) {
-	asserts.Equal(
-		fmt.Sprintf("%.2f", expected),
-		fmt.Sprintf("%.2f", actual),
-	)
+func assertInt64(expected int64, actual int64, asserts *assert.Assertions) {
+	asserts.Equal(expected, actual)
 }

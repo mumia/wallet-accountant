@@ -39,7 +39,7 @@ func TestSubscribeEventStream(t *testing.T) {
 					EventNumber:    0,
 					Position:       esdb.Position{},
 					CreatedDate:    time.Now(),
-					Data:           []byte("{\n  \"account_id\": \"7cb19cfb-5db0-4a2f-845f-1ba2055ec341\",\n  \"bank_name\": \"N26\",\n  \"name\": \"DE N26 account\",\n  \"type\": \"checking\",\n  \"starting_balance\": 100.5,\n  \"starting_balance_date\": \"2018-08-26T00:00:00Z\",\n  \"currency\": \"EUR\",\n  \"notes\": \"These are my notes\",\n  \"active_month\": 8,\n  \"active_year\": 2018\n}"),
+					Data:           []byte("{\n  \"account_id\": \"7cb19cfb-5db0-4a2f-845f-1ba2055ec341\",\n  \"bank_name\": \"N26\",\n  \"name\": \"DE N26 account\",\n  \"type\": \"checking\",\n  \"starting_balance\": 10050,\n  \"starting_balance_date\": \"2018-08-26T00:00:00Z\",\n  \"currency\": \"EUR\",\n  \"notes\": \"These are my notes\",\n  \"active_month\": 8,\n  \"active_year\": 2018\n}"),
 					SystemMetadata: nil,
 					UserMetadata:   nil,
 				},

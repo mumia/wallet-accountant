@@ -50,7 +50,7 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 	transferObject := accountmonthcommand.RegisterNewAccountMovementTransferObject{
 		AccountId:       accountId1.String(),
 		MovementTypeId:  stringPtr(movementTypeId1.String()),
-		Amount:          1010,
+		Amount:          101000,
 		Date:            date,
 		Action:          "credit",
 		SourceAccountId: nil,
@@ -60,11 +60,11 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 	}
 
 	expectedCommand := &accountmonth.RegisterNewAccountMovement{
-		AccountMonthId:    accountMonthId,
-		AccountMovementId: accountMovementId,
-		MovementTypeId:    &movementTypeId1,
+		AccountMonthId:    *accountMonthId,
+		AccountMovementId: *accountMovementId,
+		MovementTypeId:    movementTypeId1,
 		Action:            common.Credit,
-		Amount:            1010,
+		Amount:            101000,
 		Date:              date,
 		SourceAccountId:   nil,
 		Description:       "My movement description",
@@ -123,7 +123,7 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 
 			idCreator := &eventstoredb.IdCreatorMock{
 				NewFn: func() uuid.UUID {
-					return accountMovementId
+					return *accountMovementId
 				},
 			}
 
@@ -273,7 +273,7 @@ func TestCommandMediator_RegisterNewAccountMovement(t *testing.T) {
 
 			idCreator := &eventstoredb.IdCreatorMock{
 				NewFn: func() uuid.UUID {
-					return accountMovementId
+					return *accountMovementId
 				},
 			}
 
@@ -326,8 +326,8 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	endBalance1 := float32(1030.56)
-	endBalance2 := float32(1030)
+	endBalance1 := int64(103056)
+	endBalance2 := int64(103000)
 
 	transferObject := accountmonthcommand.EndAccountMonthTransferObject{
 		AccountId:  accountId1.String(),
@@ -343,9 +343,9 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 	}
 
 	expectedCommand := &accountmonth.EndAccountMonth{
-		AccountMonthId: accountMonthId,
-		AccountId:      accountId1,
-		EndBalance:     1030.56,
+		AccountMonthId: *accountMonthId,
+		AccountId:      *accountId1,
+		EndBalance:     103056,
 		Month:          month,
 		Year:           year,
 	}
@@ -366,7 +366,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 
 		idCreator := &eventstoredb.IdCreatorMock{
 			NewFn: func() uuid.UUID {
-				return accountMovementId
+				return *accountMovementId
 			},
 		}
 
@@ -444,7 +444,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
-					asserts.Equal(accountId1, *accountId)
+					asserts.Equal(accountId1, accountId)
 
 					return nil, nil
 				},
@@ -470,7 +470,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
-					asserts.Equal(accountId1, *accountId)
+					asserts.Equal(accountId1, accountId)
 
 					return &accountEntity2, nil
 				},
@@ -489,7 +489,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				) (*accountmonthreadmodel.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
-					asserts.Equal(accountId1, *account.AccountId)
+					asserts.Equal(accountId1, account.AccountId)
 
 					return nil, nil
 				},
@@ -498,7 +498,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
-					asserts.Equal(accountId1, *accountId)
+					asserts.Equal(accountId1, accountId)
 
 					return &accountEntity, nil
 				},
@@ -517,7 +517,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				) (*accountmonthreadmodel.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
-					asserts.Equal(accountId1, *account.AccountId)
+					asserts.Equal(accountId1, account.AccountId)
 
 					return &accountMonthEntityEnded, nil
 				},
@@ -526,7 +526,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
-					asserts.Equal(accountId1, *accountId)
+					asserts.Equal(accountId1, accountId)
 
 					return &accountEntity, nil
 				},
@@ -545,7 +545,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				) (*accountmonthreadmodel.Entity, error) {
 					accountMonthByActiveMonthCalled++
 
-					asserts.Equal(accountId1, *account.AccountId)
+					asserts.Equal(accountId1, account.AccountId)
 
 					return &accountMonthEntity, nil
 				},
@@ -554,7 +554,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
 					accountByIdCalled++
 
-					asserts.Equal(accountId1, *accountId)
+					asserts.Equal(accountId1, accountId)
 
 					return &accountEntity, nil
 				},
@@ -570,7 +570,7 @@ func TestCommandMediator_EndAccountMonth(t *testing.T) {
 
 			idCreator := &eventstoredb.IdCreatorMock{
 				NewFn: func() uuid.UUID {
-					return accountMovementId
+					return *accountMovementId
 				},
 			}
 

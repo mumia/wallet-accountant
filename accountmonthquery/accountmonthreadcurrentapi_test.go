@@ -41,7 +41,7 @@ func TestNewReadCurrentAccountMonthApi(t *testing.T) {
 		) (*accountmonthreadmodel.Entity, *definitions.WalletAccountantError) {
 			accountMonthCalled++
 
-			asserts.Equal(&accountId1, accountId)
+			asserts.Equal(accountId1, accountId)
 
 			switch accountMonthCalled {
 			case 1:

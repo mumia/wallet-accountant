@@ -91,11 +91,11 @@ func (projection *Projection) handleNextMonthStarted(ctx context.Context, event 
 		return definitions.EventDataTypeError(account.NextMonthStarted, event.EventType())
 	}
 
-	id := account.Id(event.AggregateID())
+	id := account.IdFromUUID(event.AggregateID())
 
 	return projection.repository.UpdateActiveMonth(
 		ctx,
-		&id,
+		id,
 		accountreadmodel.EntityActiveMonth{
 			Month: eventData.NextMonth,
 			Year:  eventData.NextYear,

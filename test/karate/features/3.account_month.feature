@@ -10,7 +10,7 @@ Feature: Account month handling
       "bankName": "a bank",
       "name": "account month test",
       "accountType": "checking",
-      "startingBalance": 100,
+      "startingBalance": 10000,
       "startingBalanceDate": "2023-08-01T00:00:00Z",
       "currency": "EUR"
     }

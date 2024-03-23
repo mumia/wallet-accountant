@@ -6,7 +6,7 @@
     {
       "movementTypeId": null,
       "action": "debit",
-      "amount": 50,
+      "amount": 5000,
       "date": "2023-08-12T00:00:00Z",
       "sourceAccountId": null,
       "description": "a debit",
@@ -16,7 +16,7 @@
     {
       "movementTypeId": null,
       "action": "credit",
-      "amount": 125.50,
+      "amount": 12550,
       "date": "2023-08-14T10:05:00Z",
       "sourceAccountId": null,
       "description": "a credit",
@@ -24,7 +24,7 @@
       "tagIds": ["#uuid"]
     }
   ],
-  "balance": 175.50,
-  "initialBalance": 100,
+  "balance": 17550,
+  "initialBalance": 10000,
   "monthEnded": false
 }

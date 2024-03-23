@@ -2,7 +2,6 @@ package accountreadmodel
 
 import (
 	"context"
-	"github.com/looplab/eventhorizon/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"time"
 	"walletaccountant/account"
@@ -44,30 +43,30 @@ func (repoMock *ReadModelRepositoryMock) GetAll(ctx context.Context) ([]*Entity,
 		return repoMock.GetAllFn(ctx)
 	}
 
-	accountId1 := account.Id(uuid.MustParse("83528ee4-3f0f-43ea-a383-e3846c00fa38"))
-	accountId2 := account.Id(uuid.MustParse("83528ee4-3f0f-43ea-a383-e3846c00fa40"))
+	accountId1 := account.IdFromUUIDString("83528ee4-3f0f-43ea-a383-e3846c00fa38")
+	accountId2 := account.IdFromUUIDString("83528ee4-3f0f-43ea-a383-e3846c00fa40")
 
 	notes := "my some notes"
 	notes1 := "my another notes"
 
 	return []*Entity{
 		repoMock.entity(
-			&accountId1,
+			accountId1,
 			"some bank name",
 			"some name",
 			common.Checking,
-			1069,
+			106900,
 			time.Date(2023, 9, 10, 0, 0, 0, 0, time.UTC),
 			account.EUR,
 			&notes,
 			account.NewActiveMonth(9, 2023),
 		),
 		repoMock.entity(
-			&accountId2,
+			accountId2,
 			"another bank name",
 			"another name",
 			common.Savings,
-			1169,
+			116900,
 			time.Date(2022, 8, 10, 0, 0, 0, 0, time.UTC),
 			account.USD,
 			&notes1,
@@ -87,7 +86,7 @@ func (repoMock *ReadModelRepositoryMock) GetByAccountId(ctx context.Context, acc
 		"bank name",
 		"name",
 		common.Checking,
-		1069,
+		106900,
 		time.Date(2023, 9, 10, 0, 0, 0, 0, time.UTC),
 		account.EUR,
 		&notes,
@@ -108,7 +107,7 @@ func (repoMock *ReadModelRepositoryMock) entity(
 	bankName account.BankName,
 	name string,
 	accountType common.AccountType,
-	startingBalance float32,
+	startingBalance int64,
 	startingBalanceDate time.Time,
 	currency account.Currency,
 	notes *string,

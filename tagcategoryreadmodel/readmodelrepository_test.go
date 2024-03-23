@@ -133,7 +133,7 @@ func TestReadModelRepository_AddNewTagToCategory(t *testing.T) {
 			),
 		)
 
-		err := readModelRepository.AddNewTagToCategory(context.Background(), &expectedTagCategoryId, &tag1)
+		err := readModelRepository.AddNewTagToCategory(context.Background(), expectedTagCategoryId, &tag1)
 		requires.Error(err)
 
 		assertAddNewTagToCategory(assertEventsForUpdate(mt, asserts, requires), asserts)

@@ -37,7 +37,7 @@ func TestReadAccountsApi_Handle(t *testing.T) {
 		AccountFn: func(ctx *gin.Context, accountId *account.Id) (*accountreadmodel.Entity, *definitions.WalletAccountantError) {
 			accountCalled++
 
-			asserts.Equal(&accountId1, accountId)
+			asserts.Equal(accountId1, accountId)
 
 			switch accountCalled {
 			case 1:

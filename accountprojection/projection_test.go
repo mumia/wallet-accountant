@@ -17,14 +17,14 @@ import (
 func TestProjection_HandleEvent(t *testing.T) {
 	asserts := assert.New(t)
 
-	accountId := account.Id(uuid.New())
+	accountId := account.IdFromUUID(uuid.New())
 	notes := "my account notes"
 	newAccountRegisteredData := account.NewAccountRegisteredData{
-		AccountId:           &accountId,
+		AccountId:           accountId,
 		BankName:            "bank name",
 		Name:                "account name",
 		AccountType:         common.Checking,
-		StartingBalance:     2069,
+		StartingBalance:     206900,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.USD,
 		Notes:               &notes,
@@ -87,7 +87,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		account.NewAccountRegistered,
 		&newAccountRegisteredData,
 		time.Now(),
-		eventhorizon.ForAggregate(account.AggregateType, accountId, 1),
+		eventhorizon.ForAggregate(account.AggregateType, *accountId, 1),
 	)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -117,7 +117,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		account.NextMonthStarted,
 		&nextMonthStartedData,
 		time.Now(),
-		eventhorizon.ForAggregate(account.AggregateType, accountId, 1),
+		eventhorizon.ForAggregate(account.AggregateType, *accountId, 1),
 	)
 
 	err = projector.HandleEvent(context.Background(), nextMonthStartedEvent)

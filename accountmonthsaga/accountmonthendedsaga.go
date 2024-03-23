@@ -90,7 +90,7 @@ func (saga *AccountMonthEndedSaga) handleNewAccountMonthEnded(
 
 	activeMonth := accountAggregate.ActiveMonth()
 
-	accountMonthId, err := accountmonth.GenerateAccountMonthId(
+	accountMonthId, err := accountmonth.IdGenerate(
 		eventData.AccountId,
 		activeMonth.Month(),
 		activeMonth.Year(),

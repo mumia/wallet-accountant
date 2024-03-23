@@ -18,11 +18,11 @@ import (
 )
 
 var newId = uuid.New()
-var expectedAccountId = account.Id(newId)
+var expectedAccountId = account.IdFromUUID(newId)
 var bankName = account.BankName("my bank name")
 var name = "account name"
 var accountType = common.Checking
-var startingBalance = float32(1269)
+var startingBalance int64 = 126900
 var startingBalanceDate = time.Now()
 var currency = account.Currency(account.USD)
 var notes = "my account notes"
@@ -62,7 +62,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 
 	t.Run("correctly handles register new account", func(t *testing.T) {
 		expectedCommand := &account.RegisterNewAccount{
-			AccountId:           expectedAccountId,
+			AccountId:           *expectedAccountId,
 			BankName:            bankName,
 			Name:                name,
 			AccountType:         accountType,
@@ -96,7 +96,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 		accountId, err := commandMediator.RegisterNewAccount(&gin.Context{}, transferObject)
 		requires.Nil(err)
 
-		asserts.Equal(&expectedAccountId, accountId)
+		asserts.Equal(expectedAccountId, accountId)
 	})
 
 	failureTestCases := [...]struct {
@@ -117,7 +117,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 			&accountreadmodel.ReadModelRepositoryMock{
 				GetByNameFn: func(ctx context.Context, name string) (*accountreadmodel.Entity, error) {
 					return &accountreadmodel.Entity{
-						AccountId:           &expectedAccountId,
+						AccountId:           expectedAccountId,
 						BankName:            bankName,
 						Name:                name,
 						AccountType:         accountType,
@@ -141,7 +141,7 @@ func TestCommandMediator_RegisterNewAccount(t *testing.T) {
 			"fails to handle register new account, because of err on command handler",
 			&mocks.CommandHandlerMock{
 				HandleCommandFn: func(ctx context.Context, command eventhorizon.Command) error {
-					asserts.Equal(expectedAccountId, command.AggregateID())
+					asserts.Equal(*expectedAccountId, command.AggregateID())
 
 					return fmt.Errorf("an error")
 				},
@@ -182,7 +182,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 	requires := require.New(t)
 
 	t.Run("successfully starts next month on account", func(t *testing.T) {
-		expectedCommand := &account.StartNextMonth{AccountId: expectedAccountId}
+		expectedCommand := &account.StartNextMonth{AccountId: *expectedAccountId}
 
 		commandHandler := &mocks.CommandHandlerMock{
 			HandleCommandFn: func(ctx context.Context, command eventhorizon.Command) error {
@@ -194,7 +194,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 
 		readModelRepository := &accountreadmodel.ReadModelRepositoryMock{
 			GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
-				asserts.Equal(&expectedAccountId, accountId)
+				asserts.Equal(expectedAccountId, accountId)
 
 				return &accountreadmodel.Entity{
 					AccountId:           accountId,
@@ -212,7 +212,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 
 		commandMediator := NewCommandMediator(commandHandler, readModelRepository, nil)
 
-		err := commandMediator.StartNextMonth(&gin.Context{}, &expectedAccountId)
+		err := commandMediator.StartNextMonth(&gin.Context{}, expectedAccountId)
 		requires.Nil(err)
 	})
 
@@ -233,7 +233,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 			},
 			&accountreadmodel.ReadModelRepositoryMock{
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
-					asserts.Equal(&expectedAccountId, accountId)
+					asserts.Equal(expectedAccountId, accountId)
 
 					return nil, nil
 				},
@@ -250,14 +250,14 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 			"fails to handle start next month, because of err on command handler",
 			&mocks.CommandHandlerMock{
 				HandleCommandFn: func(ctx context.Context, command eventhorizon.Command) error {
-					asserts.Equal(expectedAccountId, command.AggregateID())
+					asserts.Equal(*expectedAccountId, command.AggregateID())
 
 					return fmt.Errorf("an error")
 				},
 			},
 			&accountreadmodel.ReadModelRepositoryMock{
 				GetByAccountIdFn: func(ctx context.Context, accountId *account.Id) (*accountreadmodel.Entity, error) {
-					asserts.Equal(&expectedAccountId, accountId)
+					asserts.Equal(expectedAccountId, accountId)
 
 					return &accountreadmodel.Entity{
 						AccountId:           accountId,
@@ -288,7 +288,7 @@ func TestCommandMediator_StartNextMonth(t *testing.T) {
 				testCase.idCreator,
 			)
 
-			err := commandMediator.StartNextMonth(&gin.Context{}, &expectedAccountId)
+			err := commandMediator.StartNextMonth(&gin.Context{}, expectedAccountId)
 			requires.Error(err)
 		})
 	}

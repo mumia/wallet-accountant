@@ -16,18 +16,18 @@ import (
 	"walletaccountant/mongodb"
 )
 
-var expectedAccountId1 = account.Id(uuid.New())
+var expectedAccountId1 = account.IdFromUUID(uuid.New())
 var expectedActiveMonth = accountreadmodel.EntityActiveMonth{
 	Month: time.August,
 	Year:  2023,
 }
 var notes1 = "a set of notes"
 var expectedAccountEntity1 = accountreadmodel.Entity{
-	AccountId:           &expectedAccountId1,
+	AccountId:           expectedAccountId1,
 	BankName:            account.BankName("a bank name"),
 	Name:                "an account name",
 	AccountType:         common.Checking,
-	StartingBalance:     float32(5069),
+	StartingBalance:     506900,
 	StartingBalanceDate: time.Now(),
 	Currency:            account.EUR,
 	Notes:               &notes1,
@@ -53,14 +53,14 @@ var accountBson1 = bson.D{
 	},
 }
 
-var expectedAccountId2 = account.Id(uuid.New())
+var expectedAccountId2 = account.IdFromUUID(uuid.New())
 var notes2 = "another set of notes"
 var expectedAccountEntity2 = accountreadmodel.Entity{
-	AccountId:           &expectedAccountId1,
+	AccountId:           expectedAccountId1,
 	BankName:            account.BankName("another bank name"),
 	Name:                "annother account name",
 	AccountType:         common.Savings,
-	StartingBalance:     6069,
+	StartingBalance:     606900,
 	StartingBalanceDate: time.Now().Add(1 * time.Minute),
 	Currency:            account.USD,
 	Notes:               &notes2,
@@ -120,7 +120,7 @@ func TestReadModelRepository_UpdateActiveMonth(t *testing.T) {
 
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-		err := readModelRepository.UpdateActiveMonth(context.Background(), &expectedAccountId1, expectedActiveMonth)
+		err := readModelRepository.UpdateActiveMonth(context.Background(), expectedAccountId1, expectedActiveMonth)
 		requires.NoError(err)
 
 		update := assetUpdates(mt, asserts, requires)
@@ -140,7 +140,7 @@ func TestReadModelRepository_UpdateActiveMonth(t *testing.T) {
 			),
 		)
 
-		err := readModelRepository.UpdateActiveMonth(context.Background(), &expectedAccountId1, expectedActiveMonth)
+		err := readModelRepository.UpdateActiveMonth(context.Background(), expectedAccountId1, expectedActiveMonth)
 		asserts.Error(err)
 
 		update := assetUpdates(mt, asserts, requires)
@@ -207,7 +207,7 @@ func TestReadModelRepository_GetByAccountId(t *testing.T) {
 
 		mt.AddMockResponses(mtest.CreateCursorResponse(1, "foo.bar", mtest.FirstBatch, accountBson1))
 
-		actualAccountEntity, err := readModelRepository.GetByAccountId(context.Background(), &expectedAccountId1)
+		actualAccountEntity, err := readModelRepository.GetByAccountId(context.Background(), expectedAccountId1)
 		requires.NoError(err)
 
 		asserts.Equal(expectedAccountEntity1, actualAccountEntity)
@@ -257,7 +257,8 @@ func assertCreate(update bson.Raw, asserts *assert.Assertions) {
 		expectedAccountEntity1.AccountType,
 		common.AccountType(update.Lookup("account_type").StringValue()),
 	)
-	asserts.Equal(float64(expectedAccountEntity1.StartingBalance), update.Lookup("starting_balance").Double())
+
+	asserts.Equal(expectedAccountEntity1.StartingBalance, update.Lookup("starting_balance").Int64())
 	asserts.Equal(
 		expectedAccountEntity1.StartingBalanceDate.Format("2006-02-01"),
 		time.UnixMilli(update.Lookup("starting_balance_date").DateTime()).Format("2006-02-01"),

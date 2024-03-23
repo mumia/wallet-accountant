@@ -42,16 +42,14 @@ func setupMovementAction(withSourceAccount bool) common.MovementAction {
 }
 
 func setupAccountIds(withSourceAccount bool) (*account.Id, *account.Id) {
-	accountId := account.Id(uuid.MustParse("f4081021-adf4-4b04-a6e5-4ad0028b96f9"))
+	accountId := account.IdFromUUIDString("f4081021-adf4-4b04-a6e5-4ad0028b96f9")
 	var sourceAccountId *account.Id
 	if withSourceAccount {
-		accountId = account.Id(uuid.MustParse("07a7ccde-b19c-412a-a054-bc09ac529357"))
-
-		id := account.Id(uuid.MustParse("5c6e143d-f1a6-42ca-b9df-2f4a94628194"))
-		sourceAccountId = &id
+		accountId = account.IdFromUUIDString("07a7ccde-b19c-412a-a054-bc09ac529357")
+		sourceAccountId = account.IdFromUUIDString("5c6e143d-f1a6-42ca-b9df-2f4a94628194")
 	}
 
-	return &accountId, sourceAccountId
+	return accountId, sourceAccountId
 }
 
 func setupDescriptionNotes(withSourceAccount bool) (string, string) {

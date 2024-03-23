@@ -27,7 +27,7 @@ func TestQueryMediator_MovementType(t *testing.T) {
 	queryMediator := movementtypequery.NewQueryMediator(&repositoryMock)
 
 	ctx := gin.Context{}
-	actualAccount, err := queryMediator.MovementType(&ctx, &movementTypeId1)
+	actualAccount, err := queryMediator.MovementType(&ctx, movementTypeId1)
 	requires.Nil(err)
 
 	asserts.Equal(&movementTypeEntity1, actualAccount)

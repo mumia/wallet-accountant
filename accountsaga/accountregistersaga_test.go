@@ -3,7 +3,6 @@ package accountsaga_test
 import (
 	"context"
 	"github.com/looplab/eventhorizon"
-	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -19,8 +18,8 @@ var month = time.January
 var year = uint(2023)
 var date = time.Date(int(year), month, 1, 0, 0, 0, 0, time.UTC)
 var accountMonthUUIDString = "46e18992-7977-9f44-4fee-b192d8c5a746"
-var accountMonthId = accountmonth.Id(uuid.MustParse(accountMonthUUIDString))
-var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
+var accountMonthId = accountmonth.IdFromUUIDString(accountMonthUUIDString)
+var accountId1 = account.IdFromUUIDString("aeea307f-3c57-467c-8954-5f541aef6772")
 
 func TestAccountRegisterSaga_Matcher(t *testing.T) {
 	sagaSubject := accountsaga.NewAccountRegisterSaga()
@@ -40,11 +39,11 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 
 	notes := "my account notes"
 	newAccountRegisteredData := account.NewAccountRegisteredData{
-		AccountId:           &accountId1,
+		AccountId:           accountId1,
 		BankName:            "bank name",
 		Name:                "account name",
 		AccountType:         common.Checking,
-		StartingBalance:     2069.96,
+		StartingBalance:     206996,
 		StartingBalanceDate: date,
 		Currency:            account.USD,
 		Notes:               &notes,
@@ -56,7 +55,7 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 		account.NewAccountRegistered,
 		&newAccountRegisteredData,
 		time.Now(),
-		eventhorizon.ForAggregate(account.AggregateType, accountId1, 1),
+		eventhorizon.ForAggregate(account.AggregateType, *accountId1, 1),
 	)
 
 	handleCommandCalled := 0
@@ -65,9 +64,9 @@ func TestAccountRegisterSaga_RunSaga(t *testing.T) {
 			handleCommandCalled++
 
 			expectedCommand := &accountmonth.StartAccountMonth{
-				AccountMonthId: accountMonthId,
-				AccountId:      accountId1,
-				StartBalance:   2069.96,
+				AccountMonthId: *accountMonthId,
+				AccountId:      *accountId1,
+				StartBalance:   206996,
 				Month:          month,
 				Year:           year,
 			}

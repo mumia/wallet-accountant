@@ -257,18 +257,9 @@ func (ess EventStreamSubscription) subscribe(
 			return err
 		}
 
-		if event.EventAppeared == nil {
+		if event.EventAppeared == nil || event.EventAppeared.Event == nil {
 			continue
 		}
-
-		ess.logger.Debug(
-			fmt.Sprintf(
-				"persistent subscription got new event. Event: %s Stream: %s Group: %s",
-				event.EventAppeared.Event.Event.EventType,
-				ess.projectionStream,
-				ess.subscriptionGroup,
-			),
-		)
 
 		esdbPersistentSubscription, ok := subscription.(eventstoredb.PersistentSubscriptioner)
 		if !ok {
@@ -278,9 +269,24 @@ func (ess EventStreamSubscription) subscribe(
 			return err
 		}
 
+		if event.EventAppeared.Event.Event == nil {
+			ess.ack(esdbPersistentSubscription, event.EventAppeared.Event)
+
+			continue
+		}
+
+		ess.logger.Debug(
+			fmt.Sprintf(
+				"new event: %s Stream: %s Group: %s",
+				event.EventAppeared.Event.Event.EventType,
+				ess.projectionStream,
+				ess.subscriptionGroup,
+			),
+		)
+
 		if event.EventAppeared.Event.Event == nil || event.EventAppeared.Event.Event.EventType == "$metadata" {
 			message := fmt.Sprintf(
-				"persistent subscription found nil event, skipping. EventID: %s, EventType: %s, EventNumber: %d, Stream: %s Group: %s",
+				"found nil event, skipping. EventID: %s, EventType: %s, EventNumber: %d, Stream: %s Group: %s",
 				event.EventAppeared.Event.Link.EventID,
 				event.EventAppeared.Event.Link.EventType,
 				event.EventAppeared.Event.Link.EventNumber,
@@ -295,7 +301,7 @@ func (ess EventStreamSubscription) subscribe(
 
 		ess.logger.Debug(
 			fmt.Sprintf(
-				"persistent subscription processing new event. Event: %s Stream: %s Group: %s",
+				"processing new event: %s Stream: %s Group: %s",
 				event.EventAppeared.Event.Event.EventType,
 				ess.projectionStream,
 				ess.subscriptionGroup,

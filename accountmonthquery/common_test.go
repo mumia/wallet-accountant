@@ -3,7 +3,6 @@ package accountmonthquery_test
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
-	"github.com/looplab/eventhorizon/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -17,28 +16,28 @@ import (
 	"walletaccountant/definitions"
 )
 
-var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
+var accountId1 = account.IdFromUUIDString("aeea307f-3c57-467c-8954-5f541aef6772")
 
 var month = time.January
 var year = uint(2023)
 var accountMonthUUIDString = "46e18992-7977-9f44-4fee-b192d8c5a746"
 
-var accountMonthId = accountmonth.Id(uuid.MustParse(accountMonthUUIDString))
+var accountMonthId = accountmonth.IdFromUUIDString(accountMonthUUIDString)
 
 var accountMonthEntity = accountmonthreadmodel.Entity{
-	AccountMonthId: &accountMonthId,
-	AccountId:      &accountId1,
+	AccountMonthId: accountMonthId,
+	AccountId:      accountId1,
 	ActiveMonth: &accountmonthreadmodel.EntityActiveMonth{
 		Month: month,
 		Year:  year,
 	},
 	Movements:  []*accountmonthreadmodel.EntityMovement{},
-	Balance:    1030.56,
+	Balance:    103056,
 	MonthEnded: false,
 }
 
 var accountEntity = accountreadmodel.Entity{
-	AccountId:           &accountId1,
+	AccountId:           accountId1,
 	BankName:            "",
 	Name:                "",
 	AccountType:         "checking",
@@ -53,14 +52,14 @@ var accountEntity = accountreadmodel.Entity{
 }
 
 var accountMonthEntity1 = accountmonthreadmodel.Entity{
-	AccountMonthId: &accountMonthId,
-	AccountId:      &accountId1,
+	AccountMonthId: accountMonthId,
+	AccountId:      accountId1,
 	ActiveMonth: &accountmonthreadmodel.EntityActiveMonth{
 		Month: month,
 		Year:  year,
 	},
 	Movements:  []*accountmonthreadmodel.EntityMovement{},
-	Balance:    1000.45,
+	Balance:    100045,
 	MonthEnded: false,
 }
 

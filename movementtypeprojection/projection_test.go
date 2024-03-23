@@ -20,16 +20,16 @@ func TestProjection_HandleEvent(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	movementTypeId := movementtype.Id(uuid.MustParse("72a196bc-d9b1-4c57-a916-3eabf1bf167b"))
-	accountId := account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
-	sourceAccountId := account.Id(uuid.MustParse("f4081021-adf4-4b04-a6e5-4ad0028b96f9"))
+	movementTypeId := movementtype.IdFromUUIDString("72a196bc-d9b1-4c57-a916-3eabf1bf167b")
+	accountId := account.IdFromUUIDString("aeea307f-3c57-467c-8954-5f541aef6772")
+	sourceAccountId := account.IdFromUUIDString("f4081021-adf4-4b04-a6e5-4ad0028b96f9")
 	var tagId1 = tagcategory.TagId(uuid.MustParse("07a7ccde-b19c-412a-a054-bc09ac529357"))
 	var notes1 = "my movement type notes"
 	newMovementTypeRegisteredData := movementtype.NewMovementTypeRegisteredData{
-		MovementTypeId:  &movementTypeId,
+		MovementTypeId:  movementTypeId,
 		Action:          common.Credit,
-		AccountId:       &accountId,
-		SourceAccountId: &sourceAccountId,
+		AccountId:       accountId,
+		SourceAccountId: sourceAccountId,
 		Description:     "movement type description",
 		Notes:           &notes1,
 		TagIds:          []*tagcategory.TagId{&tagId1},
@@ -83,7 +83,7 @@ func TestProjection_HandleEvent(t *testing.T) {
 		movementtype.NewMovementTypeRegistered,
 		&newMovementTypeRegisteredData,
 		time.Now(),
-		eventhorizon.ForAggregate(movementtype.AggregateType, movementTypeId, 1),
+		eventhorizon.ForAggregate(movementtype.AggregateType, *movementTypeId, 1),
 	)
 
 	err = projector.HandleEvent(context.Background(), newMovementTypeRegisteredEvent)
