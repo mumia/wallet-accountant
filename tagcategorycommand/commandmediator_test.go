@@ -17,7 +17,7 @@ import (
 )
 
 var expectedCommand = &tagcategory.AddNewTagToNewCategory{
-	TagCategoryId: expectedTagCategoryId,
+	TagCategoryId: *expectedTagCategoryId,
 	Name:          tagCategoryName,
 	Notes:         &tagCategoryNotes,
 	Tag: tagcategory.NewTag{
@@ -88,7 +88,7 @@ func TestCommandMediator_AddNewTagToNewCategory(t *testing.T) {
 		tagId, tagCategoryId, err := commandMediator.AddNewTagToNewCategory(&gin.Context{}, transferObject)
 		requires.Nil(err)
 
-		asserts.Equal(&expectedTagCategoryId, tagCategoryId)
+		asserts.Equal(expectedTagCategoryId, tagCategoryId)
 		asserts.Equal(&expectedTagId, tagId)
 	})
 

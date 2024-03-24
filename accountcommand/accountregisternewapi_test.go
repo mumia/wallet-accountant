@@ -26,7 +26,7 @@ var accountBody1 = `{
 	"bankName": "a bank name",
 	"name": "the bank account",
 	"accountType": "savings",
-	"startingBalance": 10069.5,
+	"startingBalance": 1006950,
 	"startingBalanceDate": "2018-08-26T00:00:00Z",
 	"currency": "USD",
 	"notes": "some notes of the account"
@@ -36,7 +36,7 @@ var accountBody2 = `{
 	"bankName": "a bank name",
 	"name": "the bank account",
 	"accountType": "savings",
-	"startingBalance": 10069.5,
+	"startingBalance": 1006950,
 	"startingBalanceDate": "2018-08-26T00:00:00Z",
 	"currency": "USD",
 	"notes": ""
@@ -46,7 +46,7 @@ var accountBody3 = `{
 	"bankName": "a bank name",
 	"name": "the bank account",
 	"accountType": "savings",
-	"startingBalance": 10069.5,
+	"startingBalance": 1006950,
 	"startingBalanceDate": "2018-08-26T00:00:00Z",
 	"currency": "USD"
 }`
@@ -57,7 +57,7 @@ var expectedTransferObject1 = accountcommand.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
 	AccountType:         string(common.Savings),
-	StartingBalance:     10069.5,
+	StartingBalance:     1006950,
 	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
 	Currency:            "USD",
 	Notes:               &notes1,
@@ -68,7 +68,7 @@ var expectedTransferObject2 = accountcommand.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
 	AccountType:         string(common.Savings),
-	StartingBalance:     10069.5,
+	StartingBalance:     1006950,
 	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
 	Currency:            "USD",
 	Notes:               &notes2,
@@ -78,7 +78,7 @@ var expectedTransferObject3 = accountcommand.RegisterNewAccountTransferObject{
 	BankName:            "a bank name",
 	Name:                "the bank account",
 	AccountType:         string(common.Savings),
-	StartingBalance:     10069.5,
+	StartingBalance:     1006950,
 	StartingBalanceDate: time.Date(2018, time.August, 26, 0, 0, 0, 0, time.UTC),
 	Currency:            "USD",
 	Notes:               nil,

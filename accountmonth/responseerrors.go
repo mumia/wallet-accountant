@@ -138,8 +138,8 @@ func AlreadyEndedError(
 
 func MismatchedEndBalanceError(
 	accountMonthId string,
-	accountMonthBalance float32,
-	endMonthBalance float32,
+	accountMonthBalance int64,
+	endMonthBalance int64,
 	month int,
 	year int,
 ) *definitions.WalletAccountantError {

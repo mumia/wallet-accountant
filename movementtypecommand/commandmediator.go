@@ -49,15 +49,14 @@ func (mediator *CommandMediator) RegisterNewMovementType(
 	ctx *gin.Context,
 	transferObject RegisterNewMovementTypeTransferObject,
 ) (*movementtype.Id, *definitions.WalletAccountantError) {
-	accountId := account.Id(uuid.MustParse(transferObject.AccountId))
+	accountId := account.IdFromUUIDString(transferObject.AccountId)
 	var sourceAccountId *account.Id
 	if transferObject.SourceAccountId != nil {
-		srcAccId := account.Id(uuid.MustParse(*transferObject.SourceAccountId))
-		sourceAccountId = &srcAccId
+		sourceAccountId = account.IdFromUUIDString(*transferObject.SourceAccountId)
 	}
 
 	if transferObject.SourceAccountId != nil && transferObject.AccountId == *transferObject.SourceAccountId {
-		return nil, movementtype.SameAccountAndSourceAccountError(&accountId, sourceAccountId)
+		return nil, movementtype.SameAccountAndSourceAccountError(accountId, sourceAccountId)
 	}
 
 	command, err := eventhorizon.CreateCommand(movementtype.RegisterNewMovementTypeCommand)
@@ -70,19 +69,19 @@ func (mediator *CommandMediator) RegisterNewMovementType(
 		return nil, definitions.InvalidCommandError(movementtype.RegisterNewMovementTypeCommand, command.CommandType())
 	}
 
-	registerNewMovementTypeCommand.MovementTypeId = movementtype.Id(mediator.idCreator.New())
+	registerNewMovementTypeCommand.MovementTypeId = *movementtype.IdFromUUID(mediator.idCreator.New())
 	registerNewMovementTypeCommand.Action = common.MovementAction(transferObject.Action)
 	registerNewMovementTypeCommand.Description = transferObject.Description
 	registerNewMovementTypeCommand.Notes = transferObject.Notes
 
-	exists, walletAccountantError := mediator.accountExists(ctx, &accountId)
+	exists, walletAccountantError := mediator.accountExists(ctx, accountId)
 	if walletAccountantError != nil {
 		return nil, walletAccountantError
 	}
 	if !exists {
-		return nil, movementtype.NonExistentMovementTypeAccountError(&accountId)
+		return nil, movementtype.NonExistentMovementTypeAccountError(accountId)
 	}
-	registerNewMovementTypeCommand.AccountId = accountId
+	registerNewMovementTypeCommand.AccountId = *accountId
 
 	if sourceAccountId != nil {
 		exists, walletAccountantError := mediator.accountExists(ctx, sourceAccountId)

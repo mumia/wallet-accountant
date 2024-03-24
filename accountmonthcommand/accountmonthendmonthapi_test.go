@@ -22,12 +22,12 @@ import (
 
 var endMonthBody = `{
 	"accountId": "aeea307f-3c57-467c-8954-5f541aef6772",
-	"endBalance": 10069.5,
+	"endBalance": 106950,
 	"month": 1,
 	"year": 2023
 }`
 
-var endBalance = float32(10069.5)
+var endBalance int64 = 106950
 var expectedEndAccountMonthTransferObject = commandapis2.EndAccountMonthTransferObject{
 	AccountId:  accountId1.String(),
 	EndBalance: &endBalance,
@@ -100,8 +100,8 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			case 7:
 				return accountmonth.MismatchedEndBalanceError(
 					accountMonthId1.String(),
-					1000,
-					10069.5,
+					100000,
+					106950,
 					1,
 					2023,
 				)
@@ -224,8 +224,8 @@ func TestEndAccountMonthApi_Handle(t *testing.T) {
 			errorCode: accountmonth.MismatchedEndBalanceErrorCode,
 			errorContext: &definitions.ErrorContext{
 				"accountMonthId":      accountMonthId1.String(),
-				"accountMonthBalance": float64(1000),
-				"endMonthBalance":     float64(10069.5),
+				"accountMonthBalance": float64(100000),
+				"endMonthBalance":     float64(106950),
 				"month":               float64(1),
 				"year":                float64(2023),
 			},

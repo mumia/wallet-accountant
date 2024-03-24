@@ -1,6 +1,6 @@
 {
   "accountId": "${accountId}",
-  "amount":  125.5,
+  "amount":  12550,
   "date": "2023-08-14T10:05:00Z",
   "action":  "credit",
   "description":  "a credit",

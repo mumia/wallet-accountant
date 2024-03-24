@@ -24,31 +24,23 @@ func setupAccountMonthTest(instants []clock.Instant) func(id uuid.UUID) eventhor
 func setupAccountMonthId() *Id {
 	uuidString := "6c686c88-3f90-494f-bbb4-9c412d514302"
 
-	id := Id(uuid.MustParse(uuidString))
-
-	return &id
+	return IdFromUUIDString(uuidString)
 }
 
 func setupAccountMovementId() *AccountMovementId {
 	uuidString := "bbbcfa83-d879-4c24-b77d-a44e8ee572b2"
 
-	id := AccountMovementId(uuid.MustParse(uuidString))
-
-	return &id
+	return AccountMovementIdFromUUIDString(uuidString)
 }
 
 func setupMovementTypeId() *Id {
 	uuidString := "72a196bc-d9b1-4c57-a916-3eabf1bf167b"
 
-	id := Id(uuid.MustParse(uuidString))
-
-	return &id
+	return IdFromUUIDString(uuidString)
 }
 
 func setupAccountId() *account.Id {
-	accountId := account.Id(uuid.MustParse("f4081021-adf4-4b04-a6e5-4ad0028b96f9"))
-
-	return &accountId
+	return account.IdFromUUIDString("f4081021-adf4-4b04-a6e5-4ad0028b96f9")
 }
 
 func setupActiveMonth(addMonth *int) (time.Month, uint) {
@@ -73,13 +65,13 @@ func TestGenerateAccountMonthId(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	id1, err := GenerateAccountMonthId(accountId, month, year)
+	id1, err := IdGenerate(accountId, month, year)
 	requires.NoError(err)
 
-	id2, err := GenerateAccountMonthId(accountId, month, year)
+	id2, err := IdGenerate(accountId, month, year)
 	requires.NoError(err)
 
-	id3, err := GenerateAccountMonthId(accountId, otherMonth, year)
+	id3, err := IdGenerate(accountId, otherMonth, year)
 	requires.NoError(err)
 
 	requires.NotEqual(month, otherMonth)
@@ -194,7 +186,7 @@ func TestAccountMonth_HandleCommand_EndAccountMonth(t *testing.T) {
 	expectedEvent := createAccountMonthEndedEvent(instants[0].Instant)
 
 	t.Run("successfully end account month", func(t *testing.T) {
-		accountMonthAggregate.balance = 1010
+		accountMonthAggregate.balance = 101000
 		accountMonthAggregate.SetAggregateVersion(2)
 
 		err := accountMonthAggregate.HandleCommand(context.Background(), command)
@@ -230,7 +222,7 @@ func createRegisterNewAccountMovementCommand(date time.Time) eventhorizon.Comman
 		AccountMovementId: *setupAccountMovementId(),
 		MovementTypeId:    setupMovementTypeId(),
 		Action:            common.Debit,
-		Amount:            1032,
+		Amount:            103200,
 		Date:              date,
 		SourceAccountId:   nil,
 		Description:       "Movement description",
@@ -245,7 +237,7 @@ func createStartAccountMonthCommand() eventhorizon.Command {
 	return &StartAccountMonth{
 		AccountMonthId: *setupAccountMonthId(),
 		AccountId:      *setupAccountId(),
-		StartBalance:   1000,
+		StartBalance:   100000,
 		Month:          month,
 		Year:           year,
 	}
@@ -257,7 +249,7 @@ func createEndAccountMonthCommand() eventhorizon.Command {
 	return &EndAccountMonth{
 		AccountMonthId: *setupAccountMonthId(),
 		AccountId:      *setupAccountId(),
-		EndBalance:     1010,
+		EndBalance:     101000,
 		Month:          month,
 		Year:           year,
 	}
@@ -273,7 +265,7 @@ func createRegisterNewAccountEvent(date time.Time, createdAt time.Time) eventhor
 			AccountMovementId: setupAccountMovementId(),
 			MovementTypeId:    setupMovementTypeId(),
 			Action:            common.Debit,
-			Amount:            1032,
+			Amount:            103200,
 			Date:              date,
 			SourceAccountId:   nil,
 			Description:       "Movement description",
@@ -293,7 +285,7 @@ func createAccountMonthStartedEvent(createdAt time.Time) eventhorizon.Event {
 		&MonthStartedData{
 			AccountMonthId: setupAccountMonthId(),
 			AccountId:      setupAccountId(),
-			StartBalance:   1000,
+			StartBalance:   100000,
 			Month:          month,
 			Year:           year,
 		},
@@ -310,7 +302,7 @@ func createAccountMonthEndedEvent(createdAt time.Time) eventhorizon.Event {
 		&MonthEndedData{
 			AccountMonthId: setupAccountMonthId(),
 			AccountId:      setupAccountId(),
-			EndBalance:     1010,
+			EndBalance:     101000,
 			Month:          month,
 			Year:           year,
 		},

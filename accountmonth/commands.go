@@ -52,12 +52,12 @@ type RegisterNewAccountMovement struct {
 	AccountMovementId AccountMovementId     `json:"account_movement_id"`
 	MovementTypeId    *movementtype.Id      `json:"movement_type_id" eh:"optional"`
 	Action            common.MovementAction `json:"action"`
-	Amount            float32               `json:"amount"`
+	Amount            int64                 `json:"amount"`
 	Date              time.Time             `json:"date"`
 	SourceAccountId   *account.Id           `json:"source_account_id" eh:"optional"`
 	Description       string                `json:"description"`
 	Notes             *string               `json:"notes" eh:"optional"`
-	TagIds            []*tagcategory.TagId  `json:"tagIds"`
+	TagIds            []*tagcategory.TagId  `json:"tag_ids"`
 }
 
 func (command RegisterNewAccountMovement) AggregateID() uuid.UUID {
@@ -75,7 +75,7 @@ func (command RegisterNewAccountMovement) CommandType() eventhorizon.CommandType
 type StartAccountMonth struct {
 	AccountMonthId Id         `json:"account_month"`
 	AccountId      account.Id `json:"account_id"`
-	StartBalance   float32    `json:"start_balance"`
+	StartBalance   int64      `json:"start_balance"`
 	Month          time.Month `json:"month"`
 	Year           uint       `json:"year"`
 }
@@ -95,7 +95,7 @@ func (command StartAccountMonth) CommandType() eventhorizon.CommandType {
 type EndAccountMonth struct {
 	AccountMonthId Id         `json:"account_month"`
 	AccountId      account.Id `json:"account_id"`
-	EndBalance     float32    `json:"end_balance"`
+	EndBalance     int64      `json:"end_balance"`
 	Month          time.Month `json:"month"`
 	Year           uint       `json:"year"`
 }

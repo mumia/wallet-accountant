@@ -60,7 +60,7 @@ func (mediator CommandMediator) RegisterNewAccount(
 		return nil, definitions.InvalidCommandError(account.RegisterNewAccountCommand, command.CommandType())
 	}
 
-	registerNewAccountCommand.AccountId = account.Id(mediator.idCreator.New())
+	registerNewAccountCommand.AccountId = *account.IdFromUUID(mediator.idCreator.New())
 	registerNewAccountCommand.BankName = account.BankName(transferObject.BankName)
 	registerNewAccountCommand.Name = transferObject.Name
 	registerNewAccountCommand.AccountType = common.AccountType(transferObject.AccountType)

@@ -40,7 +40,7 @@ type NewAccountRegisteredData struct {
 	BankName            BankName           `json:"bank_name"`
 	Name                string             `json:"name"`
 	AccountType         common.AccountType `json:"type"`
-	StartingBalance     float32            `json:"starting_balance"`
+	StartingBalance     int64              `json:"starting_balance"`
 	StartingBalanceDate time.Time          `json:"starting_balance_date"`
 	Currency            Currency           `json:"currency"`
 	Notes               *string            `json:"notes"`
@@ -50,7 +50,7 @@ type NewAccountRegisteredData struct {
 
 type NextMonthStartedData struct {
 	AccountId *Id        `json:"account_id"`
-	Balance   float32    `json:"balance"`
+	Balance   int64      `json:"balance"`
 	NextMonth time.Month `json:"next_month"`
 	NextYear  uint       `json:"next_year"`
 }

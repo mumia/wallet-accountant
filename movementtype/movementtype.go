@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
-	"github.com/looplab/eventhorizon/uuid"
 	"walletaccountant/account"
 	"walletaccountant/clock"
 	"walletaccountant/common"
@@ -17,8 +16,6 @@ import (
 var _ events.VersionedAggregate = &MovementType{}
 
 const AggregateType eventhorizon.AggregateType = "movementType"
-
-type Id = uuid.UUID
 
 type MovementType struct {
 	*events.AggregateBase

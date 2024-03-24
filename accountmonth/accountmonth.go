@@ -4,13 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	uuid2 "github.com/google/uuid"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
-	"github.com/looplab/eventhorizon/uuid"
-	"github.com/zeebo/xxh3"
 	"time"
-	"walletaccountant/account"
 	"walletaccountant/clock"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
@@ -19,10 +15,6 @@ import (
 var _ events.VersionedAggregate = &AccountMonth{}
 
 const AggregateType eventhorizon.AggregateType = "accountMonth"
-const idFormat string = "%s-%d-%d"
-
-type Id = uuid.UUID
-type AccountMovementId = uuid.UUID
 
 type ActiveMonth struct {
 	month time.Month
@@ -34,7 +26,7 @@ type AccountMonth struct {
 	clock *clock.Clock
 
 	activeMonth *ActiveMonth
-	balance     float32
+	balance     int64
 }
 
 func (accountMonth *AccountMonth) HandleCommand(ctx context.Context, command eventhorizon.Command) error {
@@ -96,8 +88,8 @@ func (accountMonth *AccountMonth) HandleCommand(ctx context.Context, command eve
 		if command.EndBalance != accountMonth.balance {
 			return fmt.Errorf(
 				"account month: end of month balance is different. Account: %.2f EndOfMonth: %.2f",
-				accountMonth.balance,
-				command.EndBalance,
+				float64(accountMonth.balance)/100,
+				float64(command.EndBalance)/100,
 			)
 		}
 
@@ -152,17 +144,4 @@ func (accountMonth *AccountMonth) ApplyEvent(ctx context.Context, event eventhor
 	}
 
 	return nil
-}
-
-func GenerateAccountMonthId(accountId *account.Id, month time.Month, year uint) (*Id, error) {
-	idData := fmt.Sprintf(idFormat, accountId.String(), month, year)
-	hash := xxh3.HashString128(idData).Bytes()
-	uuidAux, err := uuid2.FromBytes(hash[:])
-	if err != nil {
-		return nil, err
-	}
-
-	id := Id(uuidAux)
-
-	return &id, nil
 }

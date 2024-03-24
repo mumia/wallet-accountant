@@ -14,7 +14,7 @@ var expectedTagId = tagId1
 
 var newTagCategoryId = uuid.New()
 var newTagId = tagId1
-var expectedTagCategoryId = tagcategory.Id(newTagCategoryId)
+var expectedTagCategoryId = tagcategory.IdFromUUID(newTagCategoryId)
 var tagCategoryName = "tag category name"
 var tagCategoryNotes = "tag category notes"
 var tagName = "tag name"

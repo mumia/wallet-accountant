@@ -92,7 +92,7 @@ func TestAccount_HandleCommand_StartNextMonth(t *testing.T) {
 
 	startNextMonthSameYearEvent := createStartNextMonthEvent(
 		accountNextMonthSameYear.EntityID(),
-		1000,
+		100000,
 		nextMonthSameYearData,
 		instants[0].Instant,
 		2,
@@ -111,18 +111,24 @@ func TestAccount_HandleCommand_StartNextMonth(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			testName:      "successfully start next month staying in same year",
-			account:       accountNextMonthSameYear,
-			command:       createStartNextMonthCommand(accountNextMonthSameYear.EntityID(), 1000),
+			testName: "successfully start next month staying in same year",
+			account:  accountNextMonthSameYear,
+			command: createStartNextMonthCommand(
+				accountNextMonthSameYear.EntityID(),
+				100000,
+			),
 			expectedEvent: startNextMonthSameYearEvent,
 		},
 		{
 			testName: "successfully start next month changing to next year",
 			account:  accountNextMonthDifferentYear,
-			command:  createStartNextMonthCommand(accountNextMonthDifferentYear.EntityID(), 1000),
+			command: createStartNextMonthCommand(
+				accountNextMonthDifferentYear.EntityID(),
+				100000,
+			),
 			expectedEvent: createStartNextMonthEvent(
 				accountNextMonthDifferentYear.EntityID(),
-				1000,
+				100000,
 				nextMonthDifferentYearData,
 				instants[1].Instant,
 				3,
@@ -144,7 +150,7 @@ func TestAccount_HandleCommand_StartNextMonth(t *testing.T) {
 	t.Run("fails to start next month, because account not registered", func(t *testing.T) {
 		account := newAggregateFunc(accountId).(*Account)
 
-		command := createStartNextMonthCommand(account.EntityID(), 1000)
+		command := createStartNextMonthCommand(account.EntityID(), 100000)
 
 		err := account.HandleCommand(context.Background(), command)
 		asserts.Error(err)
@@ -191,7 +197,7 @@ func TestAccount_ApplyEvent_StartNextMonth(t *testing.T) {
 		startBalanceDate := time.Date(2023, time.November, 1, 0, 0, 0, 0, time.UTC)
 
 		newAccountRegisteredEvent := createRegisterNewAccountEvent(accountId, startBalanceDate, time.Now())
-		startNextMonthEvent := createStartNextMonthEvent(accountId, 1000, nextMonth, time.Now(), 1)
+		startNextMonthEvent := createStartNextMonthEvent(accountId, 100000, nextMonth, time.Now(), 1)
 
 		err := account.ApplyEvent(context.Background(), newAccountRegisteredEvent)
 		asserts.NoError(err)
@@ -224,13 +230,13 @@ func createRegisterNewAccountCommand(accountId Id, startBalanceDate time.Time) e
 		BankName:            "My Bank",
 		Name:                "Account name",
 		AccountType:         common.Savings,
-		StartingBalance:     1069,
+		StartingBalance:     106900,
 		StartingBalanceDate: startBalanceDate,
 		Currency:            USD,
 	}
 }
 
-func createStartNextMonthCommand(accountId uuid.UUID, balance float32) eventhorizon.Command {
+func createStartNextMonthCommand(accountId uuid.UUID, balance int64) eventhorizon.Command {
 	return &StartNextMonth{AccountId: accountId, Balance: balance}
 }
 
@@ -242,7 +248,7 @@ func createRegisterNewAccountEvent(accountId Id, startingBalanceDate time.Time, 
 			BankName:            "My Bank",
 			Name:                "Account name",
 			AccountType:         common.Savings,
-			StartingBalance:     1069,
+			StartingBalance:     106900,
 			StartingBalanceDate: startingBalanceDate,
 			Currency:            USD,
 			ActiveMonth:         startingBalanceDate.Month(),
@@ -255,17 +261,17 @@ func createRegisterNewAccountEvent(accountId Id, startingBalanceDate time.Time, 
 
 func createStartNextMonthEvent(
 	aggregateId uuid.UUID,
-	balance float32,
+	balance int64,
 	activeMonth ActiveMonth,
 	createdAt time.Time,
 	version int,
 ) eventhorizon.Event {
-	accountId := Id(aggregateId)
+	accountId := IdFromUUID(aggregateId)
 
 	return eventhorizon.NewEvent(
 		NextMonthStarted,
 		&NextMonthStartedData{
-			AccountId: &accountId,
+			AccountId: accountId,
 			Balance:   balance,
 			NextMonth: activeMonth.Month(),
 			NextYear:  activeMonth.Year(),

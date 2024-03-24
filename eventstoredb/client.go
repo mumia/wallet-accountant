@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"os"
 	"strings"
+	"time"
 )
 
 const connectionStringName = "EVENTSTORE_CONNETION_STRING"
@@ -90,6 +91,9 @@ func NewClient(log *zap.Logger) (*Client, error) {
 
 		log.Log(logLevel, logMessage)
 	}
+
+	deadline := 1 * time.Hour
+	configuration.DefaultDeadline = &deadline
 
 	client, err := esdb.NewClient(configuration)
 	if err != nil {

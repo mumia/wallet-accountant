@@ -7,8 +7,8 @@ import (
 
 var newTagCategoryId = uuid.New()
 var newTagId = uuid.New()
-var expectedTagCategoryId = tagcategory.Id(newTagCategoryId)
-var expectedTagId = tagcategory.TagId(newTagId)
+var expectedTagCategoryId = tagcategory.IdFromUUID(newTagCategoryId)
+var expectedTagId = tagcategory.TagIdFromUUID(newTagId)
 var tagCategoryName = "tag category name"
 var tagCategoryNotes = "tag category notes"
 var tagName = "tag name"

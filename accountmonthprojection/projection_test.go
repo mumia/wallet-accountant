@@ -20,10 +20,10 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 	requires := require.New(t)
 
 	newMovementTypeRegisteredData := accountmonth.NewAccountMovementRegisteredData{
-		AccountMonthId:  &accountMonthId,
-		MovementTypeId:  &movementTypeId1,
+		AccountMonthId:  accountMonthId,
+		MovementTypeId:  movementTypeId1,
 		Action:          common.Debit,
-		Amount:          1040.20,
+		Amount:          104020,
 		Date:            date,
 		SourceAccountId: nil,
 		Description:     "Test description",
@@ -31,12 +31,12 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 		TagIds:          []*tagcategory.TagId{&tagId1},
 	}
 
-	expectedRegisterAccountMonthId := &accountMonthId
+	expectedRegisterAccountMonthId := accountMonthId
 
 	expectedRegisterMovement := accountmonthreadmodel.EntityMovement{
-		MovementTypeId:  &movementTypeId1,
+		MovementTypeId:  movementTypeId1,
 		Action:          common.Debit,
-		Amount:          1040.20,
+		Amount:          104020,
 		Date:            date,
 		SourceAccountId: nil,
 		Description:     "Test description",
@@ -83,7 +83,7 @@ func TestProjection_HandleEvent_NewAccountMovementRegistered(t *testing.T) {
 		accountmonth.NewAccountMovementRegistered,
 		&newMovementTypeRegisteredData,
 		time.Now(),
-		eventhorizon.ForAggregate(accountmonth.AggregateType, accountMonthId, 1),
+		eventhorizon.ForAggregate(accountmonth.AggregateType, *accountMonthId, 1),
 	)
 
 	err = projector.HandleEvent(context.Background(), newMovementTypeRegisteredEvent)
@@ -98,9 +98,9 @@ func TestProjection_HandleEvent_MonthStarted(t *testing.T) {
 	requires := require.New(t)
 
 	monthStartedData := accountmonth.MonthStartedData{
-		AccountMonthId: &accountMonthId,
-		AccountId:      &accountId1,
-		StartBalance:   1050,
+		AccountMonthId: accountMonthId,
+		AccountId:      accountId1,
+		StartBalance:   105000,
 		Month:          month,
 		Year:           year,
 	}
@@ -112,7 +112,7 @@ func TestProjection_HandleEvent_MonthStarted(t *testing.T) {
 			ctx context.Context,
 			accountMonthId *accountmonth.Id,
 			accountId *account.Id,
-			startBalance float32,
+			startBalance int64,
 			month time.Month,
 			year uint,
 		) error {
@@ -143,7 +143,7 @@ func TestProjection_HandleEvent_MonthStarted(t *testing.T) {
 		accountmonth.MonthStarted,
 		&monthStartedData,
 		time.Now(),
-		eventhorizon.ForAggregate(accountmonth.AggregateType, accountMonthId, 1),
+		eventhorizon.ForAggregate(accountmonth.AggregateType, *accountMonthId, 1),
 	)
 
 	err = projector.HandleEvent(context.Background(), monthStartedEvent)
@@ -158,9 +158,9 @@ func TestProjection_HandleEvent_MonthEnded(t *testing.T) {
 	requires := require.New(t)
 
 	monthEndedData := accountmonth.MonthEndedData{
-		AccountMonthId: &accountMonthId,
-		AccountId:      &accountId1,
-		EndBalance:     1060,
+		AccountMonthId: accountMonthId,
+		AccountId:      accountId1,
+		EndBalance:     106000,
 		Month:          month,
 		Year:           year,
 	}
@@ -192,7 +192,7 @@ func TestProjection_HandleEvent_MonthEnded(t *testing.T) {
 		accountmonth.MonthEnded,
 		&monthEndedData,
 		time.Now(),
-		eventhorizon.ForAggregate(accountmonth.AggregateType, accountMonthId, 1),
+		eventhorizon.ForAggregate(accountmonth.AggregateType, *accountMonthId, 1),
 	)
 
 	err = projector.HandleEvent(context.Background(), endMonthEvent)

@@ -61,7 +61,7 @@ func TestAddNewTagToNewCategoryApi_Handle(t *testing.T) {
 			case 1:
 				asserts.Equal(expectedTagWithCategoryTransferObject, transferObject)
 
-				return &expectedTagId, &expectedTagCategoryId, nil
+				return &expectedTagId, expectedTagCategoryId, nil
 			case 2:
 				return nil, nil, definitions.GenericError(errors.New("an error"), nil)
 			}

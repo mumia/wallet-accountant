@@ -16,14 +16,14 @@ import (
 	"walletaccountant/definitions"
 )
 
-var accountId1 = account.Id(uuid.MustParse("aeea307f-3c57-467c-8954-5f541aef6772"))
+var accountId1 = account.IdFromUUIDString("aeea307f-3c57-467c-8954-5f541aef6772")
 var notes1 = "a set of notes"
 var accountEntity1 = accountreadmodel.Entity{
-	AccountId:           &accountId1,
+	AccountId:           accountId1,
 	BankName:            "a bank name",
 	Name:                "an account name",
 	AccountType:         common.Checking,
-	StartingBalance:     float32(5069),
+	StartingBalance:     506900,
 	StartingBalanceDate: time.Now(),
 	Currency:            account.EUR,
 	Notes:               &notes1,
@@ -33,14 +33,14 @@ var accountEntity1 = accountreadmodel.Entity{
 	},
 }
 
-var accountId2 = account.Id(uuid.New())
+var accountId2 = account.IdFromUUID(uuid.New())
 var notes2 = "another set of notes"
 var accountEntity2 = accountreadmodel.Entity{
-	AccountId:           &accountId2,
+	AccountId:           accountId2,
 	BankName:            "another bank name",
 	Name:                "annother account name",
 	AccountType:         common.Savings,
-	StartingBalance:     6069,
+	StartingBalance:     606900,
 	StartingBalanceDate: time.Now().Add(1 * time.Minute),
 	Currency:            account.USD,
 	Notes:               &notes2,

@@ -42,7 +42,7 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 
 			switch movementTypeCalled {
 			case 1:
-				asserts.Equal(&movementTypeId2, movementTypeId)
+				asserts.Equal(movementTypeId2, movementTypeId)
 
 				return &movementTypeWithSourceAccountEntity1, nil
 
@@ -50,7 +50,7 @@ func TestReadMovementTypeApi_Handle(t *testing.T) {
 				return nil, definitions.GenericError(errors.New("an error"), nil)
 
 			case 3:
-				asserts.Equal(&movementTypeId1, movementTypeId)
+				asserts.Equal(movementTypeId1, movementTypeId)
 
 				return nil, movementtype.NonExistentMovementTypeError(movementTypeId.String())
 			}

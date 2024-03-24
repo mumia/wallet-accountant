@@ -1,6 +1,8 @@
-package account
+package movementtype
 
-import "github.com/looplab/eventhorizon/uuid"
+import (
+	"github.com/looplab/eventhorizon/uuid"
+)
 
 type Id = uuid.UUID
 

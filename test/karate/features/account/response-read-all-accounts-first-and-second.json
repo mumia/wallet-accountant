@@ -4,7 +4,7 @@
     "bankName": "a bank",
     "name": "my account",
     "accountType": "checking",
-    "startingBalance": 123.45,
+    "startingBalance": 12345,
     "startingBalanceDate": "2023-08-26T00:00:00Z",
     "currency": "EUR",
     "activeMonth": {"month": 8, "year": 2023}
@@ -14,7 +14,7 @@
     "bankName": "another bank",
     "name": "my other account",
     "accountType": "savings",
-    "startingBalance": 678,
+    "startingBalance": 67800,
     "startingBalanceDate": "2022-01-23T00:00:00Z",
     "currency": "USD",
     "activeMonth": {"month":1, "year": 2022}

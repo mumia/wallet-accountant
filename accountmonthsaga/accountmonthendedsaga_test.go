@@ -42,9 +42,9 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 	eventhorizon.RegisterAggregate(account.NewFactory().Factory())
 
 	monthEndedData := accountmonth.MonthEndedData{
-		AccountMonthId: &accountMonthId,
-		AccountId:      &accountId1,
-		EndBalance:     1000.43,
+		AccountMonthId: accountMonthId,
+		AccountId:      accountId1,
+		EndBalance:     100043,
 		Month:          month,
 		Year:           year,
 	}
@@ -53,7 +53,7 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 		accountmonth.MonthEnded,
 		&monthEndedData,
 		time.Now(),
-		eventhorizon.ForAggregate(account.AggregateType, accountId1, 1),
+		eventhorizon.ForAggregate(account.AggregateType, *accountId1, 1),
 	)
 
 	handleCommandCalled := 0
@@ -65,15 +65,15 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 			switch handleCommandCalled {
 			case 1:
 				expectedCommand = &account.StartNextMonth{
-					AccountId: accountId1,
-					Balance:   1000.43,
+					AccountId: *accountId1,
+					Balance:   100043,
 				}
 
 			case 2:
 				expectedCommand = &accountmonth.StartAccountMonth{
-					AccountMonthId: accountMonthId,
-					AccountId:      accountId1,
-					StartBalance:   1000.43,
+					AccountMonthId: *accountMonthId,
+					AccountId:      *accountId1,
+					StartBalance:   100043,
 					Month:          month,
 					Year:           year,
 				}
@@ -95,11 +95,11 @@ func TestAccountMonthEndedSaga_RunSaga(t *testing.T) {
 							eventhorizon.NewEvent(
 								account.NewAccountRegistered,
 								&account.NewAccountRegisteredData{
-									AccountId:           &accountId1,
+									AccountId:           accountId1,
 									BankName:            "bank name",
 									Name:                "account name",
 									AccountType:         common.Checking,
-									StartingBalance:     2069,
+									StartingBalance:     206900,
 									StartingBalanceDate: time.Now(),
 									Currency:            account.USD,
 									Notes:               &notes,

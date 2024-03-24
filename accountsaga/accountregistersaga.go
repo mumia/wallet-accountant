@@ -54,7 +54,7 @@ func (saga *AccountRegisterSaga) handleNewAccountRegistered(
 	handler eventhorizon.CommandHandler,
 	eventData *account.NewAccountRegisteredData,
 ) error {
-	accountMonthId, err := accountmonth.GenerateAccountMonthId(
+	accountMonthId, err := accountmonth.IdGenerate(
 		eventData.AccountId,
 		eventData.ActiveMonth,
 		eventData.ActiveYear,

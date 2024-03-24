@@ -11,11 +11,11 @@ import (
 )
 
 var newTagCategoryId = uuid.New()
-var expectedTagCategoryId = tagcategory.Id(newTagCategoryId)
-var tagCategoryId1 = tagcategory.Id(uuid.New())
-var tagCategoryId2 = tagcategory.Id(newTagCategoryId)
-var tagId2 = tagcategory.TagId(uuid.New())
-var tagId3 = tagcategory.TagId(uuid.New())
+var expectedTagCategoryId = tagcategory.IdFromUUID(newTagCategoryId)
+var tagCategoryId1 = tagcategory.IdFromUUID(uuid.New())
+var tagCategoryId2 = tagcategory.IdFromUUID(newTagCategoryId)
+var tagId2 = tagcategory.TagIdFromUUID(uuid.New())
+var tagId3 = tagcategory.TagIdFromUUID(uuid.New())
 var tagCategoryName = "tag category name"
 var tagCategoryNotes = "tag category notes"
 var tagCategoryNotes1 = "tag category 1 notes"
@@ -24,49 +24,49 @@ var tagNotes1 = "tag 1 notes"
 var tagNotes2 = "tag 2 notes"
 var tagNotes3 = "tag 3 notes"
 
-var tagId1 = tagcategory.TagId(uuid.New())
+var tagId1 = tagcategory.TagIdFromUUID(uuid.New())
 
 var tag1 = tagcategoryreadmodel.Entity{
-	TagId: &tagId1,
+	TagId: tagId1,
 	Name:  "tag 1 name",
 	Notes: &tagNotes1,
 }
 
 var tag2 = tagcategoryreadmodel.Entity{
-	TagId: &tagId2,
+	TagId: tagId2,
 	Name:  "tag 2 name",
 	Notes: &tagNotes2,
 }
 
 var tag3 = tagcategoryreadmodel.Entity{
-	TagId: &tagId3,
+	TagId: tagId3,
 	Name:  "tag 3 name",
 	Notes: &tagNotes3,
 }
 
 var tagCategoryEntity1 = tagcategoryreadmodel.CategoryEntity{
-	TagCategoryId: &tagCategoryId1,
+	TagCategoryId: tagCategoryId1,
 	Name:          "tag category 1 name",
 	Notes:         &tagCategoryNotes1,
 	Tags:          []*tagcategoryreadmodel.Entity{&tag2, &tag1},
 }
 
 var tagCategoryEntity2 = tagcategoryreadmodel.CategoryEntity{
-	TagCategoryId: &tagCategoryId2,
+	TagCategoryId: tagCategoryId2,
 	Name:          "tag category 2 name",
 	Notes:         &tagCategoryNotes2,
 	Tags:          []*tagcategoryreadmodel.Entity{&tag3},
 }
 
 var tagCategory1 = tagcategoryreadmodel.CategoryEntity{
-	TagCategoryId: &expectedTagCategoryId,
+	TagCategoryId: expectedTagCategoryId,
 	Name:          tagCategoryName,
 	Notes:         &tagCategoryNotes,
 	Tags:          []*tagcategoryreadmodel.Entity{&tag1, &tag3},
 }
 
 var tagCategory2 = tagcategoryreadmodel.CategoryEntity{
-	TagCategoryId: &tagCategoryId2,
+	TagCategoryId: tagCategoryId2,
 	Name:          "tag category name 2",
 	Notes:         &tagCategoryNotes2,
 	Tags:          []*tagcategoryreadmodel.Entity{&tag2},

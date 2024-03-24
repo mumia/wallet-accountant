@@ -26,21 +26,18 @@ services:
           - wallet-accountant
 
   eventstore:
-    image: "eventstore/eventstore"
+    image: "eventstore/eventstore:24.2.0-alpha-arm64v8"
     environment:
       - EVENTSTORE_CLUSTER_SIZE=1
       - EVENTSTORE_RUN_PROJECTIONS=All
       - EVENTSTORE_START_STANDARD_PROJECTIONS=True
-      - EVENTSTORE_EXT_TCP_PORT=1113
       - EVENTSTORE_HTTP_PORT=2113
       - EVENTSTORE_INSECURE=true
       - EVENTSTORE_DB=/var/lib/event-store-data
       - EVENTSTORE_INDEX=/var/lib/event-store-index
       - EVENTSTORE_LOG=/var/lib/event-store-logs
-#      - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
       - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
     ports:
-      - "1113:1113"
       - "2113:2113"
     volumes:
       - "./dbdata/eventstore/data:/var/lib/event-store-data"
@@ -50,7 +47,7 @@ services:
       wallet-accountant: ~
 
   mongodb:
-    image: mongo:latest
+    image: mongo:7.0.7
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
       - MONGO_INITDB_ROOT_PASSWORD=example
@@ -63,7 +60,7 @@ services:
       wallet-accountant: ~
 
   mongo-express:
-    image: mongo-express
+    image: mongo-express:latest
     ports:
       - 8081:8081
     environment:

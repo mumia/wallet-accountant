@@ -17,21 +17,21 @@ func TestProjection_HandleEvent_NewTagAddedToNewCategory(t *testing.T) {
 	requires := require.New(t)
 
 	newTagAddedToNewCategoryData := tagcategory.NewTagAddedToNewCategoryData{
-		TagCategoryId:    &expectedTagCategoryId,
+		TagCategoryId:    expectedTagCategoryId,
 		TagCategoryName:  tagCategoryName,
 		TagCategoryNotes: &tagCategoryNotes,
-		TagId:            &expectedTagId,
+		TagId:            expectedTagId,
 		TagName:          tagName,
 		TagNotes:         &tagNotes,
 	}
 
 	expectedTagCategoryEntity := tagcategoryreadmodel.CategoryEntity{
-		TagCategoryId: &expectedTagCategoryId,
+		TagCategoryId: expectedTagCategoryId,
 		Name:          tagCategoryName,
 		Notes:         &tagCategoryNotes,
 		Tags: []*tagcategoryreadmodel.Entity{
 			{
-				TagId: &expectedTagId,
+				TagId: expectedTagId,
 				Name:  tagName,
 				Notes: &tagNotes,
 			},
@@ -76,7 +76,7 @@ func TestProjection_HandleEvent_NewTagAddedToNewCategory(t *testing.T) {
 		tagcategory.NewTagAddedToNewCategory,
 		&newTagAddedToNewCategoryData,
 		time.Now(),
-		eventhorizon.ForAggregate(tagcategory.AggregateType, expectedTagCategoryId, 1),
+		eventhorizon.ForAggregate(tagcategory.AggregateType, *expectedTagCategoryId, 1),
 	)
 
 	err = projector.HandleEvent(context.Background(), newTagAddedToNewCategoryEvent)
@@ -95,14 +95,14 @@ func TestProjection_HandleEvent_NewTagAddedToExistingCategory(t *testing.T) {
 	requires := require.New(t)
 
 	newTagAddedToExistingCategoryData := tagcategory.NewTagAddedToExistingCategoryData{
-		TagCategoryId: &expectedTagCategoryId,
-		TagId:         &expectedTagId,
+		TagCategoryId: expectedTagCategoryId,
+		TagId:         expectedTagId,
 		Name:          tagName,
 		Notes:         &tagNotes,
 	}
 
 	expectedTagEntity := tagcategoryreadmodel.Entity{
-		TagId: &expectedTagId,
+		TagId: expectedTagId,
 		Name:  tagName,
 		Notes: &tagNotes,
 	}
@@ -112,7 +112,7 @@ func TestProjection_HandleEvent_NewTagAddedToExistingCategory(t *testing.T) {
 		AddNewTagToCategoryFn: func(ctx context.Context, categoryId *tagcategory.Id, newTag *tagcategoryreadmodel.Entity) error {
 			updateCallCount++
 
-			asserts.Equal(&expectedTagCategoryId, categoryId)
+			asserts.Equal(expectedTagCategoryId, categoryId)
 			asserts.Equal(&expectedTagEntity, newTag)
 
 			return nil
@@ -146,7 +146,7 @@ func TestProjection_HandleEvent_NewTagAddedToExistingCategory(t *testing.T) {
 		tagcategory.NewTagAddedToExistingCategory,
 		&newTagAddedToExistingCategoryData,
 		time.Now(),
-		eventhorizon.ForAggregate(tagcategory.AggregateType, expectedTagCategoryId, 1),
+		eventhorizon.ForAggregate(tagcategory.AggregateType, *expectedTagCategoryId, 1),
 	)
 
 	err = projector.HandleEvent(context.Background(), newTagAddedToExistingCategoryEvent)

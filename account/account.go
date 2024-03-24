@@ -138,9 +138,7 @@ func (account *Account) ApplyEvent(ctx context.Context, event eventhorizon.Event
 }
 
 func (account *Account) AccountId() *Id {
-	accountId := Id(account.EntityID())
-
-	return &accountId
+	return IdFromUUID(account.EntityID())
 }
 
 func (account *Account) ActiveMonth() ActiveMonth {

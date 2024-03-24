@@ -21,7 +21,7 @@ type ReadModelWriter interface {
 		ctx context.Context,
 		accountMonthId *accountmonth.Id,
 		accountId *account.Id,
-		startBalance float32,
+		startBalance int64,
 		month time.Month,
 		year uint,
 	) error
@@ -58,7 +58,7 @@ func (repository *ReadModelRepository) StartMonth(
 	ctx context.Context,
 	accountMonthId *accountmonth.Id,
 	accountId *account.Id,
-	startBalance float32,
+	startBalance int64,
 	month time.Month,
 	year uint,
 ) error {
@@ -153,7 +153,7 @@ func (repository *ReadModelRepository) GetByAccountActiveMonth(
 	ctx context.Context,
 	account *accountreadmodel.Entity,
 ) (*Entity, error) {
-	accountMonthId, err := accountmonth.GenerateAccountMonthId(
+	accountMonthId, err := accountmonth.IdGenerate(
 		account.AccountId,
 		account.ActiveMonth.Month,
 		account.ActiveMonth.Year,

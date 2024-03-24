@@ -18,14 +18,14 @@ func TestQueryMediator_Account(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	expectedAccountId := account.Id(uuid.New())
+	expectedAccountId := account.IdFromUUID(uuid.New())
 	notes := "some notes"
 	expectedAccountEntity := accountreadmodel.Entity{
-		AccountId:           &expectedAccountId,
+		AccountId:           expectedAccountId,
 		BankName:            "bank name",
 		Name:                "account name",
 		AccountType:         common.Savings,
-		StartingBalance:     3069,
+		StartingBalance:     306900,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
 		Notes:               &notes,
@@ -47,7 +47,7 @@ func TestQueryMediator_Account(t *testing.T) {
 	queryMediator := accountquery.NewQueryMediator(&repositoryMock)
 
 	ctx := gin.Context{}
-	actualAccount, err := queryMediator.Account(&ctx, &expectedAccountId)
+	actualAccount, err := queryMediator.Account(&ctx, expectedAccountId)
 	requires.Nil(err)
 
 	asserts.Equal(&expectedAccountEntity, actualAccount)
@@ -59,14 +59,14 @@ func TestQueryMediator_Accounts(t *testing.T) {
 	asserts := assert.New(t)
 	requires := require.New(t)
 
-	expectedAccountId1 := account.Id(uuid.New())
+	expectedAccountId1 := account.IdFromUUID(uuid.New())
 	notes1 := "some notes"
 	expectedAccountEntity1 := accountreadmodel.Entity{
-		AccountId:           &expectedAccountId1,
+		AccountId:           expectedAccountId1,
 		BankName:            "bank name",
 		Name:                "account name",
 		AccountType:         common.Savings,
-		StartingBalance:     3069,
+		StartingBalance:     306900,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.CHF,
 		Notes:               &notes1,
@@ -76,14 +76,14 @@ func TestQueryMediator_Accounts(t *testing.T) {
 		},
 	}
 
-	expectedAccountId2 := account.Id(uuid.New())
+	expectedAccountId2 := account.IdFromUUID(uuid.New())
 	notes2 := "some notes 2"
 	expectedAccountEntity2 := accountreadmodel.Entity{
-		AccountId:           &expectedAccountId2,
+		AccountId:           expectedAccountId2,
 		BankName:            "bank name2",
 		Name:                "account name2",
 		AccountType:         common.Checking,
-		StartingBalance:     4069,
+		StartingBalance:     406900,
 		StartingBalanceDate: time.Now(),
 		Currency:            account.USD,
 		Notes:               &notes2,
