@@ -42,6 +42,8 @@ services:
       - EVENTSTORE_MEM_DB=True
     volumes:
       - ./dbdata/eventstoreplugins:/usr/share/eventstore/plugins
+    ports:
+      - "2113:2113"
     networks:
       wallet-accountant-karate: ~
 
