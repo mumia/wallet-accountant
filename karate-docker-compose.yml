@@ -31,7 +31,7 @@ services:
       wallet-accountant-karate: ~
 
   eventstore-karate:
-    image: "eventstore/eventstore:24.2.0-alpha-arm64v8"
+    image: "eventstore/eventstore:24.2.0"
     environment:
       - EVENTSTORE_CLUSTER_SIZE=1
       - EVENTSTORE_RUN_PROJECTIONS=All
