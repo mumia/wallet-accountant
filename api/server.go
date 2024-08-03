@@ -30,6 +30,9 @@ func NewServer(
 
 	router := gin.Default()
 
+	// Set a lower memory limit for multipart forms (default is 32 MiB)
+	router.MaxMultipartMemory = 8 << 20 // 8 MiB
+
 	router.Use(firstLogger(logger))
 
 	addCorsConfig(router, logger)
@@ -119,7 +122,13 @@ func addRouteDefinitions(router *gin.Engine, routes []definitions.Route, logger 
 
 func firstLogger(logger *zap.Logger) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		logger.Debug("Incoming call", zap.String("path", ctx.Request.RemoteAddr))
+		logger.Debug(
+			"Incoming call",
+			zap.String("remoteAddr", ctx.Request.RemoteAddr),
+			zap.String("host", ctx.Request.Host),
+			zap.String("requestUri", ctx.Request.RequestURI),
+			zap.String("method", ctx.Request.Method),
+		)
 
 		ctx.Next()
 	}

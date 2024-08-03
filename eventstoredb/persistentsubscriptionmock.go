@@ -1,6 +1,6 @@
 package eventstoredb
 
-import "github.com/EventStore/EventStore-Client-Go/v3/esdb"
+import "github.com/EventStore/EventStore-Client-Go/v4/esdb"
 
 var _ PersistentSubscriptioner = &PersistentSubscriptionMock{}
 

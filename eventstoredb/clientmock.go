@@ -2,7 +2,7 @@ package eventstoredb
 
 import (
 	"context"
-	"github.com/EventStore/EventStore-Client-Go/v3/esdb"
+	"github.com/EventStore/EventStore-Client-Go/v4/esdb"
 )
 
 var _ EventStorerer = &ClientMock{}

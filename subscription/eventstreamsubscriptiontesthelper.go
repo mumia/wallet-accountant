@@ -3,7 +3,7 @@ package subscription
 import (
 	"context"
 	"fmt"
-	"github.com/EventStore/EventStore-Client-Go/v3/esdb"
+	"github.com/EventStore/EventStore-Client-Go/v4/esdb"
 	"github.com/looplab/eventhorizon"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

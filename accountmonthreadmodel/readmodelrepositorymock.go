@@ -8,7 +8,7 @@ import (
 	"walletaccountant/accountreadmodel"
 )
 
-var _ ReadModeler = &ReadModelRepository{}
+var _ ReadModeler = &ReadModelRepositoryMock{}
 
 type ReadModelRepositoryMock struct {
 	StartMonthFn func(

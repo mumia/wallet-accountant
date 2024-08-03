@@ -31,17 +31,21 @@ services:
       wallet-accountant-karate: ~
 
   eventstore-karate:
-    image: "eventstore/eventstore:24.2.0"
+    image: "eventstore/eventstore:24.6.0"
     environment:
       - EVENTSTORE_CLUSTER_SIZE=1
       - EVENTSTORE_RUN_PROJECTIONS=All
       - EVENTSTORE_START_STANDARD_PROJECTIONS=True
       - EVENTSTORE_HTTP_PORT=2113
+      - EVENTSTORE_EXT_HTTP_PORT=2113
       - EVENTSTORE_INSECURE=true
-      - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
       - EVENTSTORE_MEM_DB=True
     volumes:
       - ./dbdata/eventstoreplugins:/usr/share/eventstore/plugins
+    ports:
+      - 1112:1112
+      - 1113:1113
+      - 2113:2113
     networks:
       wallet-accountant-karate: ~
 

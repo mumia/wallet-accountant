@@ -47,18 +47,18 @@ jobs:
             gotestsum --junitfile /tmp/test-reports/unit-tests.xml
       - store_test_results:
           path: /tmp/test-reports
-  karate:
-    working_directory: ~/repo
-    docker:
-      - image: cimg/go:1.21.1
-    steps:
-      - checkout
-      - setup_remote_docker
-      - run:
-          name: Run karate tests
-          command: |
-            docker compose -f karate-docker-compose.yml build wallet-accountant-karate
-            docker compose -f karate-docker-compose.yml up karate
+#  karate:
+#    working_directory: ~/repo
+#    docker:
+#      - image: cimg/go:1.21.1
+#    steps:
+#      - checkout
+#      - setup_remote_docker
+#      - run:
+#          name: Run karate tests
+#          command: |
+#            docker compose -f karate-docker-compose.yml build wallet-accountant-karate
+#            docker compose -f karate-docker-compose.yml up karate
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows

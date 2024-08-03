@@ -1,0 +1,11 @@
+{
+  "importFileId": "#uuid",
+  "accountId": "#uuid",
+  "filename":  "test_upload.csv",
+  "importDate": "#string",
+  "startParseDate": null,
+  "endParseDate": null,
+  "state": "imported",
+  "code": null,
+  "reason":  null
+}
