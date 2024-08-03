@@ -8,11 +8,13 @@ services:
       - EVENTSTORE_CONNETION_STRING=esdb://eventstore:2113?keepAliveTimeout=10000&keepAliveInterval=10000&tls=false
       - MONGO_CONNECTION_STRING=mongodb://root:example@mongodb:27017/wallet-accountant?authSource=admin
       - FRONTEND_URLS=http://wallet-accountant-ui:3000|ws://wallet-accountant-ui:3000|http://localhost:3000
+      - FILE_UPLOAD_PATH=/files
     ports:
       - "3080:8080"
       - "40000:40000"
     volumes:
       - "./:/app"
+      - "./data/files:/files"
       - "./docker/dev-entrypoint.sh:/root/entrypoint.sh"
     entrypoint: ["/root/entrypoint.sh"]
     working_dir: "/app"
@@ -26,7 +28,7 @@ services:
           - wallet-accountant
 
   eventstore:
-    image: "eventstore/eventstore:24.2.0-alpha-arm64v8"
+    image: "eventstore/eventstore:24.6.0-alpha-arm64v8"
     environment:
       - EVENTSTORE_CLUSTER_SIZE=1
       - EVENTSTORE_RUN_PROJECTIONS=All
@@ -40,9 +42,9 @@ services:
     ports:
       - "2113:2113"
     volumes:
-      - "./dbdata/eventstore/data:/var/lib/event-store-data"
-      - "./dbdata/eventstore/index:/var/lib/event-store-index"
-      - "./dbdata/eventstore/logs:/var/lib/event-store-logs"
+      - "./data/db/eventstore/data:/var/lib/event-store-data"
+      - "./data/db/eventstore/index:/var/lib/event-store-index"
+      - "./data/db/eventstore/logs:/var/lib/event-store-logs"
     networks:
       wallet-accountant: ~
 
@@ -55,7 +57,7 @@ services:
     ports:
       - '27017:27017'
     volumes:
-      - "./dbdata/mongodb:/data/db"
+      - "./data/db/mongodb:/data/db"
     networks:
       wallet-accountant: ~
 

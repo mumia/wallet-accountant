@@ -215,7 +215,7 @@ func TestAccountMonth_HandleCommand_EndAccountMonth(t *testing.T) {
 }
 
 func createRegisterNewAccountMovementCommand(date time.Time) eventhorizon.Command {
-	tagId := tagcategory.TagId(uuid.MustParse("84c34932-9d22-40f0-9e56-443fcafc84fe"))
+	tagId := tagcategory.TagIdFromUUIDString("84c34932-9d22-40f0-9e56-443fcafc84fe")
 
 	return &RegisterNewAccountMovement{
 		AccountMonthId:    *setupAccountMonthId(),
@@ -227,7 +227,7 @@ func createRegisterNewAccountMovementCommand(date time.Time) eventhorizon.Comman
 		SourceAccountId:   nil,
 		Description:       "Movement description",
 		Notes:             nil,
-		TagIds:            []*tagcategory.TagId{&tagId},
+		TagIds:            []*tagcategory.TagId{tagId},
 	}
 }
 
@@ -256,7 +256,7 @@ func createEndAccountMonthCommand() eventhorizon.Command {
 }
 
 func createRegisterNewAccountEvent(date time.Time, createdAt time.Time) eventhorizon.Event {
-	tagId := tagcategory.TagId(uuid.MustParse("84c34932-9d22-40f0-9e56-443fcafc84fe"))
+	tagId := tagcategory.TagIdFromUUIDString("84c34932-9d22-40f0-9e56-443fcafc84fe")
 
 	return eventhorizon.NewEvent(
 		NewAccountMovementRegistered,
@@ -270,7 +270,7 @@ func createRegisterNewAccountEvent(date time.Time, createdAt time.Time) eventhor
 			SourceAccountId:   nil,
 			Description:       "Movement description",
 			Notes:             nil,
-			TagIds:            []*tagcategory.TagId{&tagId},
+			TagIds:            []*tagcategory.TagId{tagId},
 		},
 		createdAt,
 		eventhorizon.ForAggregate(AggregateType, *setupAccountMonthId(), 2),

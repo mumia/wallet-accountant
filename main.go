@@ -24,6 +24,14 @@ import (
 	"walletaccountant/definitions"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
+	"walletaccountant/importfile"
+	"walletaccountant/importfile/bankfileparser"
+	"walletaccountant/importfile/bankfilereader"
+	"walletaccountant/importfilecommand"
+	"walletaccountant/importfileprojection"
+	"walletaccountant/importfilequery"
+	"walletaccountant/importfilereadmodel"
+	"walletaccountant/importfilesaga"
 	"walletaccountant/mongodb"
 	"walletaccountant/movementtype"
 	"walletaccountant/movementtypecommand"
@@ -51,6 +59,10 @@ func main() {
 			definitions.AsRoute(accountcommand.NewRegisterNewAccountApi),
 			definitions.AsRoute(accountmonthcommand.NewAccountMonthRegisterNewMovementApi),
 			definitions.AsRoute(accountmonthcommand.NewEndAccountMonthApi),
+			definitions.AsRoute(importfilecommand.NewRegisterNewImportFileApi),
+			definitions.AsRoute(importfilecommand.NewRestartImportFileParserApi),
+			definitions.AsRoute(importfilecommand.NewVerifyImportedDataRowApi),
+			definitions.AsRoute(importfilecommand.NewInvalidateImportedDataRowApi),
 			definitions.AsRoute(movementtypecommand.NewRegisterNewMovementTypeApi),
 			definitions.AsRoute(tagcategorycommand.NewNewTagAndCategoryApi),
 			definitions.AsRoute(tagcategorycommand.NewNewTagWithExistingCategoryApi),
@@ -60,6 +72,9 @@ func main() {
 			definitions.AsRoute(accountquery.NewReadAllAccountsApi),
 			definitions.AsRoute(accountquery.NewReadAccountsApi),
 			definitions.AsRoute(accountmonthquery.NewReadCurrentAccountMonthApi),
+			definitions.AsRoute(importfilequery.NewReadAllImportFilesApi),
+			definitions.AsRoute(importfilequery.NewReadImportFileApi),
+			definitions.AsRoute(importfilequery.NewReadImportFileRowsApi),
 			definitions.AsRoute(movementtypequery.NewReadAllMovementTypesApi),
 			definitions.AsRoute(movementtypequery.NewReadMovementTypeApi),
 			definitions.AsRoute(movementtypequery.NewReadMovementTypeByAccountApi),
@@ -68,14 +83,20 @@ func main() {
 		fx.Provide(
 			// CommandMediator
 			fx.Annotate(accountcommand.NewCommandMediator, fx.As(new(accountcommand.CommandMediatorer))),
-			fx.Annotate(tagcategorycommand.NewCommandMediator, fx.As(new(tagcategorycommand.CommandMediatorer))),
-			fx.Annotate(movementtypecommand.NewCommandMediator, fx.As(new(movementtypecommand.CommandMediatorer))),
 			fx.Annotate(accountmonthcommand.NewCommandMediator, fx.As(new(accountmonthcommand.CommandMediatorer))),
+			fx.Annotate(
+				importfilecommand.NewCommandMediator,
+				fx.As(new(importfilecommand.CommandMediatorer)),
+				fx.ParamTags(`group:"bankFileParsers"`),
+			),
+			fx.Annotate(movementtypecommand.NewCommandMediator, fx.As(new(movementtypecommand.CommandMediatorer))),
+			fx.Annotate(tagcategorycommand.NewCommandMediator, fx.As(new(tagcategorycommand.CommandMediatorer))),
 		),
 		fx.Provide(
 			// QueryMediator
 			fx.Annotate(accountquery.NewQueryMediator, fx.As(new(accountquery.QueryMediatorer))),
 			fx.Annotate(accountmonthquery.NewQueryMediator, fx.As(new(accountmonthquery.QueryMediatorer))),
+			fx.Annotate(importfilequery.NewQueryMediator, fx.As(new(importfilequery.QueryMediatorer))),
 			fx.Annotate(movementtypequery.NewQueryMediator, fx.As(new(movementtypequery.QueryMediatorer))),
 			fx.Annotate(tagcategoryquery.NewQueryMediator, fx.As(new(tagcategoryquery.QueryMediatorer))),
 		),
@@ -83,6 +104,7 @@ func main() {
 			// Aggregate factory
 			definitions.AsAggregateFactory(account.NewFactory),
 			definitions.AsAggregateFactory(accountmonth.NewFactory),
+			definitions.AsAggregateFactory(importfile.NewFactory),
 			definitions.AsAggregateFactory(movementtype.NewFactory),
 			definitions.AsAggregateFactory(tagcategory.NewFactory),
 		),
@@ -90,6 +112,7 @@ func main() {
 			// Event data registers
 			definitions.AsEventDataRegister(account.NewEventRegister),
 			definitions.AsEventDataRegister(accountmonth.NewEventRegister),
+			definitions.AsEventDataRegister(importfile.NewEventRegister),
 			definitions.AsEventDataRegister(movementtype.NewEventRegister),
 			definitions.AsEventDataRegister(tagcategory.NewEventRegister),
 		),
@@ -107,10 +130,12 @@ func main() {
 			),
 			definitions.AsProjectionProvider(accountprojection.NewProjectionConfig),
 			definitions.AsProjectionProvider(accountmonthprojection.NewProjectionConfig),
+			definitions.AsProjectionProvider(importfileprojection.NewProjectionConfig),
 			definitions.AsProjectionProvider(movementtypeprojection.NewProjectionConfig),
 			definitions.AsProjectionProvider(tagcategoryprojection.NewProjectionConfig),
 			fx.Annotate(accountprojection.NewProjection, fx.As(new(accountprojection.ReadModelProjection))),
 			fx.Annotate(accountmonthprojection.NewProjection, fx.As(new(accountmonthprojection.ReadModelProjection))),
+			fx.Annotate(importfileprojection.NewProjection, fx.As(new(importfileprojection.ReadModelProjection))),
 			fx.Annotate(movementtypeprojection.NewProjection, fx.As(new(movementtypeprojection.ReadModelProjection))),
 			fx.Annotate(tagcategoryprojection.NewProjection, fx.As(new(tagcategoryprojection.ReadModelProjection))),
 		),
@@ -122,13 +147,25 @@ func main() {
 			),
 			definitions.AsSagaProvider(accountsaga.NewAccountRegisterSaga),
 			definitions.AsSagaProvider(accountmonthsaga.NewAccountMonthEndedSaga),
+			definitions.AsSagaProvider(importfilesaga.NewImportFileDataRowVerifiedSaga),
 		),
+		// Saga event stream subscriptions
+		fx.Invoke(saga.AccountRegisterSagaSubscribeEventStream),
+		fx.Invoke(saga.AccountMonthEndedSagaSubscribeEventStream),
+		fx.Invoke(saga.ImportFileDataRowVerifiedSagaSubscribeEventStream),
 		fx.Provide(
 			// Read model repositories
 			fx.Annotate(accountreadmodel.NewReadModelRepository, fx.As(new(accountreadmodel.ReadModeler))),
 			fx.Annotate(accountmonthreadmodel.NewReadModelRepository, fx.As(new(accountmonthreadmodel.ReadModeler))),
+			fx.Annotate(importfilereadmodel.NewReadModelRepository, fx.As(new(importfilereadmodel.ReadModeler))),
 			fx.Annotate(movementtypereadmodel.NewReadModelRepository, fx.As(new(movementtypereadmodel.ReadModeler))),
 			fx.Annotate(tagcategoryreadmodel.NewReadModelRepository, fx.As(new(tagcategoryreadmodel.ReadModeler))),
+		),
+		fx.Provide(
+			// Bank file parsers
+			bankfileparser.AsBankFileParser(bankfileparser.NewDeutscheBankCSVParser),
+			bankfileparser.AsBankFileParser(bankfileparser.NewN26CSVParser),
+			bankfileparser.AsBankFileParser(bankfileparser.NewBcpCSVParser),
 		),
 		fx.Provide(
 			// Event horizon stuff
@@ -148,27 +185,35 @@ func main() {
 			),
 		),
 
+		fx.Provide(
+			// Channels
+			importfileprojection.NewFileToParseNotifier,
+		),
+
 		// Start api server
-		fx.Invoke(func(engine *gin.Engine) { /* Nothing to do here */ }),
+		fx.Invoke(func(engine *gin.Engine) {
+			// Nothing to do here
+		}),
 
 		// Command handler
 		fx.Invoke(account.RegisterCommandHandler),
 		fx.Invoke(accountmonth.RegisterCommandHandler),
+		fx.Invoke(importfile.RegisterCommandHandler),
 		fx.Invoke(movementtype.RegisterCommandHandler),
 		fx.Invoke(tagcategory.RegisterCommandHandler),
 
 		// Projection event stream subscriptions
 		fx.Invoke(accountprojection.ProjectionSubscribeEventStream),
 		fx.Invoke(accountmonthprojection.ProjectionSubscribeEventStream),
+		fx.Invoke(importfileprojection.ProjectionSubscribeEventStream),
 		fx.Invoke(movementtypeprojection.ProjectionSubscribeEventStream),
 		fx.Invoke(tagcategoryprojection.ProjectionSubscribeEventStream),
 
-		// Saga event stream subscriptions
-		fx.Invoke(saga.AccountRegisterSagaSubscribeEventStream),
-		fx.Invoke(saga.AccountMonthEndedSagaSubscribeEventStream),
-
 		// Event registration
 		fx.Invoke(fx.Annotate(eventstoredb.RegisterEvents, fx.ParamTags(`group:"eventDataRegisters"`))),
+
+		// Start bank file reader
+		fx.Invoke(fx.Annotate(bankfilereader.StartBankFileReader, fx.ParamTags(`group:"bankFileParsers"`))),
 
 		//fx.WithLogger(
 		//	func(log *zap.Logger) fxevent.Logger {

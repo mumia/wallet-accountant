@@ -1,0 +1,7 @@
+{
+  "error": "Invalid CSV file",
+  "code": 101,
+  "context": {
+    "1": "Record #1 has error: wrong number of fields"
+  }
+}
