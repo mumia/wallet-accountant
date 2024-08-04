@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
-	"walletaccountant/accountmonth"
-	"walletaccountant/accountmonthreadmodel"
 	"walletaccountant/accountreadmodel"
 	"walletaccountant/common"
 	"walletaccountant/definitions"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/importfile"
 	"walletaccountant/importfilereadmodel"
+	"walletaccountant/ledger"
+	"walletaccountant/ledgerreadmodel"
 )
 
 var _ saga.Saga = &ImportFileDataRowVerifiedSaga{}
@@ -23,14 +23,14 @@ const ImportFileDataRowVerifiedSagaType saga.Type = "ImportFileDataRowVerifiedSa
 type ImportFileDataRowVerifiedSaga struct {
 	importFileRepository   importfilereadmodel.ReadModeler
 	accountRepository      accountreadmodel.ReadModeler
-	accountMonthRepository accountmonthreadmodel.ReadModeler
+	accountMonthRepository ledgerreadmodel.ReadModeler
 	idCreator              eventstoredb.IdGenerator
 }
 
 func NewImportFileDataRowVerifiedSaga(
 	importFileRepository importfilereadmodel.ReadModeler,
 	accountRepository accountreadmodel.ReadModeler,
-	accountMonthRepository accountmonthreadmodel.ReadModeler,
+	accountMonthRepository ledgerreadmodel.ReadModeler,
 	idCreator eventstoredb.IdGenerator,
 ) *ImportFileDataRowVerifiedSaga {
 	return &ImportFileDataRowVerifiedSaga{
@@ -123,11 +123,11 @@ func (saga *ImportFileDataRowVerifiedSaga) handleFileDataRowMarkedAsVerified(
 		fileDataRowEntity.Amount = fileDataRowEntity.Amount * -1
 	}
 
-	accountMovementId := accountmonth.AccountMovementIdFromUUID(saga.idCreator.New())
+	accountMovementId := ledger.AccountMovementIdFromUUID(saga.idCreator.New())
 
 	err = handler.HandleCommand(
 		ctx,
-		&accountmonth.RegisterNewAccountMovement{
+		&ledger.RegisterNewAccountMovement{
 			AccountMonthId:    *accountMonthEntity.AccountMonthId,
 			AccountMovementId: *accountMovementId,
 			MovementTypeId:    eventData.MovementTypeId,

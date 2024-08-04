@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 	"walletaccountant/account"
-	"walletaccountant/accountmonth"
 	"walletaccountant/clock"
+	"walletaccountant/ledger"
 	"walletaccountant/tagcategory"
 )
 
@@ -46,7 +46,7 @@ func setupAccountId() *account.Id {
 }
 
 func setupAccountMovementId() *account.Id {
-	return accountmonth.AccountMovementIdFromUUIDString("7d17c824-2b2f-41dd-a721-c564f29bd692")
+	return ledger.AccountMovementIdFromUUIDString("7d17c824-2b2f-41dd-a721-c564f29bd692")
 }
 
 func setupDataRowId(rawData map[string]any) (*DataRowId, error) {

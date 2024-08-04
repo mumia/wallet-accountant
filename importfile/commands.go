@@ -5,9 +5,9 @@ import (
 	"github.com/looplab/eventhorizon/uuid"
 	"time"
 	"walletaccountant/account"
-	"walletaccountant/accountmonth"
 	"walletaccountant/commands"
 	"walletaccountant/eventstoredb"
+	"walletaccountant/ledger"
 	"walletaccountant/movementtype"
 	"walletaccountant/tagcategory"
 )
@@ -229,9 +229,9 @@ func (s InvalidateFileDataRow) CommandType() eventhorizon.CommandType {
 }
 
 type RegisterAccountMovementIdForVerifiedFileDataRow struct {
-	ImportFileId      Id                             `json:"import_file_id"`
-	FileDataRowId     DataRowId                      `json:"file_data_row_id"`
-	AccountMovementId accountmonth.AccountMovementId `json:"account_movement_id"`
+	ImportFileId      Id                       `json:"import_file_id"`
+	FileDataRowId     DataRowId                `json:"file_data_row_id"`
+	AccountMovementId ledger.AccountMovementId `json:"account_movement_id"`
 }
 
 func (s RegisterAccountMovementIdForVerifiedFileDataRow) AggregateID() uuid.UUID {
