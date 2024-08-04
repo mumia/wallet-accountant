@@ -26,16 +26,16 @@ Feature: Account month handling
     # --------------------
     # Read account month initial state
     # --------------------
-    Given path 'account-month', accountId
+    Given path 'ledger', accountId
     When method get
     Then status 200
-    And match response == read("accountMonth/response-read-account-month-no-movements.json")
+    And match response == read("accountMonth/response-read-ledger-no-movements.json")
     And response.accountId = accountId
 
     # --------------------
     # Register a debit
     # --------------------
-    Given path 'account-month/account-movement'
+    Given path 'ledger/account-movement'
     * def requestBody = read("accountMonth/request-first-register-new-movement-debit.json")
     * replace requestBody.${accountId} = accountId
     * replace requestBody.${tagId1} = tagId1
@@ -49,17 +49,17 @@ Feature: Account month handling
     # --------------------
     # Read account month after debit
     # --------------------
-    Given path 'account-month', accountId
+    Given path 'ledger', accountId
     When method get
     Then status 200
-    And match response == read("accountMonth/response-read-account-month-after-debit.json")
+    And match response == read("accountMonth/response-read-ledger-after-debit.json")
     And response.accountId = accountId
     And response.movements[0].tagIds[0] = tagId1
 
     # --------------------
     # Register a credit
     # --------------------
-    Given path 'account-month/account-movement'
+    Given path 'ledger/account-movement'
     * def requestBody = read("accountMonth/request-second-register-new-movement-credit.json")
     * replace requestBody.${accountId} = accountId
     * replace requestBody.${tagId2} = tagId2
@@ -73,10 +73,10 @@ Feature: Account month handling
     # --------------------
     # Read account month after credit
     # --------------------
-    Given path 'account-month', accountId
+    Given path 'ledger', accountId
     When method get
     Then status 200
-    And match response == read("accountMonth/response-read-account-month-after-credit.json")
+    And match response == read("accountMonth/response-read-ledger-after-credit.json")
     And response.accountId = accountId
     And response.movements[0].tagIds[0] = tagId1
     And response.movements[1].tagIds[0] = tagId2
@@ -84,7 +84,7 @@ Feature: Account month handling
     # --------------------
     # Register a credit
     # --------------------
-    Given path 'account-month'
+    Given path 'ledger'
     * def requestBody = read("accountMonth/request-end-month.json")
     * replace requestBody.${accountId} = accountId
     * json requestJson = requestBody
@@ -108,8 +108,8 @@ Feature: Account month handling
     # --------------------
     # Read account month after new month
     # --------------------
-    Given path 'account-month', accountId
+    Given path 'ledger', accountId
     When method get
     Then status 200
-    And match response == read("accountMonth/response-read-account-month-after-new-month.json")
+    And match response == read("accountMonth/response-read-ledger-after-new-month.json")
     And response.accountId = accountId

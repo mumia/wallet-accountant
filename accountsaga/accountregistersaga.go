@@ -5,8 +5,8 @@ import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
 	"walletaccountant/account"
-	"walletaccountant/accountmonth"
 	"walletaccountant/definitions"
+	"walletaccountant/ledger"
 )
 
 var _ saga.Saga = &AccountRegisterSaga{}
@@ -54,7 +54,7 @@ func (saga *AccountRegisterSaga) handleNewAccountRegistered(
 	handler eventhorizon.CommandHandler,
 	eventData *account.NewAccountRegisteredData,
 ) error {
-	accountMonthId, err := accountmonth.IdGenerate(
+	accountMonthId, err := ledger.IdGenerate(
 		eventData.AccountId,
 		eventData.ActiveMonth,
 		eventData.ActiveYear,
@@ -65,7 +65,7 @@ func (saga *AccountRegisterSaga) handleNewAccountRegistered(
 
 	return handler.HandleCommand(
 		ctx,
-		&accountmonth.StartAccountMonth{
+		&ledger.StartAccountMonth{
 			AccountMonthId: *accountMonthId,
 			AccountId:      *eventData.AccountId,
 			StartBalance:   eventData.StartingBalance,

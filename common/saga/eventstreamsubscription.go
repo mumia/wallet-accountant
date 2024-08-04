@@ -4,13 +4,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"walletaccountant/account"
-	"walletaccountant/accountmonth"
-	"walletaccountant/accountmonthsaga"
 	"walletaccountant/accountsaga"
 	"walletaccountant/eventhandler"
 	"walletaccountant/eventstoredb"
 	"walletaccountant/importfile"
 	"walletaccountant/importfilesaga"
+	"walletaccountant/ledger"
+	"walletaccountant/ledgersaga"
 	"walletaccountant/subscription"
 )
 
@@ -37,8 +37,8 @@ func AccountMonthEndedSagaSubscribeEventStream(
 	lifecycle fx.Lifecycle,
 ) error {
 	return subscription.SubscribeEventStreamForSaga(
-		accountmonth.AggregateType,
-		subscription.HandlerTypeForSaga(accountmonthsaga.AccountMonthEndedSagaType.String()),
+		ledger.AggregateType,
+		subscription.HandlerTypeForSaga(ledgersaga.AccountMonthEndedSagaType.String()),
 		client,
 		sagas,
 		logger,

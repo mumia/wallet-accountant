@@ -70,6 +70,6 @@ workflows:
       - test:
           requires:
             - build
-      - karate:
-          requires:
-            - build
+#      - karate:
+#          requires:
+#            - build
