@@ -36,6 +36,7 @@ import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import org.springframework.test.web.servlet.result.MockMvcResultHandlers
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
+import java.math.BigDecimal
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -69,7 +70,7 @@ class AccountControllerTest {
         		},
         		{
         			"name": "startingBalance",
-        			"value": "-1.0",
+        			"value": "-1",
         			"reason": "must be greater than or equal to 0"
         		},
         		{
@@ -130,7 +131,7 @@ class AccountControllerTest {
                 "bankName": "BCP",
                 "name": "Mumia bcp",
                 "accountType": "CHECKING",
-                "startingBalance": 1000.50,
+                "startingBalance": 1000.5,
                 "startingBalanceDate": "2014-08-26",
                 "currency": "EUR",
                 "notes": "some notes"
@@ -150,7 +151,7 @@ class AccountControllerTest {
                 bankName = BCP,
                 name = "Mumia bcp",
                 accountType = CHECKING,
-                startingBalance = Money(1000.50, EUR),
+                startingBalance = Money(BigDecimal.valueOf(1000.5), EUR),
                 startingBalanceDate = startingBalanceDate1,
                 currency = EUR,
                 notes = "some notes",
@@ -280,7 +281,7 @@ class AccountControllerTest {
                 bankName = BCP,
                 name = "Mumia bcp",
                 accountType = CHECKING,
-                startingBalance = Money(value = 1000.50, currency = EUR),
+                startingBalance = Money(value = BigDecimal.valueOf(1000.50), currency = EUR),
                 startingBalanceDate = startingBalanceDate1,
                 currency = EUR,
                 notes = "some notes",
@@ -390,7 +391,7 @@ class AccountControllerTest {
                     bankName = BCP,
                     name = "Mumia bcp",
                     accountType = CHECKING,
-                    startingBalance = Money(value = 1000.50, currency = EUR),
+                    startingBalance = Money(value = BigDecimal.valueOf(1000.50), currency = EUR),
                     startingBalanceDate = startingBalanceDate1,
                     currency = EUR,
                     notes = "some notes",
@@ -401,7 +402,7 @@ class AccountControllerTest {
                     bankName = N26,
                     name = "Mumia n26",
                     accountType = SAVINGS,
-                    startingBalance = Money(value = 101.09, currency = USD),
+                    startingBalance = Money(value = BigDecimal.valueOf(101.09), currency = USD),
                     startingBalanceDate = startingBalanceDate2,
                     currency = USD,
                     notes = "",

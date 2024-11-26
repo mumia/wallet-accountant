@@ -1,10 +1,12 @@
 package com.wa.walletaccountant.domain.common
 
+import java.math.BigDecimal
+
 data class Money(
-    val value: Double,
+    val value: BigDecimal,
     val currency: Currency,
 ) {
-    override fun toString(): String = "%.2f %s".format(value, currency.toString())
+    override fun toString(): String = "%s %s".format(value.toPlainString(), currency.toString())
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

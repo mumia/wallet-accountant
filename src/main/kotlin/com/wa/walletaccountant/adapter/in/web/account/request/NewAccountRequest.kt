@@ -7,6 +7,7 @@ import com.wa.walletaccountant.domain.common.Currency
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.Pattern
+import java.math.BigDecimal
 
 data class NewAccountRequest(
     @field:NotEmpty
@@ -24,7 +25,7 @@ data class NewAccountRequest(
     )
     val accountType: String,
     @field:Min(value = 0)
-    val startingBalance: Double,
+    val startingBalance: BigDecimal,
     @field:NotEmpty
     @field:Pattern(regexp = "([0-9]{4}-[0-9]{2}-[0-9]{2})", message = "Expected date format is YYYY-MM-DD")
     val startingBalanceDate: String,

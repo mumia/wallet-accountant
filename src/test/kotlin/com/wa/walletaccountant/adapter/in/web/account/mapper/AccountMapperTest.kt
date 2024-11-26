@@ -10,6 +10,7 @@ import com.wa.walletaccountant.domain.common.Date
 import com.wa.walletaccountant.domain.common.Money
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 
 class AccountMapperTest {
     @Test
@@ -21,7 +22,7 @@ class AccountMapperTest {
                 bankName = DB.toString(),
                 name = "Bank name",
                 accountType = CHECKING.toString(),
-                startingBalance = 12.34,
+                startingBalance = BigDecimal.valueOf(12.34),
                 startingBalanceDate = "2014-02-03",
                 currency = EUR.toString(),
                 notes = "A note",
@@ -33,7 +34,7 @@ class AccountMapperTest {
                 bankName = DB,
                 name = request.name,
                 accountType = CHECKING,
-                startingBalance = Money(12.34, EUR),
+                startingBalance = Money(BigDecimal.valueOf(12.34), EUR),
                 startingBalanceDate = Date.fromString("2014-02-03"),
                 currency = EUR,
                 notes = "A note",

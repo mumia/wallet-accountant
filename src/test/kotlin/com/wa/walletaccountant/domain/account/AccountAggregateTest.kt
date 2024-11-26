@@ -12,6 +12,7 @@ import org.axonframework.test.aggregate.AggregateTestFixture
 import org.axonframework.test.aggregate.FixtureConfiguration
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 
 class AccountAggregateTest {
     var fixture: FixtureConfiguration<AccountAggregate>? = null
@@ -27,7 +28,7 @@ class AccountAggregateTest {
     fun registerAccount() {
         val accountId = "c5be2bf8-4ffa-4b3e-a152-518cec206b1d"
         val name = "Bcp mumia"
-        val balance = 13.00
+        val balance = BigDecimal.valueOf(13.00)
 
         val command =
             RegisterNewAccountCommand(
