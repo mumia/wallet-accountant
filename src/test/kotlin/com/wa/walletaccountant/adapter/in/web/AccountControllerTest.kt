@@ -290,7 +290,7 @@ class AccountControllerTest {
 
         every {
             queryGateway.query(ofType(ReadAccountById::class), ofType(ResponseType::class))
-        } returns CompletableFuture.completedFuture(model)
+        } returns CompletableFuture.completedFuture(Optional.of(model))
 
         val result: MvcResult =
             mockMvc

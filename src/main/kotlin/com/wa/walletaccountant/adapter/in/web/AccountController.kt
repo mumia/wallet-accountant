@@ -55,15 +55,7 @@ class AccountController(
             .query(
                 ReadAccountById(AccountId.fromString(accountId)),
                 ResponseTypes.optionalInstanceOf(AccountModel::class.java),
-            )
-//            .thenCompose { optional ->
-//                if (optional.isEmpty) {
-//                    CompletableFuture.completedFuture(ResponseEntity.notFound().build())
-//                } else {
-//                    CompletableFuture.completedFuture(ResponseEntity.ok(optional.get()))
-//                }
-//            }
-            .thenApply { optional ->
+            ).thenApply { optional ->
                 optional
                     .map { ResponseEntity.ok(it) }
                     .orElseGet { ResponseEntity.notFound().build() }

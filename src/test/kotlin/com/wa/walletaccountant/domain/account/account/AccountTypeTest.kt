@@ -3,10 +3,10 @@ package com.wa.walletaccountant.domain.account.account
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Test
 import org.skyscreamer.jsonassert.JSONAssert
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import kotlin.test.Test
 
 @SpringBootTest(classes = [ObjectMapper::class])
 class AccountTypeTest {

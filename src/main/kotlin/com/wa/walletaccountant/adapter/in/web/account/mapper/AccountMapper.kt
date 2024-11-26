@@ -24,10 +24,6 @@ class AccountMapper private constructor() {
                 AccountType.valueOf(request.accountType),
                 Money(request.startingBalance, currency),
                 Date.fromString(request.startingBalanceDate),
-//                ZonedDateTime.parse(
-//                    request.startingBalanceDate + "T00:00:00Z",
-//                    DateTimeFormatter.ISO_INSTANT.withZone(ZoneId.of("UTC")),
-//                ),
                 currency,
                 request.notes,
             )
