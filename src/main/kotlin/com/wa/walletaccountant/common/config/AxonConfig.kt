@@ -1,6 +1,7 @@
 package com.wa.walletaccountant.common.config
 
 import org.axonframework.config.Configurer
+import org.axonframework.config.ConfigurerModule
 import org.axonframework.eventhandling.TrackedEventMessage
 import org.axonframework.eventhandling.TrackingEventProcessorConfiguration
 import org.axonframework.messaging.StreamableMessageSource
@@ -16,11 +17,11 @@ class AxonConfig {
             .andInitialTrackingToken { obj: StreamableMessageSource<TrackedEventMessage<*>?> -> obj.createHeadToken() }
 
     @Bean
-    fun configurer(configurer: Configurer): Configurer {
-        configurer
-            .eventProcessing()
-            .usingTrackingEventProcessors() // Enable tracking event processors globally
-
-        return configurer
-    }
+    fun eventProcessingConfigurerModule(): ConfigurerModule =
+        ConfigurerModule { configurer: Configurer ->
+            configurer.eventProcessing { eventProcessingConfigurer ->
+                // Enable tracking event processors globally
+                eventProcessingConfigurer.usingTrackingEventProcessors()
+            }
+        }
 }
