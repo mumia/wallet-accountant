@@ -48,9 +48,15 @@ dependencies {
     }
     testImplementation("org.junit.jupiter:junit-jupiter-api")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    testImplementation(kotlin("test"))
     testImplementation("com.ninja-squad:springmockk:4.0.2")
     testImplementation("org.axonframework:axon-test")
     testImplementation("org.axonframework.extensions.kotlin:axon-kotlin-test")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    implementation("org.testcontainers:testcontainers-bom:1.20.4")
+    testImplementation("org.testcontainers:testcontainers")
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:mongodb")
 }
 
 kotlin {

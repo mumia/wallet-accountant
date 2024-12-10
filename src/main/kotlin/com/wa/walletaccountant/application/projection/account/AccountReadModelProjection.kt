@@ -8,7 +8,7 @@ import org.axonframework.eventhandling.EventHandler
 import org.springframework.stereotype.Component
 
 @Component
-@ProcessingGroup("read-models")
+@ProcessingGroup("account-read-model")
 class AccountReadModelProjection(
     private val readModelPort: AccountReadModelPort,
 ) {

@@ -10,11 +10,10 @@ import java.util.Optional
 
 @Service
 class AccountReadModelAdapter(
-    private val accountMapper: AccountMapper,
     private val accountRepository: AccountRepository,
 ) : AccountReadModelPort {
     override fun registerNewAccount(model: AccountModel) {
-        accountRepository.save(accountMapper.toDocument(model))
+        accountRepository.save(AccountMapper.toDocument(model))
     }
 
     override fun readAccount(id: AccountId): Optional<AccountModel> {
@@ -23,12 +22,12 @@ class AccountReadModelAdapter(
             return Optional.empty()
         }
 
-        return Optional.of(accountMapper.toModel(optionalAccount.get()))
+        return Optional.of(AccountMapper.toModel(optionalAccount.get()))
     }
 
     override fun readAllAccounts(): Set<AccountModel> =
         accountRepository
             .findAll()
-            .map { accountMapper.toModel(it) }
+            .map { AccountMapper.toModel(it) }
             .toSet()
 }
