@@ -6,7 +6,6 @@ import com.wa.walletaccountant.domain.tagcategory.command.AddNewTagToNewCategory
 import org.axonframework.commandhandling.CommandMessage
 import org.axonframework.messaging.MessageDispatchInterceptor
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 import java.util.function.BiFunction
 
@@ -14,8 +13,8 @@ import java.util.function.BiFunction
 class AddNewTagToNewCategoryCommandInterceptor
 @Autowired
 constructor(
-    @Lazy private val tagCategoryValidator: TagCategoryValidator,
-    @Lazy private val tagValidator: TagValidator,
+    private val tagCategoryValidator: TagCategoryValidator,
+    private val tagValidator: TagValidator,
 ) : MessageDispatchInterceptor<CommandMessage<*>> {
     override fun handle(messages: List<CommandMessage<*>>): BiFunction<Int, CommandMessage<*>, CommandMessage<*>> {
         return BiFunction<Int, CommandMessage<*>, CommandMessage<*>> { _: Int?, command: CommandMessage<*> ->
