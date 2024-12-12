@@ -7,9 +7,9 @@ services:
       - '8124:8124'
       - '8224:8224'
     volumes:
-      - ./db/data:/axonserver/data
-      - ./db/events:/axonserver/events
-      - ./db/log:/axonserver/log
+      - ./db/axonserver/data:/axonserver/data
+      - ./db/axonserver/events:/axonserver/events
+      - ./db/axonserver/log:/axonserver/log
     networks:
       wallet-accountant: ~
 

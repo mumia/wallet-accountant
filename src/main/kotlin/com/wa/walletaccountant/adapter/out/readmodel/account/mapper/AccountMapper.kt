@@ -5,7 +5,7 @@ import com.wa.walletaccountant.application.model.account.AccountModel
 import org.springframework.stereotype.Service
 
 @Service
-class AccountMapper {
+object AccountMapper {
     fun toDocument(model: AccountModel): AccountDocument =
         AccountDocument(
             accountId = model.accountId,
