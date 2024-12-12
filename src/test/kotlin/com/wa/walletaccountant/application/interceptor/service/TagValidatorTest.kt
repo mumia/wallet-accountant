@@ -24,7 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers
 import kotlin.test.assertFailsWith
 
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest
 @ActiveProfiles("testing")
 class TagValidatorTest
 @Autowired
