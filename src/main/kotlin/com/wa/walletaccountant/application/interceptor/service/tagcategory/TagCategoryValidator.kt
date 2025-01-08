@@ -1,4 +1,4 @@
-package com.wa.walletaccountant.application.interceptor.service
+package com.wa.walletaccountant.application.interceptor.service.tagcategory
 
 import com.wa.walletaccountant.application.interceptor.exception.TagCategoryAlreadyExistsException
 import com.wa.walletaccountant.application.interceptor.exception.UnknownTagCategoryException

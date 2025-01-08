@@ -1,4 +1,4 @@
-package com.wa.walletaccountant.adapter.out.readmodel.tagcategory.respository
+package com.wa.walletaccountant.adapter.out.readmodel.tagcategory
 
 import com.wa.walletaccountant.adapter.out.readmodel.TagCategoryReadModelAdapter
 import com.wa.walletaccountant.adapter.out.readmodel.tagcategory.mapper.TagCategoryMapper
@@ -27,9 +27,9 @@ import org.testcontainers.junit.jupiter.Testcontainers
 import java.util.stream.Stream
 
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest()
 @ActiveProfiles("testing")
-class TagCategoryRepositoryTest
+class TagCategoryReadModelAdapterTest
 @Autowired
 constructor(
     val tagCategoryRepository: TagCategoryRepository,

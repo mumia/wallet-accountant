@@ -4,7 +4,7 @@ import com.wa.walletaccountant.domain.tagcategory.tagcategory.TagCategoryId
 
 class UnknownTagCategoryException private constructor(
     identifier: String,
-) : RuntimeException(
+) : UnknownEntityException(
     "Unknown tag category. [%s]".format(identifier),
 ) {
     companion object {

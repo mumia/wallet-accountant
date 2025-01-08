@@ -3,8 +3,8 @@ package com.wa.walletaccountant.domain.tagcategory
 import com.ninjasquad.springmockk.MockkBean
 import com.wa.walletaccountant.application.interceptor.command.tagcategory.AddNewTagToExistingCategoryCommandInterceptor
 import com.wa.walletaccountant.application.interceptor.command.tagcategory.AddNewTagToNewCategoryCommandInterceptor
-import com.wa.walletaccountant.application.interceptor.service.TagCategoryValidator
-import com.wa.walletaccountant.application.interceptor.service.TagValidator
+import com.wa.walletaccountant.application.interceptor.service.tagcategory.TagCategoryValidator
+import com.wa.walletaccountant.application.interceptor.service.tagcategory.TagValidator
 import com.wa.walletaccountant.application.port.out.TagCategoryReadModelPort
 import com.wa.walletaccountant.domain.tagcategory.command.AddNewTagToExistingCategoryCommand
 import com.wa.walletaccountant.domain.tagcategory.command.AddNewTagToNewCategoryCommand

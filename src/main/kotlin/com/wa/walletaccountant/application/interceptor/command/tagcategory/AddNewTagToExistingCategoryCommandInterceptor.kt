@@ -1,7 +1,7 @@
 package com.wa.walletaccountant.application.interceptor.command.tagcategory
 
-import com.wa.walletaccountant.application.interceptor.service.TagCategoryValidator
-import com.wa.walletaccountant.application.interceptor.service.TagValidator
+import com.wa.walletaccountant.application.interceptor.service.tagcategory.TagCategoryValidator
+import com.wa.walletaccountant.application.interceptor.service.tagcategory.TagValidator
 import com.wa.walletaccountant.domain.tagcategory.command.AddNewTagToExistingCategoryCommand
 import org.axonframework.commandhandling.CommandMessage
 import org.axonframework.messaging.MessageDispatchInterceptor

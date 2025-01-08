@@ -5,6 +5,8 @@ import com.wa.walletaccountant.adapter.out.readmodel.tagcategory.repository.TagC
 import com.wa.walletaccountant.application.interceptor.exception.TagAlreadyExistsException
 import com.wa.walletaccountant.application.interceptor.exception.TagCategoryAlreadyExistsException
 import com.wa.walletaccountant.application.interceptor.exception.UnknownTagCategoryException
+import com.wa.walletaccountant.application.interceptor.service.tagcategory.TagCategoryValidator
+import com.wa.walletaccountant.application.interceptor.service.tagcategory.TagValidator
 import com.wa.walletaccountant.application.model.tagcategory.TagCategoryModel
 import com.wa.walletaccountant.application.model.tagcategory.TagModel
 import com.wa.walletaccountant.domain.tagcategory.tagcategory.TagCategoryId
