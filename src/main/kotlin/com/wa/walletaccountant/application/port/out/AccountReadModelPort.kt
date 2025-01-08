@@ -10,4 +10,6 @@ interface AccountReadModelPort {
     fun readAccount(id: AccountId): Optional<AccountModel>
 
     fun readAllAccounts(): Set<AccountModel>
+
+    fun accountExistsById(accountId: AccountId): Boolean
 }

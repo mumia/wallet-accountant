@@ -30,4 +30,8 @@ class AccountReadModelAdapter(
             .findAll()
             .map { AccountMapper.toModel(it) }
             .toSet()
+
+    override fun accountExistsById(accountId: AccountId): Boolean {
+        return accountRepository.existsById(accountId)
+    }
 }

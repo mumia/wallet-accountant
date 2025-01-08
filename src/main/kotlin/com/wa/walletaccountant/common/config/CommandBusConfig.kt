@@ -1,5 +1,6 @@
 package com.wa.walletaccountant.common.config
 
+import com.wa.walletaccountant.application.interceptor.command.movementtype.RegisterNewMovementTypeCommandInterceptor
 import com.wa.walletaccountant.application.interceptor.command.tagcategory.AddNewTagToExistingCategoryCommandInterceptor
 import com.wa.walletaccountant.application.interceptor.command.tagcategory.AddNewTagToNewCategoryCommandInterceptor
 import org.axonframework.commandhandling.CommandBus
@@ -13,8 +14,10 @@ class CommandBusConfig {
         commandBus: CommandBus,
         addNewTagToNewCategoryCommandInterceptor: AddNewTagToNewCategoryCommandInterceptor,
         addNewTagToExistingCategoryCommandInterceptor: AddNewTagToExistingCategoryCommandInterceptor,
+        registerNewMovementTypeCommandInterceptor: RegisterNewMovementTypeCommandInterceptor,
     ) {
         commandBus.registerDispatchInterceptor(addNewTagToNewCategoryCommandInterceptor)
         commandBus.registerDispatchInterceptor(addNewTagToExistingCategoryCommandInterceptor)
+        commandBus.registerDispatchInterceptor(registerNewMovementTypeCommandInterceptor)
     }
 }

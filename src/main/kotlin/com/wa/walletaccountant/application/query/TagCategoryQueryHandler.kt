@@ -12,7 +12,7 @@ class TagCategoryQueryHandler(
 ) {
     @QueryHandler
     fun on(readTags: ReadTags): Set<TagCategoryModel> {
-        if (readTags.filter.isEmpty()) {
+        if (readTags.filter == null || readTags.filter.isEmpty()) {
             return tagCategoryReadModelPort.readAllTags()
         }
 

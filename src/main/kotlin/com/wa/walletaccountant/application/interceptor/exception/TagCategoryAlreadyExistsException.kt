@@ -4,7 +4,7 @@ import com.wa.walletaccountant.domain.tagcategory.tagcategory.TagCategoryId
 
 class TagCategoryAlreadyExistsException private constructor(
     identifier: String,
-) : RuntimeException(
+) : EntityExistenceException(
     "Tag category already exists. [%s]".format(identifier),
 ) {
     companion object {
