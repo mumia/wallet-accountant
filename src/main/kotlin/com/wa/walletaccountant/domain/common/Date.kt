@@ -6,11 +6,14 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+import java.time.temporal.ChronoUnit
 
 data class Date(
     val value: ZonedDateTime,
 ) {
     companion object {
+        fun now(): Date = Date(ZonedDateTime.now().truncatedTo(ChronoUnit.DAYS))
+
         @JsonCreator
         fun fromString(stringValue: String): Date =
             Date(
