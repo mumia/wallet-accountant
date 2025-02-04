@@ -1,13 +1,13 @@
 package com.wa.walletaccountant.domain.ledger
 
 import com.wa.walletaccountant.domain.common.Money
-import com.wa.walletaccountant.domain.ledger.command.EndMonthCommand
-import com.wa.walletaccountant.domain.ledger.command.RegisterLedgerMovementCommand
-import com.wa.walletaccountant.domain.ledger.command.StartMonthCommand
-import com.wa.walletaccountant.domain.ledger.event.LedgerMovementRegisteredEvent
-import com.wa.walletaccountant.domain.ledger.event.MonthEndedEvent
-import com.wa.walletaccountant.domain.ledger.event.MonthStartedEvent
-import com.wa.walletaccountant.domain.ledger.exception.EndBalanceDoesNotMatchCurrentBalanceException
+import com.wa.walletaccountant.domain.ledger.command.CloseBalanceForMonthCommand
+import com.wa.walletaccountant.domain.ledger.command.OpenBalanceForMonthCommand
+import com.wa.walletaccountant.domain.ledger.command.RegisterTransactionCommand
+import com.wa.walletaccountant.domain.ledger.event.MonthBalanceClosedEvent
+import com.wa.walletaccountant.domain.ledger.event.MonthBalanceOpenedEvent
+import com.wa.walletaccountant.domain.ledger.event.TransactionRegisteredEvent
+import com.wa.walletaccountant.domain.ledger.exception.CloseBalanceDoesNotMatchCurrentBalanceException
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 import com.wa.walletaccountant.domain.movementtype.movementtype.MovementAction.Debit
 import org.axonframework.commandhandling.CommandHandler
@@ -26,9 +26,9 @@ class LedgerAggregrate {
 
     @CommandHandler
     @CreationPolicy(AggregateCreationPolicy.ALWAYS)
-    fun on(command: StartMonthCommand) {
+    fun on(command: OpenBalanceForMonthCommand) {
         applyEvent(
-            MonthStartedEvent(
+            MonthBalanceOpenedEvent(
                 ledgerId = command.ledgerId,
                 startBalance = command.startBalance
             )
@@ -36,11 +36,11 @@ class LedgerAggregrate {
     }
 
     @CommandHandler
-    fun on(command: RegisterLedgerMovementCommand) {
+    fun on(command: RegisterTransactionCommand) {
         applyEvent(
-            LedgerMovementRegisteredEvent(
+            TransactionRegisteredEvent(
                 ledgerId = command.ledgerId,
-                movementId = command.movementId,
+                transactionId = command.transactionId,
                 movementTypeId = command.movementTypeId,
                 action = command.action,
                 amount = command.amount,
@@ -54,9 +54,9 @@ class LedgerAggregrate {
     }
 
     @CommandHandler
-    fun on(command: EndMonthCommand) {
+    fun on(command: CloseBalanceForMonthCommand) {
         if (currentBalance != command.endBalance) {
-            throw EndBalanceDoesNotMatchCurrentBalanceException(
+            throw CloseBalanceDoesNotMatchCurrentBalanceException(
                 ledgerId = command.ledgerId,
                 currentBalance = currentBalance,
                 endBalance = command.endBalance,
@@ -64,7 +64,7 @@ class LedgerAggregrate {
         }
 
         applyEvent(
-            MonthEndedEvent(
+            MonthBalanceClosedEvent(
                 ledgerId = command.ledgerId,
                 endBalance = command.endBalance,
             )
@@ -72,13 +72,13 @@ class LedgerAggregrate {
     }
 
     @EventSourcingHandler
-    fun on(event: MonthStartedEvent) {
+    fun on(event: MonthBalanceOpenedEvent) {
         aggregateId = event.ledgerId
         currentBalance = event.startBalance
     }
 
     @EventSourcingHandler
-    fun on(event: LedgerMovementRegisteredEvent) {
+    fun on(event: TransactionRegisteredEvent) {
         if (event.action == Debit) {
             currentBalance = currentBalance.subtract(event.amount)
         } else {

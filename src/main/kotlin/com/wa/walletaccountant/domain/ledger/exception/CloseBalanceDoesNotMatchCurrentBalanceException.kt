@@ -4,7 +4,7 @@ import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.exception.AggregateLogicException
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 
-class EndBalanceDoesNotMatchCurrentBalanceException(
+class CloseBalanceDoesNotMatchCurrentBalanceException(
     ledgerId: LedgerId,
     currentBalance: Money,
     endBalance: Money,

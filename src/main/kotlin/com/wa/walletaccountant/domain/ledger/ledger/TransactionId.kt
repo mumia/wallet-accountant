@@ -3,11 +3,11 @@ package com.wa.walletaccountant.domain.ledger.ledger
 import com.fasterxml.jackson.annotation.JsonValue
 import java.util.UUID
 
-data class MovementId(
+data class TransactionId(
     val value: UUID,
 ) {
     companion object {
-        fun fromString(stringValue: String) = MovementId(UUID.fromString(stringValue))
+        fun fromString(stringValue: String) = TransactionId(UUID.fromString(stringValue))
     }
 
     @JsonValue
@@ -17,7 +17,7 @@ data class MovementId(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
 
-        other as MovementId
+        other as TransactionId
 
         return value == other.value
     }
