@@ -34,7 +34,7 @@ class AccountMapperTest {
                 bankName = DB,
                 name = request.name,
                 accountType = CHECKING,
-                startingBalance = Money(BigDecimal.valueOf(12.34), EUR),
+                startingBalance = Money(amount = 12.34),
                 startingBalanceDate = Date.fromString("2014-02-03"),
                 currency = EUR,
                 notes = "A note",

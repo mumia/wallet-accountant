@@ -16,4 +16,5 @@ data class AccountModel(
     val startingBalanceDate: Date,
     val currency: Currency,
     val notes: String?,
+    val currentMonth: Date,
 )

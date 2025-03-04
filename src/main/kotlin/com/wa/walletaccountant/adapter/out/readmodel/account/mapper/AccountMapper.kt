@@ -16,6 +16,7 @@ object AccountMapper {
             startingBalanceDate = model.startingBalanceDate,
             currency = model.currency,
             notes = model.notes,
+            currentMonth = model.currentMonth,
         )
 
     fun toModel(document: AccountDocument): AccountModel =
@@ -28,5 +29,6 @@ object AccountMapper {
             startingBalanceDate = document.startingBalanceDate,
             currency = document.currency,
             notes = document.notes,
+            currentMonth = document.currentMonth,
         )
 }

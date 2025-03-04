@@ -22,7 +22,7 @@ class AccountMapper private constructor() {
                 BankName.valueOf(request.bankName),
                 request.name,
                 AccountType.valueOf(request.accountType),
-                Money(request.startingBalance, currency),
+                Money(request.startingBalance),
                 Date.fromString(request.startingBalanceDate),
                 currency,
                 request.notes,

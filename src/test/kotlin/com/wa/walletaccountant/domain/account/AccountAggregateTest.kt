@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 
 class AccountAggregateTest {
-    var fixture: FixtureConfiguration<AccountAggregate>? = null
+    lateinit var fixture: FixtureConfiguration<AccountAggregate>
     val date1 = Date.fromString("2014-01-02")
     val date2 = Date.fromString("2014-01-02")
 
@@ -36,7 +36,7 @@ class AccountAggregateTest {
                 bankName = BCP,
                 name = name,
                 accountType = CHECKING,
-                startingBalance = Money(balance, EUR),
+                startingBalance = Money(amount = balance),
                 startingBalanceDate = date1,
                 currency = EUR,
                 notes = "",
@@ -48,13 +48,13 @@ class AccountAggregateTest {
                 bankName = BCP,
                 name = name,
                 accountType = CHECKING,
-                startingBalance = Money(balance, EUR),
+                startingBalance = Money(amount = balance),
                 startingBalanceDate = date2,
                 currency = EUR,
                 notes = "",
             )
 
-        fixture!!
+        fixture
             .givenNoPriorActivity()
             .`when`(command)
             .expectSuccessfulHandlerExecution()
