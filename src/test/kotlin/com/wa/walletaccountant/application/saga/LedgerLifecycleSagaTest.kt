@@ -22,14 +22,13 @@ import org.axonframework.test.saga.SagaTestFixture
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import java.math.BigDecimal
 
 @ExtendWith(MockKExtension::class)
 class LedgerLifecycleSagaTest {
     private lateinit var fixture: FixtureConfiguration
     private val accountId = AccountId.fromString("c5be2bf8-4ffa-4b3e-a152-518cec206b1d")
     private val name = "Bcp mumia"
-    private val balance = Money(BigDecimal.valueOf(13.00), EUR)
+    private val balance = Money(amount = 13.00)
     private val date = Date.fromString("2014-01-02")
     private val ledgerId = LedgerId(
         accountId = accountId,
@@ -92,7 +91,7 @@ class LedgerLifecycleSagaTest {
             .publishes(
                 MonthBalanceClosedEvent(
                     ledgerId = ledgerId,
-                    endBalance = balance
+                    closeBalance = balance
                 )
             )
             .expectSuccessfulHandlerExecution()
@@ -116,7 +115,7 @@ class LedgerLifecycleSagaTest {
             .published(
                 MonthBalanceClosedEvent(
                     ledgerId = ledgerId,
-                    endBalance = balance
+                    closeBalance = balance
                 )
             )
             .whenAggregate(accountId.toString())

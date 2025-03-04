@@ -9,6 +9,7 @@ import com.wa.walletaccountant.domain.ledger.event.MonthBalanceOpenedEvent
 import com.wa.walletaccountant.domain.ledger.event.TransactionRegisteredEvent
 import com.wa.walletaccountant.domain.ledger.exception.CloseBalanceDoesNotMatchCurrentBalanceException
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
+import com.wa.walletaccountant.domain.movementtype.movementtype.MovementAction.Credit
 import com.wa.walletaccountant.domain.movementtype.movementtype.MovementAction.Debit
 import org.axonframework.commandhandling.CommandHandler
 import org.axonframework.eventsourcing.EventSourcingHandler
@@ -42,7 +43,7 @@ class LedgerAggregrate {
                 ledgerId = command.ledgerId,
                 transactionId = command.transactionId,
                 movementTypeId = command.movementTypeId,
-                action = command.action,
+                action = if (command.amount.isNegative()) Debit else Credit,
                 amount = command.amount,
                 date = command.date,
                 sourceAccountId = command.sourceAccountId,
@@ -66,7 +67,7 @@ class LedgerAggregrate {
         applyEvent(
             MonthBalanceClosedEvent(
                 ledgerId = command.ledgerId,
-                endBalance = command.endBalance,
+                closeBalance = command.endBalance,
             )
         )
     }
@@ -79,11 +80,8 @@ class LedgerAggregrate {
 
     @EventSourcingHandler
     fun on(event: TransactionRegisteredEvent) {
-        if (event.action == Debit) {
-            currentBalance = currentBalance.subtract(event.amount)
-        } else {
-            currentBalance = currentBalance.add(event.amount)
-        }
+        currentBalance = currentBalance.add(event.amount)
+
     }
 
 //    @EventSourcingHandler

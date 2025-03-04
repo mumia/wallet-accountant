@@ -5,5 +5,5 @@ import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 
 data class MonthBalanceClosedEvent(
     val ledgerId: LedgerId,
-    val endBalance: Money,
+    val closeBalance: Money,
 )

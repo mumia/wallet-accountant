@@ -4,4 +4,4 @@ import com.wa.walletaccountant.adapter.out.readmodel.movementtype.document.Movem
 import com.wa.walletaccountant.domain.movementtype.movementtype.MovementTypeId
 import org.springframework.data.mongodb.repository.MongoRepository
 
-interface MovementTypeRepository : MongoRepository<MovementTypeDocument, MovementTypeId>
+interface MovementTypeRepository: MongoRepository<MovementTypeDocument, MovementTypeId>

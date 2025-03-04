@@ -43,7 +43,7 @@ class LedgerLifecycleSaga : BaseSaga() {
         sendCommandAndWait(
             StartNextMonthCommand(
                 accountId = event.ledgerId.accountId,
-                balance = event.endBalance,
+                balance = event.closeBalance,
             ),
             event.javaClass.simpleName
         )
