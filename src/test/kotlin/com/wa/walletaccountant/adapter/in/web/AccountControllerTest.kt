@@ -36,7 +36,6 @@ import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import org.springframework.test.web.servlet.result.MockMvcResultHandlers
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
-import java.math.BigDecimal
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -151,7 +150,7 @@ class AccountControllerTest {
                 bankName = BCP,
                 name = "Mumia bcp",
                 accountType = CHECKING,
-                startingBalance = Money(BigDecimal.valueOf(1000.5), EUR),
+                startingBalance = Money(1000.5),
                 startingBalanceDate = startingBalanceDate1,
                 currency = EUR,
                 notes = "some notes",
@@ -267,10 +266,11 @@ class AccountControllerTest {
                 "bankName": "BCP",
                 "name": "Mumia bcp",
                 "accountType": "CHECKING",
-                "startingBalance": {"value": 1000.50, "currency": "EUR"},
+                "startingBalance": 1000.50,
                 "startingBalanceDate": "2014-08-26",
                 "currency": "EUR",
-                "notes": "some notes"
+                "notes": "some notes",
+                "currentMonth": "2014-08-01"
             }
             """.trimIndent()
                 .format(accountId.value.toString())
@@ -281,10 +281,11 @@ class AccountControllerTest {
                 bankName = BCP,
                 name = "Mumia bcp",
                 accountType = CHECKING,
-                startingBalance = Money(value = BigDecimal.valueOf(1000.50), currency = EUR),
+                startingBalance = Money(amount = 1000.50),
                 startingBalanceDate = startingBalanceDate1,
                 currency = EUR,
                 notes = "some notes",
+                currentMonth = Date.fromMonthYEar(startingBalanceDate1.month(), startingBalanceDate1.year()),
             )
 
         val query = ReadAccountById(accountId = accountId)
@@ -361,10 +362,11 @@ class AccountControllerTest {
                     "bankName": "BCP",
                     "name": "Mumia bcp",
                     "accountType": "CHECKING",
-                    "startingBalance": {"value": 1000.50, "currency": "EUR"},
+                    "startingBalance": 1000.50,
                     "startingBalanceDate": "2014-08-26",
                     "currency": "EUR",
-                    "notes": "some notes"
+                    "notes": "some notes",
+                    "currentMonth": "2014-08-01"
                 }
                 """.trimIndent()
                     .format(accountId1.value.toString())
@@ -376,9 +378,10 @@ class AccountControllerTest {
                     "bankName": "N26",
                     "name": "Mumia n26",
                     "accountType": "SAVINGS",
-                    "startingBalance": {"value": 101.09, "currency": "USD"},
+                    "startingBalance": 101.09,
                     "startingBalanceDate": "2013-12-26",
-                    "currency": "USD"
+                    "currency": "USD",
+                    "currentMonth": "2013-12-01"
                 }
                 """.trimIndent()
                     .format(accountId2.value.toString())
@@ -391,10 +394,11 @@ class AccountControllerTest {
                     bankName = BCP,
                     name = "Mumia bcp",
                     accountType = CHECKING,
-                    startingBalance = Money(value = BigDecimal.valueOf(1000.50), currency = EUR),
+                    startingBalance = Money(amount = 1000.50),
                     startingBalanceDate = startingBalanceDate1,
                     currency = EUR,
                     notes = "some notes",
+                    currentMonth = Date.fromMonthYEar(startingBalanceDate1.month(), startingBalanceDate1.year()),
                 )
             val model2 =
                 AccountModel(
@@ -402,10 +406,11 @@ class AccountControllerTest {
                     bankName = N26,
                     name = "Mumia n26",
                     accountType = SAVINGS,
-                    startingBalance = Money(value = BigDecimal.valueOf(101.09), currency = USD),
+                    startingBalance = Money(amount = 101.09),
                     startingBalanceDate = startingBalanceDate2,
                     currency = USD,
                     notes = "",
+                    currentMonth = Date.fromMonthYEar(startingBalanceDate2.month(), startingBalanceDate2.year()),
                 )
 
             return Stream.of(

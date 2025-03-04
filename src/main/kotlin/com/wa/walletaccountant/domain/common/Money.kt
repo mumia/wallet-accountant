@@ -1,31 +1,47 @@
 package com.wa.walletaccountant.domain.common
 
-import com.wa.walletaccountant.domain.common.exception.MismatchedMoneyCurrencyException
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonValue
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import com.wa.walletaccountant.common.serialization.MoneySerializer
 import java.math.BigDecimal
+import java.math.RoundingMode.HALF_UP
 
-data class Money(
-    val value: BigDecimal,
-    val currency: Currency,
-) {
+@JsonSerialize(using = MoneySerializer::class)
+class Money(private var amount: BigDecimal) {
+    constructor(amount: Int): this(BigDecimal(amount))
+    constructor(amount: Long): this(BigDecimal(amount))
+    @JsonCreator
+    constructor(amount: Double): this(BigDecimal(amount))
+
+    init {
+        amount = amount.setScale(2, HALF_UP)
+    }
+
     fun subtract(value: Money): Money {
-        checkCurrencyEquality(value.currency)
-
-        return Money(this.value.subtract(value.value), currency)
+        return Money(this.amount.subtract(value.amount).setScale(2, HALF_UP))
     }
 
     fun add(value: Money): Money {
-        checkCurrencyEquality(value.currency)
-
-        return Money(this.value.add(value.value), currency)
+        return Money(this.amount.add(value.amount).setScale(2, HALF_UP))
     }
 
-    private fun checkCurrencyEquality(givenCurrency: Currency) {
-        if (!this.currency.equals(givenCurrency)) {
-            throw MismatchedMoneyCurrencyException(this.currency, givenCurrency)
-        }
+    fun toBigDecimal(): BigDecimal {
+        return amount
     }
 
-    override fun toString(): String = "%s %s".format(value.toPlainString(), currency.toString())
+    fun toInvertedBigDecimal(): BigDecimal {
+        return amount * BigDecimal(-1)
+    }
+
+    fun isNegative(): Boolean {
+        return amount < BigDecimal.ZERO
+    }
+
+    @JsonValue
+    private fun toDouble(): Double = amount.toDouble()
+
+    override fun toString(): String = this.amount.toPlainString()
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -33,13 +49,11 @@ data class Money(
 
         other as Money
 
-        return value == other.value &&
-            currency == other.currency
+        return this.amount == other.amount
     }
 
     override fun hashCode(): Int {
-        var result = value.hashCode()
-        result = 31 * result + currency.hashCode()
+        val result = amount.hashCode()
 
         return result
     }

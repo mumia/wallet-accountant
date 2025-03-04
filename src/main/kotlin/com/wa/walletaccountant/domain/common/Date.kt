@@ -10,13 +10,14 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
 import java.time.temporal.ChronoUnit
 
-data class Date(
+data class Date
+private constructor(
     private val value: ZonedDateTime,
 ) {
     companion object {
         val UTC: ZoneId = ZoneId.of("UTC")
 
-        fun now(): Date = Date(ZonedDateTime.now().truncatedTo(ChronoUnit.DAYS))
+        fun now(): Date = Date(ZonedDateTime.now(UTC).truncatedTo(ChronoUnit.DAYS))
 
         @JsonCreator
         fun fromString(stringValue: String): Date =
@@ -27,12 +28,15 @@ data class Date(
                 ),
             )
 
+        fun fromMonthYEar(month: Month, year: Year): Date =
+            Date(zoneDateTimeFromMonthYear(month, year))
+
         fun nextMonth(month: Month, year: Year): Date =
-            Date(
-                ZonedDateTime
-                    .of(year.value, month.value, 1, 0, 0, 0, 0, UTC)
-                    .plusMonths(1)
-            )
+            Date(zoneDateTimeFromMonthYear(month, year).plusMonths(1))
+
+        private fun zoneDateTimeFromMonthYear(month: Month, year: Year): ZonedDateTime =
+            ZonedDateTime
+                .of(year.value, month.value, 1, 0, 0, 0, 0, UTC)
     }
 
     fun year(): Year = Year.of(value.year)
