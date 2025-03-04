@@ -5,6 +5,7 @@ import com.wa.walletaccountant.adapter.out.readmodel.account.repository.AccountR
 import com.wa.walletaccountant.application.model.account.AccountModel
 import com.wa.walletaccountant.application.port.out.AccountReadModelPort
 import com.wa.walletaccountant.domain.account.account.AccountId
+import com.wa.walletaccountant.domain.common.Date
 import org.springframework.stereotype.Service
 import java.util.Optional
 
@@ -14,6 +15,10 @@ class AccountReadModelAdapter(
 ) : AccountReadModelPort {
     override fun registerNewAccount(model: AccountModel) {
         accountRepository.save(AccountMapper.toDocument(model))
+    }
+
+    override fun updateCurrentMonth(id: AccountId, currentMonth: Date):Boolean {
+        return accountRepository.updateCurrentMonth(id, currentMonth = currentMonth)
     }
 
     override fun readAccount(id: AccountId): Optional<AccountModel> {

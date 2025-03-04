@@ -22,4 +22,5 @@ data class AccountDocument(
     val startingBalanceDate: Date,
     val currency: Currency,
     val notes: String?,
+    val currentMonth: Date,
 )
