@@ -9,10 +9,13 @@ import java.util.stream.Collectors
 
 @Service
 object LedgerMonthMapper {
-    fun toDocument(id: LedgerId, balance: Money): LedgerMonthDocument =
+    fun toDocument(id: LedgerId, initialBalance: Money): LedgerMonthDocument =
         LedgerMonthDocument(
             ledgerId = id,
-            balance = balance,
+            accountId = id.accountId,
+            month = id.month,
+            year = id.year,
+            initialBalance = initialBalance,
             transactions = emptySet(),
             closed = false,
         )
@@ -20,7 +23,10 @@ object LedgerMonthMapper {
     fun toDocument(model: LedgerMonthModel): LedgerMonthDocument =
         LedgerMonthDocument(
             ledgerId = model.ledgerId,
-            balance = model.balance,
+            accountId = model.accountId,
+            month = model.month,
+            year = model.year,
+            initialBalance = model.initialBalance,
             transactions = model.transactions
                 .stream()
                 .map { LedgerTransactionMapper.toDocument(it) }
@@ -28,16 +34,27 @@ object LedgerMonthMapper {
             closed = model.closed
         )
 
-    fun toModel(document: LedgerMonthDocument): LedgerMonthModel =
-        LedgerMonthModel(
+    fun toModel(document: LedgerMonthDocument): LedgerMonthModel {
+        var balance = document.initialBalance
+        val transactions = LinkedHashSet(
+            document.transactions
+                .map {
+                    balance = balance.add(it.amount)
+
+                    LedgerTransactionMapper.toModel(it)
+                }
+                .toSortedSet(compareBy { it.date.timestamp() })
+        )
+
+        return LedgerMonthModel(
             ledgerId = document.ledgerId,
-            balance = document.balance,
-            transactions = LinkedHashSet(
-                document.transactions
-                .stream()
-                .map { LedgerTransactionMapper.toModel(it) }
-                .collect(Collectors.toSet())
-            ),
+            accountId = document.accountId,
+            month = document.month,
+            year = document.year,
+            initialBalance = document.initialBalance,
+            balance = balance,
+            transactions = transactions,
             closed = document.closed,
         )
+    }
 }

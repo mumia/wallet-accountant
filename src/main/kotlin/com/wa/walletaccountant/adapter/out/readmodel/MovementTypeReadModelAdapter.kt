@@ -4,6 +4,7 @@ import com.wa.walletaccountant.adapter.out.readmodel.movementtype.mapper.Movemen
 import com.wa.walletaccountant.adapter.out.readmodel.movementtype.repository.MovementTypeRepository
 import com.wa.walletaccountant.application.model.movementtype.MovementTypeModel
 import com.wa.walletaccountant.application.port.out.MovementTypeReadModelPort
+import com.wa.walletaccountant.domain.account.account.AccountId
 import com.wa.walletaccountant.domain.movementtype.movementtype.MovementTypeId
 import org.springframework.stereotype.Service
 import java.util.Optional
@@ -17,7 +18,7 @@ class MovementTypeReadModelAdapter(
     }
 
     override fun readMovementType(movementTypeId: MovementTypeId): Optional<MovementTypeModel> {
-        val optionalMovementType = movementTypeRepository.findById(movementTypeId)
+        val optionalMovementType = movementTypeRepository.findById(movementTypeId.id())
         if (optionalMovementType.isEmpty) {
             return Optional.empty()
         }
@@ -31,4 +32,9 @@ class MovementTypeReadModelAdapter(
             .map { MovementTypeMapper.toModel(it) }
             .toSet()
 
+    override fun readMovementTypesForAccount(accountId: AccountId): Set<MovementTypeModel> =
+        movementTypeRepository
+            .findByAccountId(accountId)
+            .map { MovementTypeMapper.toModel(it) }
+            .toSet()
 }

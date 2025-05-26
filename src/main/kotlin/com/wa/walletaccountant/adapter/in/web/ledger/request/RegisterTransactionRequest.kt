@@ -13,12 +13,15 @@ data class RegisterTransactionRequest(
     @field:UUID
     val accountId: String,
     @field:UUID(allowEmpty = true)
-    val movementTypeId: String?,
+    val transactionTypeId: String?,
     @field:NotNull
     @field:NumberFormat(style = CURRENCY)
     val amount: BigDecimal,
     @field:NotEmpty
-    @field:Pattern(regexp = "([0-9]{4}-[0-9]{2}-[0-9]{2})", message = "Expected date format is YYYY-MM-DD")
+    @field:Pattern(
+        regexp = "^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.000Z)$",
+        message = "Expected date format is YYYY-MM-DDTHH:MM:SS.000Z"
+    )
     val date: String,
     @field:UUID(allowEmpty = true)
     val sourceAccountId: String?,

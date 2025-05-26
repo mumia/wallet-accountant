@@ -18,5 +18,5 @@ data class MovementTypeDocument(
     val sourceAccountId: AccountId?,
     val description: String,
     val notes: String?,
-    val tagIds: Set<TagId>
+    val tags: Set<TagId>
 )

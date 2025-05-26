@@ -62,7 +62,7 @@ class TagCategoryController(
     @GetMapping(path = ["/tags" ], produces = ["application/json"])
     @ResponseStatus(OK)
     fun readAllAccounts(
-        @RequestParam(required = false) filters: Set<String>?,
+        @RequestParam(name = "filters[]", required = false) filters: Set<String>?,
     ): CompletableFuture<MutableList<TagCategoryModel>> =
         queryGateway.query(
             ReadTags(filters?.map { TagId.fromString(it) }?.toSet()),

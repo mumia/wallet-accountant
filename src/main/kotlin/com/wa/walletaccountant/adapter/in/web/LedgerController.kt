@@ -1,6 +1,7 @@
 package com.wa.walletaccountant.adapter.`in`.web
 
 import com.wa.walletaccountant.adapter.`in`.web.ledger.mapper.LedgerMapper
+import com.wa.walletaccountant.adapter.`in`.web.ledger.request.CloseBalanceForMonthRequest
 import com.wa.walletaccountant.adapter.`in`.web.ledger.request.RegisterTransactionRequest
 import com.wa.walletaccountant.adapter.`in`.web.ledger.request.TransactionRegisteredResponse
 import com.wa.walletaccountant.application.model.ledger.LedgerMonthModel
@@ -18,6 +19,7 @@ import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
@@ -55,4 +57,12 @@ class LedgerController(
                     .map { ResponseEntity.ok(it) }
                     .orElseGet { ResponseEntity.notFound().build() }
             }
+
+    @PutMapping(path = ["ledger"], consumes = ["application/json"])
+    fun closeBalance(
+        @RequestBody @Valid request: CloseBalanceForMonthRequest
+    ): CompletableFuture<ResponseEntity<Unit>> =
+        commandGateway
+            .send<Unit>(LedgerMapper.toCloseBalanceCommand(request))
+            .thenApply { _ -> return@thenApply ResponseEntity.ok().build() }
 }

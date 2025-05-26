@@ -1,7 +1,7 @@
 package com.wa.walletaccountant.application.model.ledger
 
+import com.wa.walletaccountant.domain.common.DateTime
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.ledger.TransactionId
 import com.wa.walletaccountant.domain.movementtype.movementtype.MovementAction
@@ -13,7 +13,7 @@ data class LedgerTransactionModel(
     val movementTypeId: MovementTypeId?,
     val action: MovementAction,
     val amount: Money,
-    val date: Date,
+    val date: DateTime,
     val sourceAccountId: AccountId?,
     val description: String,
     val notes: String?,

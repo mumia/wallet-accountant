@@ -4,6 +4,7 @@ import com.wa.walletaccountant.application.model.movementtype.MovementTypeModel
 import com.wa.walletaccountant.application.port.out.MovementTypeReadModelPort
 import com.wa.walletaccountant.application.query.movementtype.ReadAllMovementTypes
 import com.wa.walletaccountant.application.query.movementtype.ReadMovementTypeById
+import com.wa.walletaccountant.application.query.movementtype.ReadMovementTypesForAccount
 import org.axonframework.queryhandling.QueryHandler
 import org.springframework.stereotype.Component
 import java.util.Optional
@@ -18,4 +19,8 @@ class MovementTypeQueryHandler(
 
     @QueryHandler
     fun readAllMovementTypes(query: ReadAllMovementTypes): Set<MovementTypeModel> = readModel.readAllMovementTypes()
+
+    @QueryHandler
+    fun readMovementTypesForAccount(query: ReadMovementTypesForAccount): Set<MovementTypeModel> =
+        readModel.readMovementTypesForAccount(query.accountId)
 }

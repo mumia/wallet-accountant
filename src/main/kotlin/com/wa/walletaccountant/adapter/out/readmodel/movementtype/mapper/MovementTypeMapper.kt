@@ -14,7 +14,7 @@ object MovementTypeMapper {
             sourceAccountId = model.sourceAccountId,
             description = model.description,
             notes = model.notes,
-            tagIds = model.tagIds
+            tags = model.tagIds
         )
 
     fun toModel(document: MovementTypeDocument): MovementTypeModel =
@@ -25,6 +25,6 @@ object MovementTypeMapper {
             sourceAccountId = document.sourceAccountId,
             description = document.description,
             notes = document.notes,
-            tagIds = document.tagIds,
+            tagIds = document.tags,
         )
 }

@@ -6,7 +6,7 @@ import com.wa.walletaccountant.application.model.ledger.LedgerTransactionModel
 import com.wa.walletaccountant.application.query.ledger.ReadCurrentMonthLedger
 import com.wa.walletaccountant.common.IdGenerator
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
+import com.wa.walletaccountant.domain.common.DateTime
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.command.RegisterTransactionCommand
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
@@ -69,7 +69,7 @@ class LedgerControllerTest {
             {
               "name": "date",
               "value": "201-08-26",
-              "reason": "Expected date format is YYYY-MM-DD"
+              "reason": "Expected date format is YYYY-MM-DDTHH:MM:SS.000Z"
             },
             {
               "name": "accountId",
@@ -124,7 +124,7 @@ class LedgerControllerTest {
         val accountId = AccountId(UUID.randomUUID())
         val tagId = TagId(UUID.randomUUID())
         val transactionId = TransactionId(UUID.randomUUID())
-        val date = Date.fromString("2025-02-26")
+        val date = DateTime.fromString("2025-02-26T01:02:03.456Z")
 
         val request =
             """
@@ -231,14 +231,14 @@ class LedgerControllerTest {
             year = Year.of(2025)
         )
         val transactionId = TransactionId.fromString("44df052d-13fc-4900-b792-6d5075fe1973")
-        val dateStr = "2025-02-22"
+        val dateStr = "2025-02-22T01:02:03Z"
         val description = "transaction description"
         val tagId = TagId.fromString("17c9575b-b43e-4c7f-bbf5-a7f36bc1af1f")
 
         val response =
             """
             {
-                "ledgerId": {"accountId":"83bf7fcb-d537-4596-921d-5e7103d2bd3f","month":"MAY","year":"2025"},
+                "ledgerId": {"accountId":"83bf7fcb-d537-4596-921d-5e7103d2bd3f","month":"MAY","year":2025},
                 "balance": 1000.5,
                 "transactions": [
                     {
@@ -266,6 +266,10 @@ class LedgerControllerTest {
         val model =
             LedgerMonthModel(
                 ledgerId = ledgerId,
+                accountId = ledgerId.accountId,
+                month = ledgerId.month,
+                year = ledgerId.year,
+                initialBalance = Money(amount = 1000.50),
                 balance = Money(amount = 1000.50),
                 transactions = setOf(
                     LedgerTransactionModel(
@@ -273,7 +277,7 @@ class LedgerControllerTest {
                         movementTypeId = null,
                         action = Debit,
                         amount = Money(amount = 100.12),
-                        date = Date.fromString(dateStr),
+                        date = DateTime.fromString(dateStr),
                         sourceAccountId = null,
                         description = description,
                         notes = null,

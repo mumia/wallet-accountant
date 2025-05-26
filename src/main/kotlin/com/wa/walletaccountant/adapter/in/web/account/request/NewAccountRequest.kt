@@ -1,12 +1,12 @@
 package com.wa.walletaccountant.adapter.`in`.web.account.request
 
+import com.wa.walletaccountant.adapter.`in`.web.constraint.DateDayFormatConstraint
 import com.wa.walletaccountant.adapter.`in`.web.constraint.EnumConstraint
 import com.wa.walletaccountant.domain.account.account.AccountType
 import com.wa.walletaccountant.domain.account.account.BankName
 import com.wa.walletaccountant.domain.common.Currency
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotEmpty
-import jakarta.validation.constraints.Pattern
 import java.math.BigDecimal
 
 data class NewAccountRequest(
@@ -27,7 +27,7 @@ data class NewAccountRequest(
     @field:Min(value = 0)
     val startingBalance: BigDecimal,
     @field:NotEmpty
-    @field:Pattern(regexp = "([0-9]{4}-[0-9]{2}-[0-9]{2})", message = "Expected date format is YYYY-MM-DD")
+    @field:DateDayFormatConstraint
     val startingBalanceDate: String,
     @field:NotEmpty
     @field:EnumConstraint(

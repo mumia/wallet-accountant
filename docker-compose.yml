@@ -2,6 +2,9 @@ services:
   axonserver:
     hostname: axonserver
     image: axoniq/axonserver:2024.1.4-jdk-17
+    environment:
+      - AXONIQ_AXONSERVER_DEVMODE_ENABLED=true
+      - AXONIQ_AXONSERVER_STANDALONE=true
     ports:
       - '8024:8024'
       - '8124:8124'

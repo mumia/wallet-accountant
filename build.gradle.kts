@@ -35,6 +35,9 @@ dependencies {
     implementation("org.axonframework:axon-server-connector")
     implementation("org.axonframework.extensions.kotlin:axon-kotlin")
 
+    // Swagger
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.0.2")
+
     // Helper
     implementation("org.apache.commons:commons-text:1.12.0")
     implementation("com.google.guava:guava:33.2.1-jre")

@@ -22,13 +22,15 @@ private constructor(
         @JsonCreator
         fun fromString(stringValue: String): Date =
             Date(
-                ZonedDateTime.parse(
-                    stringValue + "T00:00:00Z",
-                    DateTimeFormatter.ISO_INSTANT.withZone(UTC),
-                ),
+                ZonedDateTime
+                    .parse(
+                        if (stringValue.length == 10) stringValue + "T00:00:00Z" else stringValue,
+                        DateTimeFormatter.ISO_INSTANT.withZone(UTC),
+                    )
+                    .truncatedTo(ChronoUnit.DAYS),
             )
 
-        fun fromMonthYEar(month: Month, year: Year): Date =
+        fun fromMonthYear(month: Month, year: Year): Date =
             Date(zoneDateTimeFromMonthYear(month, year))
 
         fun nextMonth(month: Month, year: Year): Date =

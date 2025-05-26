@@ -5,6 +5,8 @@ import org.axonframework.commandhandling.gateway.CommandGateway
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
+import java.util.concurrent.TimeUnit.SECONDS
+import java.util.concurrent.TimeoutException
 
 abstract class BaseSaga {
     @Transient
@@ -17,15 +19,12 @@ abstract class BaseSaga {
 
     fun <T : Any> sendCommandAndWait(command: T, eventName: String) {
         try {
-            val result = commandGateway.sendAndWait<T>(command)
-
-            if (result === null) {
-                throw SagaEventHandlingTimedOut(this.javaClass.simpleName, eventName)
-            }
-        } catch (exception: SagaEventHandlingTimedOut) {
-            log.warn("${exception.javaClass.simpleName}: ${exception.message}")
-
-            throw exception
+            commandGateway.send<T>(command).get(5, SECONDS) // Throws TimeoutException
+            // If we get here, we got a response (null or not)
+        } catch (exception: TimeoutException) {
+            handleTimeoutOrInterruption(exception, eventName)
+        } catch (exception: InterruptedException) {
+            handleTimeoutOrInterruption(exception, eventName)
         } catch (exception: Throwable) {
             var cause: Throwable? = exception
             var previousCause: Throwable? = null
@@ -44,5 +43,13 @@ abstract class BaseSaga {
 
             throw exception
         }
+    }
+
+    private fun handleTimeoutOrInterruption(exception: Exception, eventName: String) {
+        val newException = SagaEventHandlingTimedOut(this.javaClass.simpleName, eventName, exception)
+
+        log.warn("${newException.javaClass.simpleName}: ${newException.message}")
+
+        throw newException
     }
 }

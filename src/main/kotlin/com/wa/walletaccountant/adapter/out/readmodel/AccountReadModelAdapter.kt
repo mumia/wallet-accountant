@@ -3,9 +3,9 @@ package com.wa.walletaccountant.adapter.out.readmodel
 import com.wa.walletaccountant.adapter.out.readmodel.account.mapper.AccountMapper
 import com.wa.walletaccountant.adapter.out.readmodel.account.repository.AccountRepository
 import com.wa.walletaccountant.application.model.account.AccountModel
+import com.wa.walletaccountant.application.model.account.AccountModel.ActiveMonth
 import com.wa.walletaccountant.application.port.out.AccountReadModelPort
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
 import org.springframework.stereotype.Service
 import java.util.Optional
 
@@ -17,12 +17,12 @@ class AccountReadModelAdapter(
         accountRepository.save(AccountMapper.toDocument(model))
     }
 
-    override fun updateCurrentMonth(id: AccountId, currentMonth: Date):Boolean {
-        return accountRepository.updateCurrentMonth(id, currentMonth = currentMonth)
+    override fun updateActiveMonth(id: AccountId, activeMonth: ActiveMonth):Boolean {
+        return accountRepository.updateActiveMonth(id, activeMonth = activeMonth)
     }
 
     override fun readAccount(id: AccountId): Optional<AccountModel> {
-        val optionalAccount = accountRepository.findById(id)
+        val optionalAccount = accountRepository.findById(id.id())
         if (optionalAccount.isEmpty) {
             return Optional.empty()
         }
@@ -37,6 +37,6 @@ class AccountReadModelAdapter(
             .toSet()
 
     override fun accountExistsById(accountId: AccountId): Boolean {
-        return accountRepository.existsById(accountId)
+        return accountRepository.existsById(accountId.id())
     }
 }

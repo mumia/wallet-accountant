@@ -1,7 +1,7 @@
 package com.wa.walletaccountant.application.model.ledger
 
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
+import com.wa.walletaccountant.domain.common.DateTime
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 import com.wa.walletaccountant.domain.ledger.ledger.TransactionId
@@ -21,31 +21,16 @@ class LedgerMonthModelTest {
     private val year = Year.of(2024)
     private val balance = Money(amount = 10000)
     private val amount = Money(amount = 1000)
-    private val date = "2025-02-01"
+    private val date = "2025-02-01T01:02:03.456Z"
 
     @Test
     fun shouldBeTheSame() {
         val model1 = LedgerMonthModel(
             ledgerId = LedgerId(AccountId.fromString(accountId), month, year),
-            balance = balance,
-            transactions = setOf(
-                LedgerTransactionModel(
-                    transactionId = TransactionId.fromString(transactionId),
-                    movementTypeId = null,
-                            action = Debit,
-                            amount = amount,
-                            date = Date.fromString(date),
-                            sourceAccountId = null,
-                            description = "a description",
-                            notes = "No notes",
-                            tagIds = setOf(TagId.fromString(tagId)),
-                )
-            ),
-            closed = false,
-        )
-
-        val model2 = LedgerMonthModel(
-            ledgerId = LedgerId(AccountId.fromString(accountId), month, year),
+            accountId = AccountId.fromString(accountId),
+            month = month,
+            year = year,
+            initialBalance = balance,
             balance = balance,
             transactions = setOf(
                 LedgerTransactionModel(
@@ -53,7 +38,30 @@ class LedgerMonthModelTest {
                     movementTypeId = null,
                     action = Debit,
                     amount = amount,
-                    date = Date.fromString(date),
+                    date = DateTime.fromString(date),
+                    sourceAccountId = null,
+                    description = "a description",
+                    notes = "No notes",
+                    tagIds = setOf(TagId.fromString(tagId)),
+                )
+            ),
+            closed = false,
+        )
+
+        val model2 = LedgerMonthModel(
+            ledgerId = LedgerId(AccountId.fromString(accountId), month, year),
+            accountId = AccountId.fromString(accountId),
+            month = month,
+            year = year,
+            initialBalance = balance,
+            balance = balance,
+            transactions = setOf(
+                LedgerTransactionModel(
+                    transactionId = TransactionId.fromString(transactionId),
+                    movementTypeId = null,
+                    action = Debit,
+                    amount = amount,
+                    date = DateTime.fromString(date),
                     sourceAccountId = null,
                     description = "a description",
                     notes = "No notes",

@@ -1,8 +1,8 @@
 package com.wa.walletaccountant.adapter.out.readmodel.account.repository.accountrepository
 
+import com.wa.walletaccountant.application.model.account.AccountModel.ActiveMonth
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
 
 interface AccountRepositoryCustom {
-    fun updateCurrentMonth(id: AccountId, currentMonth: Date): Boolean
+    fun updateActiveMonth(id: AccountId, activeMonth: ActiveMonth): Boolean
 }

@@ -1,7 +1,7 @@
 package com.wa.walletaccountant.domain.ledger
 
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
+import com.wa.walletaccountant.domain.common.DateTime
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.command.CloseBalanceForMonthCommand
 import com.wa.walletaccountant.domain.ledger.command.OpenBalanceForMonthCommand
@@ -40,6 +40,7 @@ class LedgerAggregrateTest {
         private val movementTypeId = MovementTypeId.fromString("c5be2bf8-4ffa-4b3e-a152-518cec206b1d")
         private val tagId1 = TagId.fromString("e661ea45-deba-4e88-98e0-eb0d53ce3ab0")
         private val tagId2 = TagId.fromString("d869c9d6-b8e4-4b5c-bda0-d0a341bd4dbc")
+        private val dateNow = DateTime.now()
 
         val monthBalanceOpenedEvent =
             MonthBalanceOpenedEvent(
@@ -54,7 +55,7 @@ class LedgerAggregrateTest {
                 movementTypeId = null,
                 action = Credit,
                 amount = Money(amount = 15),
-                date = Date.now(),
+                date = dateNow,
                 sourceAccountId = null,
                 description = "a credit",
                 notes = "no notes",
@@ -68,7 +69,7 @@ class LedgerAggregrateTest {
                 movementTypeId = movementTypeId,
                 action = Debit,
                 amount = Money(amount = -15),
-                date = Date.now(),
+                date = dateNow,
                 sourceAccountId = null,
                 description = "a debit",
                 notes = "no notes",
@@ -158,7 +159,7 @@ class LedgerAggregrateTest {
                     transactionId = transactionId,
                     movementTypeId = movementTypeId,
                     amount = Money(amount = -15),
-                    date = Date.now(),
+                    date = dateNow,
                     sourceAccountId = null,
                     description = "a debit",
                     notes = "no notes",

@@ -22,8 +22,9 @@ import org.axonframework.spring.stereotype.Aggregate
 @Aggregate
 class LedgerAggregrate {
     @AggregateIdentifier
-    private var aggregateId: LedgerId? = null
-    private lateinit var currentBalance: Money
+    private lateinit var aggregateId: LedgerId
+    private lateinit var startBalance: Money
+    private lateinit var transactions: MutableMap<Long, Money>
 
     @CommandHandler
     @CreationPolicy(AggregateCreationPolicy.ALWAYS)
@@ -56,6 +57,11 @@ class LedgerAggregrate {
 
     @CommandHandler
     fun on(command: CloseBalanceForMonthCommand) {
+        var currentBalance = startBalance
+        for (value in transactions.values) {
+            currentBalance = currentBalance.add(value)
+        }
+
         if (currentBalance != command.endBalance) {
             throw CloseBalanceDoesNotMatchCurrentBalanceException(
                 ledgerId = command.ledgerId,
@@ -75,17 +81,12 @@ class LedgerAggregrate {
     @EventSourcingHandler
     fun on(event: MonthBalanceOpenedEvent) {
         aggregateId = event.ledgerId
-        currentBalance = event.startBalance
+        startBalance = event.startBalance
+        transactions = sortedMapOf()
     }
 
     @EventSourcingHandler
     fun on(event: TransactionRegisteredEvent) {
-        currentBalance = currentBalance.add(event.amount)
-
+        transactions.put(event.date.timestamp(), event.amount)
     }
-
-//    @EventSourcingHandler
-//    fun on(event: MonthEndedEvent) {
-// TODO: mark month has ended?
-//    }
 }

@@ -46,7 +46,7 @@ class AccountAggregate {
 
         applyEvent(
             NextMonthStartedEvent(
-                accountId = command.accountId,
+                accountId = aggregateId,
                 balance = command.balance,
                 month = nextMonthDate.month(),
                 year = nextMonthDate.year(),

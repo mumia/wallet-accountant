@@ -6,7 +6,9 @@ import com.wa.walletaccountant.adapter.`in`.web.movementtype.response.NewMovemen
 import com.wa.walletaccountant.application.model.movementtype.MovementTypeModel
 import com.wa.walletaccountant.application.query.movementtype.ReadAllMovementTypes
 import com.wa.walletaccountant.application.query.movementtype.ReadMovementTypeById
+import com.wa.walletaccountant.application.query.movementtype.ReadMovementTypesForAccount
 import com.wa.walletaccountant.common.IdGenerator
+import com.wa.walletaccountant.domain.account.account.AccountId
 import com.wa.walletaccountant.domain.movementtype.movementtype.MovementTypeId
 import jakarta.validation.Valid
 import org.axonframework.commandhandling.gateway.CommandGateway
@@ -65,4 +67,14 @@ class MovementTypeController(
     @ResponseStatus(HttpStatus.OK)
     fun readAllMovementTypes(): CompletableFuture<MutableList<MovementTypeModel>>? =
         queryGateway.query(ReadAllMovementTypes(), ResponseTypes.multipleInstancesOf(MovementTypeModel::class.java))
+
+    @GetMapping(path = ["movement-types/account/{accountId}"], produces = ["application/json"])
+    @ResponseStatus(HttpStatus.OK)
+    fun readMovementTypesForAccount(
+        @PathVariable @UUID(message = "Invalid account id, must be a valid UUID") accountId: String,
+    ): CompletableFuture<MutableList<MovementTypeModel>>? =
+        queryGateway.query(
+            ReadMovementTypesForAccount(AccountId.fromString(accountId)),
+            ResponseTypes.multipleInstancesOf(MovementTypeModel::class.java)
+        )
 }

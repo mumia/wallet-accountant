@@ -4,14 +4,11 @@ import com.wa.walletaccountant.adapter.out.readmodel.ledger.document.LedgerMonth
 import com.wa.walletaccountant.adapter.out.readmodel.ledger.document.LedgerTransactionDocument
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
-import com.wa.walletaccountant.domain.movementtype.movementtype.MovementAction.Debit
-import org.bson.types.Decimal128
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
-import java.math.BigDecimal
 
 class LedgerRepositoryCustomImpl
 @Autowired
@@ -23,16 +20,7 @@ constructor(
     }
 
     override fun registerTransaction(id: LedgerId, transaction: LedgerTransactionDocument): Boolean {
-        val amount: BigDecimal
-        if (transaction.action == Debit) {
-            amount = transaction.amount.toInvertedBigDecimal()
-        } else {
-            amount = transaction.amount.toBigDecimal()
-        }
-
-        val update = Update()
-            .addToSet("transactions", transaction)
-            .inc("balance.amount", Decimal128(amount))
+        val update = Update().addToSet("transactions", transaction)
 
         return updateLedgerMonth(id, update)
     }
