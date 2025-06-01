@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
 
-class AccountIdTest {
+class AccountAggregateIdTest {
     @Test
     fun areTheSame() {
         val accountId1 = AccountId.fromString("67f51f27-1070-46d7-b651-98fd12038832")

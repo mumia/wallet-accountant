@@ -6,8 +6,12 @@ import com.wa.walletaccountant.domain.account.account.BankName
 import com.wa.walletaccountant.domain.common.Currency
 import com.wa.walletaccountant.domain.common.Date
 import com.wa.walletaccountant.domain.common.Money
+import io.swagger.v3.oas.annotations.media.Schema
+import java.time.Month
+import java.time.Year
 
 data class AccountModel(
+    val aggregateId: String,
     val accountId: AccountId,
     val bankName: BankName,
     val name: String,
@@ -16,5 +20,11 @@ data class AccountModel(
     val startingBalanceDate: Date,
     val currency: Currency,
     val notes: String?,
-    val currentMonth: Date,
-)
+    val activeMonth: ActiveMonth,
+) {
+    data class ActiveMonth(
+        val month: Month,
+        @Schema(type = "integer", format = "int32")
+        val year: Year,
+    )
+}

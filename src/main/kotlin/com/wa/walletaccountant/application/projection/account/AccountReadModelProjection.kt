@@ -1,10 +1,10 @@
 package com.wa.walletaccountant.application.projection.account
 
 import com.wa.walletaccountant.application.model.account.AccountModel
+import com.wa.walletaccountant.application.model.account.AccountModel.ActiveMonth
 import com.wa.walletaccountant.application.port.out.AccountReadModelPort
 import com.wa.walletaccountant.domain.account.event.NewAccountRegisteredEvent
 import com.wa.walletaccountant.domain.account.event.NextMonthStartedEvent
-import com.wa.walletaccountant.domain.common.Date
 import org.axonframework.config.ProcessingGroup
 import org.axonframework.eventhandling.EventHandler
 import org.springframework.stereotype.Component
@@ -18,6 +18,7 @@ class AccountReadModelProjection(
     fun on(event: NewAccountRegisteredEvent) {
         readModelPort.registerNewAccount(
             AccountModel(
+                event.accountId.id(),
                 event.accountId,
                 event.bankName,
                 event.name,
@@ -26,20 +27,20 @@ class AccountReadModelProjection(
                 event.startingBalanceDate,
                 event.currency,
                 event.notes,
-                event.startingBalanceDate,
+                ActiveMonth(event.startingBalanceDate.month(), event.startingBalanceDate.year()),
             ),
         )
     }
 
     @EventHandler
     fun on(event: NextMonthStartedEvent) {
-        val didUpdate = readModelPort.updateCurrentMonth(
+        val didUpdate = readModelPort.updateActiveMonth(
             id = event.accountId,
-            currentMonth = Date.fromMonthYEar(event.month, event.year)
+            activeMonth = ActiveMonth(event.month, event.year)
         )
 
         if (!didUpdate) {
-            throw CurrentMonthUpdateFailureException(
+            throw ActiveMonthUpdateFailureException(
                 accountId = event.accountId,
                 month = event.month,
                 year = event.year

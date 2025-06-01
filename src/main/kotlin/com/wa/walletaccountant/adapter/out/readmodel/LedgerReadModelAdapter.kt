@@ -18,8 +18,8 @@ class LedgerReadModelAdapter(
     private val repository: LedgerRepository,
     private val accountRepository: AccountRepository
 ) : LedgerReadModelPort {
-    override fun openMonthBalance(id: LedgerId, balance: Money) {
-        repository.save(LedgerMonthMapper.toDocument(id, balance))
+    override fun openMonthBalance(id: LedgerId, initialBalance: Money) {
+        repository.save(LedgerMonthMapper.toDocument(id, initialBalance))
     }
 
     override fun closeMonthBalance(id: LedgerId, balance: Money): Boolean {
@@ -31,7 +31,7 @@ class LedgerReadModelAdapter(
     }
 
     override fun readCurrentMonthLedger(accountId: AccountId): Optional<LedgerMonthModel> {
-        val optionalAccount = accountRepository.findById(accountId)
+        val optionalAccount = accountRepository.findById(accountId.id())
 
         if (optionalAccount.isEmpty) {
             return Optional.empty()
@@ -40,8 +40,8 @@ class LedgerReadModelAdapter(
         val account = optionalAccount.get()
         val ledgerId = LedgerId(
             accountId = accountId,
-            month = account.currentMonth.month(),
-            year = account.currentMonth.year(),
+            month = account.activeMonth.month,
+            year = account.activeMonth.year,
         )
 
         val optionalLedgerMonth = repository.findById(ledgerId)

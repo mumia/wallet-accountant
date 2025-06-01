@@ -1,15 +1,12 @@
 package com.wa.walletaccountant.domain.ledger.ledger
 
 import com.wa.walletaccountant.domain.account.account.AccountId
+import com.wa.walletaccountant.domain.common.AggregateId
 import java.time.Month
 import java.time.Year
 import java.util.UUID
 
-data class LedgerId(val accountId: AccountId, val month: Month, val year: Year) {
-    fun id(): String {
-        return idUUID().toString()
-    }
-
+data class LedgerId(val accountId: AccountId, val month: Month, val year: Year): AggregateId() {
     fun idUUID(): UUID {
         return UUID
             .nameUUIDFromBytes(
@@ -17,6 +14,10 @@ data class LedgerId(val accountId: AccountId, val month: Month, val year: Year) 
                     .format(accountId.toString(), month.value, year.value)
                     .toByteArray()
             )
+    }
+
+    override fun id(): String {
+        return idUUID().toString()
     }
 
     override fun toString(): String {

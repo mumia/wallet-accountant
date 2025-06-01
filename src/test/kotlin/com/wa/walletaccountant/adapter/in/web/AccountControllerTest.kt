@@ -2,6 +2,7 @@ package com.wa.walletaccountant.adapter.`in`.web
 
 import com.ninjasquad.springmockk.MockkBean
 import com.wa.walletaccountant.application.model.account.AccountModel
+import com.wa.walletaccountant.application.model.account.AccountModel.ActiveMonth
 import com.wa.walletaccountant.application.query.account.ReadAccountById
 import com.wa.walletaccountant.application.query.account.ReadAllAccounts
 import com.wa.walletaccountant.common.IdGenerator
@@ -270,13 +271,15 @@ class AccountControllerTest {
                 "startingBalanceDate": "2014-08-26",
                 "currency": "EUR",
                 "notes": "some notes",
-                "currentMonth": "2014-08-01"
+                "activeMonth": {"year": 2014, "month": "AUGUST"}
             }
-            """.trimIndent()
+            """
+                .trimIndent()
                 .format(accountId.value.toString())
 
         val model =
             AccountModel(
+                aggregateId = accountId.id(),
                 accountId = accountId,
                 bankName = BCP,
                 name = "Mumia bcp",
@@ -285,7 +288,7 @@ class AccountControllerTest {
                 startingBalanceDate = startingBalanceDate1,
                 currency = EUR,
                 notes = "some notes",
-                currentMonth = Date.fromMonthYEar(startingBalanceDate1.month(), startingBalanceDate1.year()),
+                activeMonth = ActiveMonth(startingBalanceDate1.month(), startingBalanceDate1.year()),
             )
 
         val query = ReadAccountById(accountId = accountId)
@@ -366,7 +369,7 @@ class AccountControllerTest {
                     "startingBalanceDate": "2014-08-26",
                     "currency": "EUR",
                     "notes": "some notes",
-                    "currentMonth": "2014-08-01"
+                    "activeMonth": {"year": 2014, "month": "AUGUST"}
                 }
                 """.trimIndent()
                     .format(accountId1.value.toString())
@@ -381,7 +384,7 @@ class AccountControllerTest {
                     "startingBalance": 101.09,
                     "startingBalanceDate": "2013-12-26",
                     "currency": "USD",
-                    "currentMonth": "2013-12-01"
+                    "activeMonth": {"year": 2013, "month": "DECEMBER"}
                 }
                 """.trimIndent()
                     .format(accountId2.value.toString())
@@ -390,6 +393,7 @@ class AccountControllerTest {
 
             val model1 =
                 AccountModel(
+                    aggregateId = accountId1.id(),
                     accountId = accountId1,
                     bankName = BCP,
                     name = "Mumia bcp",
@@ -398,10 +402,11 @@ class AccountControllerTest {
                     startingBalanceDate = startingBalanceDate1,
                     currency = EUR,
                     notes = "some notes",
-                    currentMonth = Date.fromMonthYEar(startingBalanceDate1.month(), startingBalanceDate1.year()),
+                    activeMonth = ActiveMonth(startingBalanceDate1.month(), startingBalanceDate1.year()),
                 )
             val model2 =
                 AccountModel(
+                    aggregateId = accountId2.id(),
                     accountId = accountId2,
                     bankName = N26,
                     name = "Mumia n26",
@@ -410,7 +415,7 @@ class AccountControllerTest {
                     startingBalanceDate = startingBalanceDate2,
                     currency = USD,
                     notes = "",
-                    currentMonth = Date.fromMonthYEar(startingBalanceDate2.month(), startingBalanceDate2.year()),
+                    activeMonth = ActiveMonth(startingBalanceDate2.month(), startingBalanceDate2.year()),
                 )
 
             return Stream.of(

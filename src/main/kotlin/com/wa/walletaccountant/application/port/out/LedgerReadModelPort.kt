@@ -8,7 +8,7 @@ import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 import java.util.Optional
 
 interface LedgerReadModelPort {
-    fun openMonthBalance(id: LedgerId, balance: Money)
+    fun openMonthBalance(id: LedgerId, initialBalance: Money)
 
     fun closeMonthBalance(id: LedgerId, balance: Money): Boolean
 

@@ -58,9 +58,7 @@ class TagCategoryReadModelAdapter(
     override fun tagExistsByName(tagName: String): Boolean = tagCategoryRepository.tagExistsByName(tagName)
 
     override fun tagCategoryExistsById(tagCategoryId: TagCategoryId): Boolean =
-        tagCategoryRepository.existsById(
-            tagCategoryId,
-        )
+        tagCategoryRepository.existsById(tagCategoryId)
 
     override fun tagCategoryExistsByName(tagCategoryName: String): Boolean =
         tagCategoryRepository.tagCategoryExistsByName(

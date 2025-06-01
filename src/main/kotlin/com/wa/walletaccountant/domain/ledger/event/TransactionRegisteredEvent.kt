@@ -1,7 +1,7 @@
 package com.wa.walletaccountant.domain.ledger.event
 
+import com.wa.walletaccountant.domain.common.DateTime
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 import com.wa.walletaccountant.domain.ledger.ledger.TransactionId
@@ -15,7 +15,7 @@ data class TransactionRegisteredEvent(
     val movementTypeId: MovementTypeId?,
     val action: MovementAction,
     val amount: Money,
-    val date: Date,
+    val date: DateTime,
     val sourceAccountId: AccountId?,
     val description: String,
     val notes: String?,

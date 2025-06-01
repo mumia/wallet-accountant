@@ -5,7 +5,7 @@ import com.wa.walletaccountant.adapter.out.readmodel.ledger.repository.LedgerRep
 import com.wa.walletaccountant.application.model.ledger.LedgerMonthModel
 import com.wa.walletaccountant.application.model.ledger.LedgerTransactionModel
 import com.wa.walletaccountant.domain.account.account.AccountId
-import com.wa.walletaccountant.domain.common.Date
+import com.wa.walletaccountant.domain.common.DateTime
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 import com.wa.walletaccountant.domain.ledger.ledger.TransactionId
@@ -89,6 +89,10 @@ constructor(
         assertEquals(
             LedgerMonthModel(
                 ledgerId = ledgerId1,
+                accountId = ledgerId1.accountId,
+                month = ledgerId1.month,
+                year = ledgerId1.year,
+                initialBalance = balance,
                 balance = balance,
                 transactions = emptySet(),
                 closed = false,
@@ -106,6 +110,10 @@ constructor(
         assertEquals(
             LedgerMonthModel(
                 ledgerId = ledgerId1,
+                accountId = ledgerId1.accountId,
+                month = ledgerId1.month,
+                year = ledgerId1.year,
+                initialBalance = balance,
                 balance = balance,
                 transactions = emptySet(),
                 closed = false,
@@ -113,15 +121,18 @@ constructor(
             result1.get(),
         )
 
-        val closeBalance = Money(amount = 10)
-        val closeResult = ledgerReadModelAdapter.closeMonthBalance(ledgerId1, closeBalance)
+        val closeResult = ledgerReadModelAdapter.closeMonthBalance(ledgerId1, balance)
         assertTrue(closeResult)
 
         result1 = ledgerReadModelAdapter.readLedgerMonth(ledgerId1)
         assertEquals(
             LedgerMonthModel(
                 ledgerId = ledgerId1,
-                balance = closeBalance,
+                accountId = ledgerId1.accountId,
+                month = ledgerId1.month,
+                year = ledgerId1.year,
+                initialBalance = balance,
+                balance = balance,
                 transactions = emptySet(),
                 closed = true,
             ),
@@ -131,7 +142,7 @@ constructor(
 
     @Test
     fun testRegisterTransaction() {
-        val date = Date.fromString("2025-01-30")
+        val date = DateTime.fromString("2025-01-30T01:02:03.456Z")
 
         val transaction1 = LedgerTransactionModel(
             transactionId = transactionId1,
@@ -159,6 +170,10 @@ constructor(
 
         val ledgerNoTransactions = LedgerMonthModel(
             ledgerId = ledgerId1,
+            accountId = ledgerId1.accountId,
+            month = ledgerId1.month,
+            year = ledgerId1.year,
+            initialBalance = balance,
             balance = balance,
             transactions = setOf(),
             closed = false,
@@ -166,18 +181,27 @@ constructor(
 
         val ledgerFirstTransactions = LedgerMonthModel(
             ledgerId = ledgerId1,
-            balance = balance.subtract(transaction1.amount),
+            accountId = ledgerId1.accountId,
+            month = ledgerId1.month,
+            year = ledgerId1.year,
+            initialBalance = balance,
+            balance = balance.add(transaction1.amount),
             transactions = setOf(transaction1),
             closed = false,
         )
 
         val ledgerSecondTransaction = LedgerMonthModel(
             ledgerId = ledgerId1,
-            balance = balance.subtract(transaction1.amount).add(transaction2.amount),
+            accountId = ledgerId1.accountId,
+            month = ledgerId1.month,
+            year = ledgerId1.year,
+            initialBalance = balance,
+            balance = balance.add(transaction1.amount).add(transaction2.amount),
             transactions = setOf(transaction1, transaction2),
             closed = false,
         )
 
+        
         ledgerReadModelAdapter.openMonthBalance(ledgerId1, balance)
 
         assertEquals(ledgerNoTransactions, ledgerReadModelAdapter.readLedgerMonth(ledgerId1).get())
