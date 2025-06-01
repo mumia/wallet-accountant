@@ -15,6 +15,7 @@ import org.axonframework.messaging.responsetypes.ResponseTypes
 import org.axonframework.queryhandling.QueryGateway
 import org.hibernate.validator.constraints.UUID
 import org.springframework.http.ResponseEntity
+import org.springframework.scheduling.annotation.Async
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -34,6 +35,7 @@ class LedgerController(
     private val idGenerator: IdGenerator,
 ) {
     @PostMapping(path = ["ledger/transaction"], consumes = ["application/json"])
+    @Async
     fun registerTransaction(
         @RequestBody @Valid request: RegisterTransactionRequest
     ): CompletableFuture<ResponseEntity<TransactionRegisteredResponse>> {

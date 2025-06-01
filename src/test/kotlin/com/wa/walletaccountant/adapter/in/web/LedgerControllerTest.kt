@@ -49,7 +49,6 @@ class LedgerControllerTest {
     @MockkBean
     lateinit var queryGateway: QueryGateway
 
-
     @MockkBean
     lateinit var idGenerator: IdGenerator
 
@@ -69,7 +68,7 @@ class LedgerControllerTest {
             {
               "name": "date",
               "value": "201-08-26",
-              "reason": "Expected date format is YYYY-MM-DDTHH:MM:SS.000Z"
+              "reason": "Expected date format is YYYY-MM-DDTHH:MM:SSZ"
             },
             {
               "name": "accountId",
@@ -82,7 +81,7 @@ class LedgerControllerTest {
               "reason": "must be a valid UUID"
             },
             {
-              "name": "movementTypeId",
+              "name": "transactionTypeId",
               "value": "not an uuid",
               "reason": "must be a valid UUID"
             },
@@ -99,7 +98,7 @@ class LedgerControllerTest {
             """
             {
                 "accountId": "not an uuid",
-                "movementTypeId": "not an uuid",
+                "transactionTypeId": "not an uuid",
                 "amount": 1,
                 "date": "201-08-26",
                 "sourceAccountId": "not an uuid",
@@ -151,7 +150,7 @@ class LedgerControllerTest {
                     month = Month.FEBRUARY,
                     year = Year.of(2025),
                 ),
-                transactionId =  transactionId,
+                transactionId = transactionId,
                 movementTypeId = null,
                 amount = Money(10.25),
                 date = date,
@@ -161,7 +160,7 @@ class LedgerControllerTest {
                 tagIds = setOf(tagId),
             )
 
-        every { commandGateway.send<TransactionId>(any()) }returns CompletableFuture.completedFuture(
+        every { commandGateway.send<TransactionId>(any()) } returns CompletableFuture.completedFuture(
             transactionId
         )
         every { idGenerator.newId() } returns transactionId.value
@@ -173,7 +172,8 @@ class LedgerControllerTest {
                         .post("/api/v1/ledger/transaction")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request),
-                ).andExpect(MockMvcResultMatchers.request().asyncStarted())
+                )
+                .andExpect(MockMvcResultMatchers.request().asyncStarted())
                 .andDo(MockMvcResultHandlers.log())
                 .andReturn()
 

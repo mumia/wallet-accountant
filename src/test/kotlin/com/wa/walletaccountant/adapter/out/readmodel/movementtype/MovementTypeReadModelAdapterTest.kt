@@ -123,9 +123,9 @@ constructor(
     ) {
         prepareMultiMovementTypes()
 
-    val actualMovementType = movementTypeReadModelAdapter.readMovementType(movementTypeId)
+        val actualMovementType = movementTypeReadModelAdapter.readMovementType(movementTypeId)
 
-    assertEquals(expectedMovementType, actualMovementType)
+        assertEquals(expectedMovementType, actualMovementType)
     }
 
     private fun prepareMultiMovementTypes() {

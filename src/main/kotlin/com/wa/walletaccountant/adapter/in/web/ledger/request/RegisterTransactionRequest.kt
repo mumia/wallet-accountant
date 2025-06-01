@@ -19,8 +19,8 @@ data class RegisterTransactionRequest(
     val amount: BigDecimal,
     @field:NotEmpty
     @field:Pattern(
-        regexp = "^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.000Z)$",
-        message = "Expected date format is YYYY-MM-DDTHH:MM:SS.000Z"
+        regexp = "^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+        message = "Expected date format is YYYY-MM-DDTHH:MM:SSZ"
     )
     val date: String,
     @field:UUID(allowEmpty = true)

@@ -201,6 +201,7 @@ constructor(
             closed = false,
         )
 
+        
         ledgerReadModelAdapter.openMonthBalance(ledgerId1, balance)
 
         assertEquals(ledgerNoTransactions, ledgerReadModelAdapter.readLedgerMonth(ledgerId1).get())

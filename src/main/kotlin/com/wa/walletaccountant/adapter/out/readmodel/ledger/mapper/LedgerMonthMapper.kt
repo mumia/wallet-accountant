@@ -2,6 +2,7 @@ package com.wa.walletaccountant.adapter.out.readmodel.ledger.mapper
 
 import com.wa.walletaccountant.adapter.out.readmodel.ledger.document.LedgerMonthDocument
 import com.wa.walletaccountant.application.model.ledger.LedgerMonthModel
+import com.wa.walletaccountant.application.model.ledger.LedgerTransactionModel
 import com.wa.walletaccountant.domain.common.Money
 import com.wa.walletaccountant.domain.ledger.ledger.LedgerId
 import org.springframework.stereotype.Service
@@ -43,7 +44,9 @@ object LedgerMonthMapper {
 
                     LedgerTransactionMapper.toModel(it)
                 }
-                .toSortedSet(compareBy { it.date.timestamp() })
+                .toSortedSet(
+                    compareBy<LedgerTransactionModel> { it.date.timestamp() }.thenBy { it.transactionId.toString() }
+                )
         )
 
         return LedgerMonthModel(
