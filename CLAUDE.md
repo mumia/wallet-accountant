@@ -35,6 +35,6 @@ Wallet Accountant — a Kotlin-based personal finance/wallet accounting applicat
 This repo uses speckit for feature specification and planning. Feature artifacts live in `.specify/` and custom Claude commands in `.claude/commands/speckit.*.md`. Use the `/speckit.*` slash commands to drive the spec-plan-task-implement workflow.
 
 ## Active Technologies
-- Kotlin 2.3+ (for stable `kotlin.uuid.Uuid`) + Axon Framework 5.x, Spring Boot 3.x, Jackson
-- Axon Server (event store); 
+- Kotlin 2.3.0 (stable `kotlin.uuid.Uuid` with `@OptIn` compiler flag) + Axon Framework 5.0.3, Spring Boot 3.5.3, Jackson
+- Axon Server (event store)
 - MongoDB
