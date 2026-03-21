@@ -27,6 +27,7 @@ dependencyManagement {
 dependencies {
     // Spring Boot
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
 
     // Axon Framework 5
     implementation("org.axonframework:axon-server-connector")
@@ -44,6 +45,10 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.axonframework:axon-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation("io.mockk:mockk:1.14.2")
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:mongodb:1.20.6")
+    testImplementation("org.testcontainers:junit-jupiter:1.20.6")
 }
 
 kotlin {

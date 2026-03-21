@@ -1,6 +1,9 @@
 spring:
   application:
     name: wallet-accountant
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/wallet-accountant
 
 axon:
   axonserver:
