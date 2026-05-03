@@ -10,7 +10,7 @@ compile_schema_version: 2
 <!-- topic: event-sourcing -->
 <!-- sources: guidelines/event-sourcing.md -->
 <!-- compiled_by: edikt v0.4.3 -->
-<!-- compiled_at: 2026-05-01T10:19:34Z -->
+<!-- compiled_at: 2026-05-03T16:03:05Z -->
 
 # Event Sourcing
 
@@ -20,7 +20,7 @@ compile_schema_version: 2
 - Aggregate state transitions MUST be applied only inside `@EventSourcingHandler` methods, building the new state via `copy(...)` on the state's `data class`. NEVER mutate aggregate state inside a `@CommandHandler`, and NEVER in-place-mutate fields inside an event-sourcing handler. (ref: event-sourcing)
 - Axon Server MUST be the single source of truth for event history. NEVER persist domain events to any other store as the system of record, and NEVER bypass Axon's event-store APIs to read or write events. (ref: event-sourcing)
 - Operations spanning multiple aggregates MUST use Axon Framework 5's Dynamic Consistency Boundary (DCB) facility. NEVER coordinate across aggregates with two-phase commits, distributed transactions, or hand-rolled compensation outside DCB. (ref: event-sourcing)
-- NEVER dispatch a command to another aggregate from within an aggregate's `@CommandHandler` or `@EventSourcingHandler`. Cross-aggregate command flow MUST go through a saga, a stateless external handler, or a DCB-coordinated unit of work. (ref: event-sourcing)
+- NEVER dispatch a command to another aggregate from within an aggregate's `@CommandHandler` or `@EventSourcingHandler`. Cross-aggregate command flow MUST go through a stateless external handler (typically a Restate workflow, per ADR-001) or a DCB-coordinated unit of work. Axon sagas (`@Saga`) MUST NOT be used for this — see ADR-001. (ref: event-sourcing)
 - Commands, domain events, queries, and read-model DTOs MUST be immutable Kotlin `data class`es with `val` properties. NEVER add `var` properties, setters, or mutable collection types (`MutableList`, `MutableSet`, `MutableMap`) to any of these types. (ref: event-sourcing)
 - Domain events MUST represent facts in the past tense (`InvoicePaid`, `OrderShipped`, `AccountCredited`) and, once published, MUST NEVER be modified, deleted, or rewritten in place. Schema evolution MUST proceed via Axon upcasters or new event types — never by editing past events. (ref: event-sourcing)
 - Read models / projections MUST be fully rebuildable by replaying the event stream from offset zero. NEVER store derived state in a projection that cannot be reconstructed from events alone, and NEVER allow read-model writes outside of the projection's event-handler code path. (ref: event-sourcing)

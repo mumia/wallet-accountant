@@ -18,7 +18,7 @@ Axon Framework 5 gives this project the right primitives: aggregates with `@Comm
 - Aggregate state transitions MUST be applied only inside `@EventSourcingHandler` methods, building the new state via `copy(...)` on the state's `data class`. NEVER mutate aggregate state inside a `@CommandHandler`, and NEVER in-place-mutate fields inside an event-sourcing handler.
 - Axon Server MUST be the single source of truth for event history. NEVER persist domain events to any other store as the system of record, and NEVER bypass Axon's event-store APIs to read or write events.
 - Operations spanning multiple aggregates MUST use Axon Framework 5's Dynamic Consistency Boundary (DCB) facility. NEVER coordinate across aggregates with two-phase commits, distributed transactions, or hand-rolled compensation outside DCB.
-- NEVER dispatch a command to another aggregate from within an aggregate's `@CommandHandler` or `@EventSourcingHandler`. Cross-aggregate command flow MUST go through a saga, a stateless external handler, or a DCB-coordinated unit of work.
+- NEVER dispatch a command to another aggregate from within an aggregate's `@CommandHandler` or `@EventSourcingHandler`. Cross-aggregate command flow MUST go through a stateless external handler (typically a Restate workflow, per ADR-001) or a DCB-coordinated unit of work. Axon sagas (`@Saga`) MUST NOT be used for this — see ADR-001.
 - Commands, domain events, queries, and read-model DTOs MUST be immutable Kotlin `data class`es with `val` properties. NEVER add `var` properties, setters, or mutable collection types (`MutableList`, `MutableSet`, `MutableMap`) to any of these types.
 - Domain events MUST represent facts in the past tense (`InvoicePaid`, `OrderShipped`, `AccountCredited`) and, once published, MUST NEVER be modified, deleted, or rewritten in place. Schema evolution MUST proceed via Axon upcasters or new event types — never by editing past events.
 - Read models / projections MUST be fully rebuildable by replaying the event stream from offset zero. NEVER store derived state in a projection that cannot be reconstructed from events alone, and NEVER allow read-model writes outside of the projection's event-handler code path.
@@ -40,8 +40,8 @@ These four exceptions are the only legitimate ones. "It's faster to write the re
 
 <!-- Directives for edikt governance. Populated by /edikt:guideline:compile. -->
 [edikt:directives:start]: #
-source_hash: 68c57340203861861a4f5730310d387e26b0873f34c49efdf35bc7a25d1927dd
-directives_hash: 34911a0bf4f80a99ca96d40bd98a0cbb4cd643077880fc382f0ef002c31ee3bc
+source_hash: c04bd04ad6f92baec71c41bd83041fff8ae32a021cf99cf13912459b842303b4
+directives_hash: 1c0859499d5b2f6c91b245e71239360bcc7264406c5a7d120bb4f45e3121e48b
 compiler_version: "0.4.3"
 paths:
   - "**/*.kt"
@@ -59,7 +59,7 @@ directives:
   - "Aggregate state transitions MUST be applied only inside `@EventSourcingHandler` methods, building the new state via `copy(...)` on the state's `data class`. NEVER mutate aggregate state inside a `@CommandHandler`, and NEVER in-place-mutate fields inside an event-sourcing handler. (ref: event-sourcing)"
   - "Axon Server MUST be the single source of truth for event history. NEVER persist domain events to any other store as the system of record, and NEVER bypass Axon's event-store APIs to read or write events. (ref: event-sourcing)"
   - "Operations spanning multiple aggregates MUST use Axon Framework 5's Dynamic Consistency Boundary (DCB) facility. NEVER coordinate across aggregates with two-phase commits, distributed transactions, or hand-rolled compensation outside DCB. (ref: event-sourcing)"
-  - "NEVER dispatch a command to another aggregate from within an aggregate's `@CommandHandler` or `@EventSourcingHandler`. Cross-aggregate command flow MUST go through a saga, a stateless external handler, or a DCB-coordinated unit of work. (ref: event-sourcing)"
+  - "NEVER dispatch a command to another aggregate from within an aggregate's `@CommandHandler` or `@EventSourcingHandler`. Cross-aggregate command flow MUST go through a stateless external handler (typically a Restate workflow, per ADR-001) or a DCB-coordinated unit of work. Axon sagas (`@Saga`) MUST NOT be used for this — see ADR-001. (ref: event-sourcing)"
   - "Commands, domain events, queries, and read-model DTOs MUST be immutable Kotlin `data class`es with `val` properties. NEVER add `var` properties, setters, or mutable collection types (`MutableList`, `MutableSet`, `MutableMap`) to any of these types. (ref: event-sourcing)"
   - "Domain events MUST represent facts in the past tense (`InvoicePaid`, `OrderShipped`, `AccountCredited`) and, once published, MUST NEVER be modified, deleted, or rewritten in place. Schema evolution MUST proceed via Axon upcasters or new event types — never by editing past events. (ref: event-sourcing)"
   - "Read models / projections MUST be fully rebuildable by replaying the event stream from offset zero. NEVER store derived state in a projection that cannot be reconstructed from events alone, and NEVER allow read-model writes outside of the projection's event-handler code path. (ref: event-sourcing)"
