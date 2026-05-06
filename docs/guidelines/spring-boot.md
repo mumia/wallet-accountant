@@ -28,11 +28,10 @@ The rules below also harden the operational surface: typed `@ConfigurationProper
 These rules do not apply to:
 
 - **Spring's own auto-generated test scaffolding** — the smoke test produced by `start.spring.io` (`contextLoads()`) and any auto-generated configuration metadata. Replace it with real slice tests as soon as real components exist.
-- **Single-module prototypes** before the hexagonal modules are split. The location-based rules (controllers under `adapter/in/web`, `@Document` under `adapter/out/readmodel`) MAY relax in a literal single-module sandbox, but MUST be applied as soon as a second module exists or as soon as a domain layer is introduced — whichever comes first.
 - **Internal-only management listeners** firewalled from public traffic. The Actuator exposure rule still applies in spirit (whitelist by name, never `*`), but the *set* of whitelisted endpoints MAY widen on a private listener — `env` and `configprops` are acceptable on an admin port that is never reachable from the internet.
 - **Migration scripts and ops tooling under a clearly marked profile** (e.g., `tools`, `migration`). Startup work that is normally forbidden inside `@PostConstruct` is acceptable in a `CommandLineRunner` *gated by such a profile*, because the profile makes the side effect explicit and the run intentional.
 
-These four exceptions are the only legitimate ones. "It works fine on my machine without setting `SPRING_PROFILES_ACTIVE`", "we'll move the controller later", and "the secret is only in the dev YAML" are not exceptions — they are the exact failure modes these rules exist to prevent.
+These three exceptions are the only legitimate ones. "It works fine on my machine without setting `SPRING_PROFILES_ACTIVE`", "we'll move the controller later", and "the secret is only in the dev YAML" are not exceptions — they are the exact failure modes these rules exist to prevent.
 
 ---
 
@@ -40,7 +39,7 @@ These four exceptions are the only legitimate ones. "It works fine on my machine
 
 <!-- Directives for edikt governance. Populated by /edikt:guideline:compile. -->
 [edikt:directives:start]: #
-source_hash: 4cb9bfbd0134585e617f0057ff5f404ef145b430bec27beace6d608969c2ef2a
+source_hash: f8ac42105bb92b361582490a7761093cc061ec256553003ea6666655de517f87
 directives_hash: 4e00b193953664b4d23c5e543f7b3e33ffd1957b94aab15f3c87bfa9d3e40103
 compiler_version: "0.4.3"
 paths:

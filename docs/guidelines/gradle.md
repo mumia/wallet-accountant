@@ -1,12 +1,12 @@
 # Gradle Guidelines
 
-**Purpose:** Keep the Gradle build reproducible, fast, and consistent across modules — preventing version drift, leaky module boundaries, configuration-cache regressions, and the per-script divergence that turns multi-module Gradle builds into a maintenance burden.
+**Purpose:** Keep the Gradle build reproducible, fast, and consistent — preventing version drift, leaky build-script boundaries, configuration-cache regressions, and the per-script divergence that erodes Gradle builds over time.
 
 ## Rationale
 
 Gradle's flexibility is its largest footgun. Without explicit conventions, each `build.gradle.kts` diverges, dependency versions drift between modules, builds stop being reproducible across developer machines and CI, and incremental performance silently rots as build logic violates the configuration cache contract. The rules below pin the conventions that the Gradle team itself recommends: Kotlin DSL for type safety, version catalogs as the single source of truth for coordinates, lock files for transitive reproducibility, the `plugins { }` block for declarative plugin resolution, the `java-library` `api`/`implementation` separation for honest module surfaces, and convention plugins (instead of root-level `subprojects { }` mutation) so build logic stays inspectable per-module.
 
-In this project (Kotlin + Spring Boot + Axon Framework 5 + Restate, multi-module hexagonal), the build coordinates several plugin ecosystems (Spring Boot, Kotlin JVM, Kotlin Spring, Axon) across at least three layers (domain, application, adapters). The rules are calibrated to keep those modules independently buildable, the dependency surface honest, and the version of each framework component pinned deterministically — so that "what runs in CI" and "what the developer just built" cannot diverge.
+In this project (Kotlin + Spring Boot + Axon Framework 5 + Restate, single-module hexagonal per [ADR-003](../architecture/decisions/ADR-003-single-module-gradle-hexagonal.md)), the build coordinates several plugin ecosystems (Spring Boot, Kotlin JVM, Kotlin Spring, Axon) across the three hexagonal layers (domain, application, adapters), enforced by package conventions and an architecture test rather than by separate Gradle subprojects. The rules are calibrated to keep the dependency surface honest, the version of each framework component pinned deterministically, and the build reproducible across developer machines and CI — so that "what runs in CI" and "what the developer just built" cannot diverge.
 
 ## Rules
 
@@ -26,7 +26,7 @@ In this project (Kotlin + Spring Boot + Axon Framework 5 + Restate, multi-module
 These rules do not apply to:
 
 - **Throwaway / one-off scripts** that are not committed to the repository. An `init.gradle.kts` used locally for a single experimental build, or a personal `~/.gradle/init.d/` script, may diverge from these rules — but the moment a script is committed, every rule applies.
-- **Buildless prototypes** before any module split exists. Rule 9 (convention plugins under `buildSrc/`) MAY be deferred while the project is a single-module prototype with no shared build logic to extract; it MUST be applied as soon as a second module is added.
+- **Single-module project with no shared build logic to extract.** wallet-accountant is single-module by design (per [ADR-003](../architecture/decisions/ADR-003-single-module-gradle-hexagonal.md)), so Rule 9 (convention plugins under `buildSrc/`) is moot until shared build logic actually needs extraction. The rule guards against per-script divergence in multi-module setups; in this single-module project, the one root `build.gradle.kts` IS the shared logic. Apply Rule 9 if and when shared build logic emerges (e.g., a `buildSrc/` plugin to encode common Kotlin/Axon setup), not as a prerequisite.
 - **Third-party plugins absent from the version catalog**. A plugin outside the Gradle Plugin Portal that has no catalog entry yet MAY be applied via `id("...") version "..."` directly in the `plugins { }` block as a temporary measure, with a tracking TODO. It MUST NEVER be applied via legacy `apply plugin:` syntax, and the catalog entry MUST be added in the same change set or in a follow-up tracked in the issue tracker.
 
 These three exceptions are the only legitimate ones. "It's faster to inline the version", "the plugin block is annoying here", "we'll catalogize later" are not exceptions — every dependency and plugin version MUST live in the catalog from day one.
@@ -37,7 +37,7 @@ These three exceptions are the only legitimate ones. "It's faster to inline the 
 
 <!-- Directives for edikt governance. Populated by /edikt:guideline:compile. -->
 [edikt:directives:start]: #
-source_hash: 647dd07ac21b077769f66ee2aebb5ca59aab04bddcbf835d302fc7e4168b1844
+source_hash: aa4cc17e784fe8a5430b34e4069a323c5f3d8300d1ab3db636b7fd70ebc13fdd
 directives_hash: 1f3a2f48768c930ad4082559497d9148354960d4b632960ce2c67a6cd35d25ef
 compiler_version: "0.4.3"
 paths:
