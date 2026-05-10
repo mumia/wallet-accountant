@@ -48,7 +48,7 @@ The decision lands as the following hard rules:
 - Read-model persistence MUST be MongoDB. NEVER persist read models to PostgreSQL, MySQL, Elasticsearch, Cassandra, Redis (as a primary store), DynamoDB, or any other database. The project has exactly two persistent stores: Axon Server (events) and MongoDB (read models).
 - The Spring Data persistence starter in `gradle/libs.versions.toml` and every `build.gradle.kts` MUST be limited to `org.springframework.boot:spring-boot-starter-data-mongodb`. NEVER add `spring-boot-starter-data-jpa`, `spring-boot-starter-data-jdbc`, `spring-boot-starter-data-r2dbc`, `spring-boot-starter-data-elasticsearch`, `spring-boot-starter-data-cassandra`, `spring-boot-starter-data-redis` (for persistence), `spring-boot-starter-data-neo4j`, or any equivalent persistence starter.
 - Persistence drivers in `gradle/libs.versions.toml` and every `build.gradle.kts` MUST be limited to `org.mongodb:*` (for read models) and Axon Framework / Axon Server client coordinates (for events). NEVER add `org.postgresql:postgresql`, `mysql:mysql-connector-java`, `co.elastic.clients:*`, `com.datastax.oss:*`, JDBC drivers for any other RDBMS, or any other persistence client library.
-- This ADR does NOT govern caches. In-process caching (Caffeine, Spring's `@Cacheable`) and remote caches that are explicitly transient (Redis used as a cache only, with `spring-boot-starter-data-redis-reactive` strictly forbidden as a *persistence* path) are out of scope and remain available — but adding any cache that becomes a system of record reopens this ADR.
+- Caches MUST NOT be the system-of-record for any user-facing query path. Caffeine, in-memory `@Cacheable`, and Redis-as-cache are permitted only when the cached value is recomputed on demand from Axon events or read-model collections. NEVER persist authoritative state to a cache.
 
 ### Consequences
 
@@ -68,7 +68,7 @@ The decision lands as the following hard rules:
 
 **Neutral:**
 - The application connects to Axon Server (via Axon's client), and to MongoDB (via Spring Data Mongo). Two client configurations, two health checks, two backup strategies.
-- Caches (Caffeine, Spring `@Cacheable`, Redis-as-cache) remain a separate concern. This ADR does not forbid them — but a Redis or other cache that becomes a system of record falls under this ADR and requires an amendment.
+- Caches (Caffeine, Spring `@Cacheable`, Redis-as-cache) remain available, but only as caches — never as the system-of-record for a user-facing query path. A cache that crosses that line falls under this ADR and requires an amendment.
 
 ## Pros and Cons of the Options
 
@@ -138,8 +138,8 @@ How we will know this decision is being followed:
 
 <!-- Directives for edikt governance. Populated by /edikt:adr:compile. -->
 [edikt:directives:start]: #
-source_hash: 9954820ea0127c06a171aa3d50194955a152bb203974e7ddbb834fe0c10a7064
-directives_hash: f519e5355121c426247ff0dfa8fee414d5366b192e1cd551465e86b40f556c2a
+source_hash: 670ac76c32ccfbed681d2e9d1c80169958fba86c78a4a394f3b2999780d64f9e
+directives_hash: a588de87c6f27db431363d1deff3dab9d9df6e9ee7077867d8f9927d3ad187ab
 compiler_version: "0.4.3"
 paths:
   - "**/*.kt"
@@ -157,7 +157,7 @@ directives:
   - "Read-model persistence MUST be MongoDB. NEVER persist read models to PostgreSQL, MySQL, Elasticsearch, Cassandra, Redis (as a primary store), DynamoDB, or any other database — wallet-accountant has exactly two persistent stores: Axon Server (events) and MongoDB (read models). (ref: ADR-004)"
   - "The Spring Data persistence starter in `gradle/libs.versions.toml` and every `build.gradle.kts` MUST be limited to `org.springframework.boot:spring-boot-starter-data-mongodb`. NEVER add `spring-boot-starter-data-jpa`, `spring-boot-starter-data-jdbc`, `spring-boot-starter-data-r2dbc`, `spring-boot-starter-data-elasticsearch`, `spring-boot-starter-data-cassandra`, `spring-boot-starter-data-redis` (for persistence), `spring-boot-starter-data-neo4j`, or any equivalent persistence starter. (ref: ADR-004)"
   - "Persistence drivers in `gradle/libs.versions.toml` and every `build.gradle.kts` MUST be limited to `org.mongodb:*` (for read models) and Axon Framework / Axon Server client coordinates (for events). NEVER add `org.postgresql:postgresql`, `mysql:mysql-connector-java`, `co.elastic.clients:*`, `com.datastax.oss:*`, JDBC drivers for any other RDBMS, or any other persistence client library. (ref: ADR-004)"
-  - "This ADR governs persistent stores only. Caches that are explicitly transient — Caffeine, Spring `@Cacheable` with an in-memory backend, Redis used solely as a cache — remain available, but ANY cache that becomes a system of record (i.e., its data cannot be regenerated from Axon Server events or recomputed on demand) reopens this ADR and requires an amendment before being added. (ref: ADR-004)"
+  - "Caches MUST NOT be the system-of-record for any user-facing query path. Caffeine, in-memory `@Cacheable`, and Redis-as-cache are permitted only when the cached value is recomputed on demand from Axon events or read-model collections. NEVER persist authoritative state to a cache. (ref: ADR-004)"
 reminders:
   - "Before adding a Spring Data starter or persistence driver to `gradle/libs.versions.toml` or any `build.gradle.kts` → confirm the coordinate is `spring-boot-starter-data-mongodb` or an `org.mongodb:*` / Axon coordinate; never JPA/JDBC/Elasticsearch/Cassandra/Postgres/etc. (ref: ADR-004)"
   - "Before declaring an Axon `EventStorageEngine` bean in `src/main/**` → don't; the application MUST connect to Axon Server via Axon Framework's native protocol, never via `JpaEventStorageEngine`, `JdbcEventStorageEngine`, `MongoEventStorageEngine`, or `InMemoryEventStorageEngine` (ref: ADR-004)"

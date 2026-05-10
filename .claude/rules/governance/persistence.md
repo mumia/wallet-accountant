@@ -11,7 +11,7 @@ compile_schema_version: 2
 <!-- topic: persistence -->
 <!-- sources: ADR-004-two-store-persistence-axon-server-mongo.md -->
 <!-- compiled_by: edikt v0.4.3 -->
-<!-- compiled_at: 2026-05-08T20:57:47Z -->
+<!-- compiled_at: 2026-05-10T13:00:00Z -->
 
 # Persistence
 
@@ -19,4 +19,4 @@ compile_schema_version: 2
 - Read-model persistence MUST be MongoDB. NEVER persist read models to PostgreSQL, MySQL, Elasticsearch, Cassandra, Redis (as a primary store), DynamoDB, or any other database — wallet-accountant has exactly two persistent stores: Axon Server (events) and MongoDB (read models). (ref: ADR-004)
 - The Spring Data persistence starter in `gradle/libs.versions.toml` and every `build.gradle.kts` MUST be limited to `org.springframework.boot:spring-boot-starter-data-mongodb`. NEVER add `spring-boot-starter-data-jpa`, `spring-boot-starter-data-jdbc`, `spring-boot-starter-data-r2dbc`, `spring-boot-starter-data-elasticsearch`, `spring-boot-starter-data-cassandra`, `spring-boot-starter-data-redis` (for persistence), `spring-boot-starter-data-neo4j`, or any equivalent persistence starter. (ref: ADR-004)
 - Persistence drivers in `gradle/libs.versions.toml` and every `build.gradle.kts` MUST be limited to `org.mongodb:*` (for read models) and Axon Framework / Axon Server client coordinates (for events). NEVER add `org.postgresql:postgresql`, `mysql:mysql-connector-java`, `co.elastic.clients:*`, `com.datastax.oss:*`, JDBC drivers for any other RDBMS, or any other persistence client library. (ref: ADR-004)
-- This ADR governs persistent stores only. Caches that are explicitly transient — Caffeine, Spring `@Cacheable` with an in-memory backend, Redis used solely as a cache — remain available, but ANY cache that becomes a system of record (i.e., its data cannot be regenerated from Axon Server events or recomputed on demand) reopens this ADR and requires an amendment before being added. (ref: ADR-004)
+- Caches MUST NOT be the system-of-record for any user-facing query path. Caffeine, in-memory `@Cacheable`, and Redis-as-cache are permitted only when the cached value is recomputed on demand from Axon events or read-model collections. NEVER persist authoritative state to a cache. (ref: ADR-004)
