@@ -12,7 +12,7 @@ compile_schema_version: 2
 <!-- topic: spring-boot -->
 <!-- sources: guidelines/spring-boot.md -->
 <!-- compiled_by: edikt v0.4.3 -->
-<!-- compiled_at: 2026-04-26T17:11:48Z -->
+<!-- compiled_at: 2026-05-11T12:00:00Z -->
 
 # Spring Boot
 
@@ -24,7 +24,7 @@ compile_schema_version: 2
 - MUST validate request bodies with `@Valid` plus Bean Validation 3.x annotations (`@NotBlank`, `@Size`, `@Email`, etc.) and surface validation and domain failures through a single `@RestControllerAdvice` that returns RFC 7807 `ProblemDetail` responses. NEVER write per-controller `try/catch` blocks for validation or expected domain failures. (ref: spring-boot)
 - NEVER perform business work, network calls, blocking I/O, or event publication inside `@PostConstruct`, bean constructors, `ApplicationContextInitializer`s, or `BeanFactoryPostProcessor`s. Move startup work into `ApplicationRunner` / `CommandLineRunner` or an `@EventListener(ApplicationReadyEvent::class)` so failures are observable and the container can fail fast. (ref: spring-boot)
 - MUST keep Spring Data Mongo `@Document` types and `MongoRepository` / `ReactiveMongoRepository` interfaces under `adapter/out/readmodel` only. NEVER let a domain or application class reference Spring Data Mongo annotations (`@Document`, `@Field`, `@Id`, `@Indexed`, `@DBRef`, `@CompoundIndex`) — read models are projections owned by the outbound adapter. (ref: spring-boot)
-- MUST declare every Mongo index explicitly via `@Indexed` / `@CompoundIndex` on the `@Document` AND apply indexes through a migration tool (`mongock`, `mongobee`) or a startup `IndexOps` job gated behind a profile. NEVER set `spring.data.mongodb.auto-index-creation=true` in `staging` or `prod` — auto-creation hides index drift and surprises ops. (ref: spring-boot)
+- MUST declare every Mongo index explicitly via `@Indexed` / `@CompoundIndex` on the `@Document` AND apply indexes through Mongock change units (per ADR-007) under `**/adapter/out/readmodel/migrations/**`. NEVER use Mongobee, the Liquibase MongoDB extension, or a custom `IndexOps` startup runner — Mongock is the only sanctioned migration runner. NEVER set `spring.data.mongodb.auto-index-creation=true` in any profile — auto-creation hides index drift and surprises ops. (ref: spring-boot)
 - MUST log via SLF4J — either `LoggerFactory.getLogger(...)` or `KotlinLogging.logger {}`. NEVER use `println`, `System.out.println`, `System.err.println`, `printStackTrace()`, or `java.util.logging` from application or test-runtime code. (ref: spring-boot)
 - MUST whitelist Actuator endpoints by name in `management.endpoints.web.exposure.include` (e.g., `health,info,metrics,prometheus`). NEVER set the value to `*`, and NEVER expose `env`, `configprops`, `heapdump`, `threaddump`, `mappings`, `loggers`, or `beans` on a public-facing listener — sensitive endpoints MUST sit on a separate management port (`management.server.port`) or behind authentication. (ref: spring-boot)
 - MUST use the narrowest Spring test slice for the layer under test — `@WebMvcTest` for controllers, `@DataMongoTest` for Mongo read models, `@JsonTest` for serialization, `@RestClientTest` for outbound HTTP clients. NEVER reach for `@SpringBootTest` when a slice would suffice; full-context tests are reserved for cross-layer smoke tests and consumer-driven contract tests. (ref: spring-boot)
