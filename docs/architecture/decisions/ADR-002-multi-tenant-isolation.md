@@ -11,7 +11,7 @@ supersedes: null
 
 ## Context and Problem Statement
 
-wallet-accountant is multi-tenant: each tenant is an end user managing their own personal accounts. Tenant isolation is a hard architectural constraint, declared in `docs/project-context.md`:
+wallet-accountant is multi-tenant. Each tenant is a household / family / shared-finance group of one or more users who share a single set of accounts and transactions. The tenant is the unit of isolation — every command, event, query, and read-model write is scoped by `tenantId`. *Which user within the tenant* issued a given command is tracked as Axon event metadata (the JWT `sub` claim) for audit purposes; it is not a first-class domain field, and this ADR does not change with the addition of users. Tenant isolation remains a hard architectural constraint, declared in `docs/project-context.md`:
 
 > Every query against the read models in MongoDB (must be tenant-scoped). Every command against an aggregate (must verify tenant ownership before applying state changes). Every Restate workflow (the workflow context must carry the tenant identity end-to-end).
 
@@ -168,7 +168,7 @@ How we will know this decision is being followed:
 
 <!-- Directives for edikt governance. Populated by /edikt:adr:compile. -->
 [edikt:directives:start]: #
-source_hash: 9c11bfbc83c9b054c1cec41c092fe78b73553e5a9a50fd86ece07e5de908d685
+source_hash: 8bd77ea74142bdfdbb5e31fb5fe7d846e8747a331edadd2922c5a1be711b64ec
 directives_hash: c8a67abdc3f8008cda91d8022fe7b9083f87be03d75037b28b4233d13ef3a931
 compiler_version: "0.4.3"
 paths:

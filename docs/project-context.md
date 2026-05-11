@@ -38,10 +38,12 @@ Hexagonal / DDD with three layers and a strict folder layout:
 
 ## Users
 
-Multi-tenant — each tenant is an end user managing their own personal accounts. Tenant isolation is a hard architectural constraint and applies to:
+Multi-tenant — each tenant is a household / family / shared-finance group of one or more users who share a single set of accounts and transactions. Tenant isolation is a hard architectural constraint and applies to:
 - Every query against the read models in MongoDB (must be tenant-scoped).
 - Every command against an aggregate (must verify tenant ownership before applying state changes).
 - Every Restate workflow (the workflow context must carry the tenant identity end-to-end).
+
+User attribution *within* a tenant — i.e., which user issued a given command — is captured as Axon event metadata (JWT `sub` claim, propagated via a `MessageDispatchInterceptor` on the command bus), not as a first-class domain field. See ADR-002 and PRD-001.
 
 ## Notes
 
