@@ -13,7 +13,7 @@ references:
 
 # PRD-001: Account aggregate — register a new account
 
-**Status:** draft
+**Status:** accepted
 **Date:** 2026-05-11
 **Author:** Miguel Manso
 
@@ -21,7 +21,7 @@ references:
 
 ## Problem
 
-wallet-accountant is a multi-tenant personal accounts manager (per `docs/project-context.md`). A user — i.e., a tenant — needs to be able to register the bank accounts they want to track so the system can record transactions against them, categorise spending, and produce monthly views.
+wallet-accountant is a multi-tenant personal accounts manager (per `docs/project-context.md`). A **tenant** — a household, family, or shared-finance group of one or more users (a tenant is NOT a single user; it is a group that shares one set of accounts) — needs to be able to register the bank accounts the group wants to track so the system can record transactions against them, categorise spending, and produce monthly views. Any user within the tenant can perform the registration on the tenant's behalf; the resulting `Account` belongs to the tenant, not to the user who registered it.
 
 Today there is no domain code; this PRD captures the foundational vocabulary (Account aggregate, supporting value objects, the first command/event pair) on which every later transaction-tracking feature will build. Without it, transaction ingestion, categorisation, budgeting, and reporting have nothing to attach to.
 
@@ -102,7 +102,7 @@ A **tenant** of wallet-accountant — a household, family, or shared-finance gro
 
 ## Acceptance Criteria
 
-- [ ] **AC-001**: A `RegisterAccount` command with valid inputs (all FR-006/007/008/009/010 enum/VO rules satisfied; tenantId present; name non-blank; currency matches starting-balance currency) MUST cause the `Account` aggregate to apply exactly one `AccountRegistered` event and transition to a non-empty state with the supplied fields. — Verify: aggregate-fixture unit test using Axon Test Fixture (`AggregateTestFixture<Account>`), `expectEvents(AccountRegistered(...))`.
+- [ ] **AC-001**: A `RegisterAccount` command with valid inputs (all FR-006/007/008/009/010 enum/VO rules satisfied; `tenantId` non-null; `currency` a valid `Currency` enum value; `name` non-blank with length ≤ 100; `notes` either null or non-blank with length ≤ 500; `startingBalance` constructed per FR-008) MUST cause the `Account` aggregate to apply exactly one `AccountRegistered` event and transition to a non-empty state with the supplied fields. — Verify: aggregate-fixture unit test using Axon Test Fixture (`AggregateTestFixture<Account>`), `expectEvents(AccountRegistered(...))`.
 - [ ] **AC-002**: `Money` exposes exactly one property (`value: BigDecimal`); no `Currency` field exists on `Money`. The arch test (ArchUnit / Konsist) asserts that no class in `domain/**` named `Money` references the `Currency` type, and that `Money`'s declared properties are exactly `{value: BigDecimal}`. — Verify: structural arch test + unit test on `Money`'s public API. (Replaces the legacy currency-mismatch check, which is impossible by construction now that `Money` carries no currency.)
 - [ ] **AC-003**: A second `RegisterAccount` against an already-registered `AccountId` MUST be rejected with `AccountAlreadyRegistered` and emit no event. — Verify: aggregate-fixture unit test seeding `AccountRegistered`, then dispatching `RegisterAccount` again.
 - [ ] **AC-004**: A `RegisterAccount` whose `tenantId` is null or differs from the aggregate's stored `tenantId` on a re-issued command MUST be rejected — per ADR-002. — Verify: aggregate-fixture unit test + an ArchUnit / Konsist test from ADR-002's verification list confirming the field exists and is non-null.
