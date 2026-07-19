@@ -30,7 +30,7 @@ Today there is no domain code; this PRD captures the foundational vocabulary (Ac
 A **tenant** of wallet-accountant — a household, family, or shared-finance group of one or more users who share a single set of accounts and transactions. Per [ADR-002](../../architecture/decisions/ADR-002-multi-tenant-isolation.md), each request carries a `tenantId` resolved from a JWT `tid` claim, and every command / event / read model is tenant-scoped. The tenant typically:
 
 - Has 1..N users (typical N is small — couple, family of 3–5) who all share the same accounts.
-- Holds 1–5 accounts across one or more banks (Millennium BCP, N26, Wise) and account types (Checking, Savings).
+- Holds any number of accounts across one or more banks (Millennium BCP, N26, Wise) and account types (Checking, Savings) — no upper limit on account count.
 - Wants to see balances and transactions per account, organised by month.
 - Operates entirely in a single currency per account, but may hold accounts in different currencies (EUR, USD, CHF).
 
