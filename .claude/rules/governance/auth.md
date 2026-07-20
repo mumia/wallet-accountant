@@ -10,7 +10,7 @@ compile_schema_version: 2
 <!-- topic: auth -->
 <!-- sources: ADR-005-oauth-zitadel-local-jwt.md -->
 <!-- compiled_by: edikt v0.4.3 -->
-<!-- compiled_at: 2026-05-10T11:53:56Z -->
+<!-- compiled_at: 2026-07-19T19:20:00Z -->
 
 # Authentication
 
@@ -18,7 +18,7 @@ compile_schema_version: 2
 - The API MUST validate JWTs locally using Spring Security's resource-server with `spring.security.oauth2.resourceserver.jwt.issuer-uri` (or `jwk-set-uri`) pointing at the Zitadel issuer. NEVER use OAuth 2.0 Token Introspection (RFC 7662) — `spring.security.oauth2.resourceserver.opaquetoken.*` properties MUST NOT appear in any `application*.yml`. (ref: ADR-005)
 - JWTs MUST be signed with RS256 or ES256 (asymmetric algorithms). NEVER configure, accept, or fall back to HS256 — symmetric signing requires sharing the signing key with every validator and is incompatible with the local-validation model. (ref: ADR-005)
 - Federation with external identity providers (Google, Apple, Microsoft, GitHub, generic OIDC) MUST be configured at the Zitadel side via Zitadel's external IDPs feature. NEVER integrate `google-oauth-client`, `google-api-services-*`, Apple Sign-In SDKs, MSAL (`com.microsoft.azure:msal4j`), or any other upstream-IdP client directly from the Spring Boot application — the application MUST only see Zitadel-issued JWTs. (ref: ADR-005)
-- Every access token MUST carry a `tid` claim populated from Zitadel's Organization ID (configured via a Zitadel Action or claim mapper) per ADR-002. The Spring Security `JwtAuthenticationConverter` MUST extract `tid` and populate the request-scoped `TenantContext`. (ref: ADR-005)
+- Every access token MUST carry a `tid` claim whose value equals the `TenantId` of the wallet-accountant Tenant aggregate (per ADR-002 and the Tenant-aggregate PRD). Zitadel emits this claim via a Zitadel Action or claim mapper sourced from the Zitadel Organization ID; the Organization ID is kept equal to the `TenantId` by the domain event handler that syncs `TenantRegistered` events from wallet-accountant to Zitadel via its admin API. The direction of setup is wallet-accountant → Zitadel; the Tenant aggregate is the source of truth. The Spring Security `JwtAuthenticationConverter` MUST extract `tid` and populate the request-scoped `TenantContext`. (ref: ADR-005)
 - Access-token lifetime MUST be ≤ 15 minutes. NEVER configure access-token TTL longer than 15 minutes at Zitadel — local validation has no revocation channel, and longer lifetimes widen the post-revocation attack window unacceptably. (ref: ADR-005)
 - Refresh tokens MUST rotate on every use: each refresh exchange MUST issue a new refresh token and invalidate the prior one. NEVER configure non-rotating (long-lived static) refresh tokens at Zitadel. (ref: ADR-005)
 - Refresh tokens MUST have an absolute lifetime ≤ 30 days regardless of rotation, and an inactivity timeout of ≤ 14 days (a refresh token unused for 14 days is revoked). NEVER allow a session chain to extend indefinitely. (ref: ADR-005)

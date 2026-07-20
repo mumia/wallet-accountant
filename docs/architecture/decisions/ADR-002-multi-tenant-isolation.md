@@ -11,7 +11,11 @@ supersedes: null
 
 ## Context and Problem Statement
 
-wallet-accountant is multi-tenant. Each tenant is a household / family / shared-finance group of one or more users who share a single set of accounts and transactions. The tenant is the unit of isolation — every command, event, query, and read-model write is scoped by `tenantId`. *Which user within the tenant* issued a given command is tracked as Axon event metadata (the JWT `sub` claim) for audit purposes; it is not a first-class domain field, and this ADR does not change with the addition of users. Tenant isolation remains a hard architectural constraint, declared in `docs/project-context.md`:
+wallet-accountant is multi-tenant. Each tenant is a household / family / shared-finance group of one or more users who share a single set of accounts and transactions. The tenant is the unit of isolation — every command, event, query, and read-model write is scoped by `tenantId`. *Which user within the tenant* issued a given command is tracked as Axon event metadata (the JWT `sub` claim) for audit purposes; it is not a first-class domain field.
+
+**Tenant as an aggregate.** The **Tenant aggregate** — defined by a separate PRD (see PRD-001 FR-003a) — is the source of truth for tenant identity and lifecycle. Zitadel Organizations are maintained as a **downstream projection** of the Tenant aggregate's events: a domain event handler (most likely a Restate workflow per ADR-001 — Zitadel admin-API calls are external side effects that need durable execution) creates / updates / deletes the corresponding Zitadel Organization on `TenantRegistered` / etc. The JWT `tid` claim still carries the same `TenantId` value — it just originates from our aggregate, not from Zitadel. Every directive in this ADR (tenantId on every command / event / query, DCB scoping by tenant, `TenantContext` bean population from the JWT filter) is unchanged by this framing; only the source-of-truth story inverts.
+
+Tenant isolation remains a hard architectural constraint, declared in `docs/project-context.md`:
 
 > Every query against the read models in MongoDB (must be tenant-scoped). Every command against an aggregate (must verify tenant ownership before applying state changes). Every Restate workflow (the workflow context must carry the tenant identity end-to-end).
 
@@ -168,7 +172,7 @@ How we will know this decision is being followed:
 
 <!-- Directives for edikt governance. Populated by /edikt:adr:compile. -->
 [edikt:directives:start]: #
-source_hash: 8bd77ea74142bdfdbb5e31fb5fe7d846e8747a331edadd2922c5a1be711b64ec
+source_hash: 9f335040e35605c0f9d6108bacf615180b25e7bd650952310210ff031be40abf
 directives_hash: c8a67abdc3f8008cda91d8022fe7b9083f87be03d75037b28b4233d13ef3a931
 compiler_version: "0.4.3"
 paths:

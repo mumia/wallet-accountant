@@ -45,6 +45,8 @@ Multi-tenant — each tenant is a household / family / shared-finance group of o
 
 User attribution *within* a tenant — i.e., which user issued a given command — is captured as Axon event metadata (JWT `sub` claim, propagated via a `MessageDispatchInterceptor` on the command bus), not as a first-class domain field. See ADR-002 and PRD-001.
 
+The **Tenant aggregate** — defined by a separate PRD — is the source of truth for tenant identity and lifecycle. Zitadel Organizations are maintained as a downstream projection of the Tenant aggregate's events (a domain event handler, likely a Restate workflow, calls Zitadel's admin API on `TenantRegistered` / etc.). Users, however, are NOT aggregates in this project — they remain entirely Zitadel-managed.
+
 ## Notes
 
 - **No Kotlin / Spring / Axon rule packs ship with edikt.** Stack-specific conventions are captured as **guidelines** in `docs/guidelines/` via `/edikt:guideline:new` and compiled into governance directives.
