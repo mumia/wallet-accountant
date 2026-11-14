@@ -1,0 +1,3 @@
+# Immediate effects for what a User would notice; events for everything else
+
+When one command affects more than one aggregate or bounded context, an effect happens **immediately** (in the same database transaction, through a port call) if a User would notice a delay or an inconsistency. Otherwise it happens **later**, through a domain event handled by a worker. For example, Accepting an Imported transaction creates its Ledger Transaction and updates the Account balance immediately, because Month close depends on them. Budget actuals, Category totals and Match suggestions follow later. Every command's immediate and deferred effects are listed in `docs/architecture/consistency.md`. Each spec adds its rows, and code review checks the code against them.
