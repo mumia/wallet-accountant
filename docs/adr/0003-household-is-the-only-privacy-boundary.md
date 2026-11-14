@@ -1,0 +1,3 @@
+# The Household is the only ownership and privacy boundary
+
+Every Account, Category and Budget belongs to exactly one Household, and every member of a Household sees all of it. There are no personal Accounts inside a Household and no per-Account sharing or permissions. A User who wants privacy creates a separate Household, for example a household of one, and moves money between Households with Household transfers. We rejected a mixed model where Users own personal Accounts and share some of them, because every report and Budget would then have to answer "whose view is this?" Do not add per-Account sharing without revisiting this decision.
