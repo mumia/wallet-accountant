@@ -201,3 +201,43 @@ func (f importFixture) assertOnlyTheFirstImport(t *testing.T) {
 		t.Errorf("imported transactions = %+v, want only the first file's three", got.Items)
 	}
 }
+
+// Accepted rows still count: once a row of the first import is Accepted,
+// the next import's Balance check still adds it in, and it is still a
+// certain repeat. A wrong Export balance is refused, the right one passes.
+func TestALaterImportsBalanceCheckCountsAcceptedRows(t *testing.T) {
+	t.Parallel()
+	f := newLaterImportFixture(t, apitest.Start(t), "alice")
+
+	pending := map[string]importedTransaction{}
+	for _, i := range f.imported(t, "?state=PENDING").Items {
+		pending[i.Description] = i
+	}
+
+	af := acceptFixture{importFixture: f, pending: pending}
+	af.accepted(t, "Salary", map[string]any{})
+	af.accepted(t, "Rent", map[string]any{})
+
+	res := f.upload(t, "", overlapping, "2400.00", "")
+	res.AssertProblem(t, http.StatusUnprocessableEntity, "/problems/balance-check-failed")
+
+	var p balanceCheckProblem
+	if err := json.Unmarshal(res.Body, &p); err != nil || p.ExpectedBalance == nil || p.Difference == nil {
+		t.Fatalf("problem = %s (%v)", res.Body, err)
+	}
+
+	assertMoney(t, "expected balance", *p.ExpectedBalance, "2454.90")
+	assertMoney(t, "difference", *p.Difference, "-54.90")
+	f.assertOnlyTheFirstImport(t)
+
+	var si statementImport
+	f.upload(t, "", overlapping, "2454.90", "").AssertJSON(t, http.StatusCreated, &si)
+
+	if si.RowsImported != 1 || si.RowsSkippedAsCertainRepeats != 2 || si.BalanceCheck != "PASSED" {
+		t.Errorf("statement import = %+v, want 1 imported, 2 skipped (one Accepted), the check passed", si)
+	}
+
+	if got := f.imported(t, "?state=ACCEPTED"); len(got.Items) != 2 {
+		t.Errorf("accepted = %+v, want Rent and Salary still Accepted", got.Items)
+	}
+}
