@@ -170,7 +170,7 @@ func (a *App) DoWithHeader(t testing.TB, method, path, token string, header http
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	if body != nil {
+	if body != nil && header.Get("Content-Type") == "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
 

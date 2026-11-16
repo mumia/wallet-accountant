@@ -1,0 +1,338 @@
+package domain
+
+import (
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/mumia/wallet-accountant/internal/sharedkernel"
+	"github.com/mumia/wallet-accountant/internal/sharedkernel/decider"
+)
+
+var (
+	// ErrStatementImportAlreadyRecorded is returned for recording a
+	// Statement import twice.
+	ErrStatementImportAlreadyRecorded = errors.New("statement import already recorded")
+	// ErrFileHashRequired is returned for a Statement import without the
+	// hash of its file, which deduplicates it.
+	ErrFileHashRequired = errors.New("statement file hash required")
+	// ErrLaterImportsNotSupported is returned for an import that is not the
+	// Account's first: Balance checks of later imports come in a later
+	// ticket.
+	ErrLaterImportsNotSupported = errors.New("later statement imports are not supported yet")
+)
+
+// BalanceCheck is the state of a Statement import's Balance check.
+type BalanceCheck string
+
+// The Balance check states. The first import passes by construction.
+const (
+	BalanceCheckPassed BalanceCheck = "passed"
+)
+
+// StatementImportState is a Statement import's fold.
+type StatementImportState struct {
+	Recorded       bool
+	ConnectionID   sharedkernel.ID
+	AccountID      sharedkernel.ID
+	FileHash       string
+	MappingVersion int
+	Currency       string
+	ExportBalance  sharedkernel.Decimal
+	RowsImported   int
+	RowsIgnored    int
+	RowsTotal      sharedkernel.Decimal
+	// OpeningBalance is set only for the Account's first import.
+	OpeningBalance *sharedkernel.Decimal
+	BalanceCheck   BalanceCheck
+	RecordedAt     time.Time
+}
+
+type (
+	// StatementImportCommand is a command to a Statement import.
+	StatementImportCommand interface{ isStatementImportCommand() }
+
+	// RecordStatementImport records one upload of a statement file: its
+	// Export balance and what its rows came to. First marks the Account's
+	// first import, which works out the Opening balance.
+	RecordStatementImport struct {
+		ConnectionID   sharedkernel.ID
+		AccountID      sharedkernel.ID
+		FileHash       string
+		MappingVersion int
+		Currency       string
+		ExportBalance  sharedkernel.Decimal
+		RowsImported   int
+		RowsIgnored    int
+		RowsTotal      sharedkernel.Decimal
+		First          bool
+	}
+)
+
+func (RecordStatementImport) isStatementImportCommand() {}
+
+type (
+	// StatementImportEvent is a Statement import's event.
+	StatementImportEvent interface{ isStatementImportEvent() }
+
+	// StatementImportRecorded is recorded when a statement file is
+	// imported. OpeningBalance is set only for the Account's first import.
+	StatementImportRecorded struct {
+		ConnectionID   sharedkernel.ID       `json:"connectionid"`
+		AccountID      sharedkernel.ID       `json:"accountid"`
+		FileHash       string                `json:"filehash"`
+		MappingVersion int                   `json:"mappingversion"`
+		Currency       string                `json:"currency"`
+		ExportBalance  sharedkernel.Decimal  `json:"exportbalance"`
+		RowsImported   int                   `json:"rowsimported"`
+		RowsIgnored    int                   `json:"rowsignored"`
+		RowsTotal      sharedkernel.Decimal  `json:"rowstotal"`
+		OpeningBalance *sharedkernel.Decimal `json:"openingbalance,omitempty"`
+		BalanceCheck   BalanceCheck          `json:"balancecheck"`
+	}
+)
+
+func (StatementImportRecorded) isStatementImportEvent() {}
+
+// StatementImport is the Statement import Decider (ADR-0018).
+var StatementImport = decider.Decider[StatementImportState, StatementImportCommand, StatementImportEvent]{
+	Decide: decideStatementImport,
+	Evolve: evolveStatementImport,
+}
+
+func decideStatementImport(s StatementImportState, c StatementImportCommand) ([]StatementImportEvent, error) {
+	switch c := c.(type) {
+	case RecordStatementImport:
+		return recordStatementImport(s, c)
+	default:
+		return nil, nil
+	}
+}
+
+func recordStatementImport(s StatementImportState, c RecordStatementImport) ([]StatementImportEvent, error) {
+	if s.Recorded {
+		return nil, ErrStatementImportAlreadyRecorded
+	}
+
+	if c.FileHash == "" {
+		return nil, ErrFileHashRequired
+	}
+
+	currency, err := sharedkernel.ParseCurrency(c.Currency)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // the shared kernel's own refusal
+	}
+
+	if err := CheckExportBalance(c.ExportBalance, currency); err != nil {
+		return nil, err
+	}
+
+	if !c.First {
+		return nil, ErrLaterImportsNotSupported
+	}
+
+	// The first import has nothing earlier to check against: its Opening
+	// balance makes the Balance check pass by construction.
+	opening := c.ExportBalance.Sub(c.RowsTotal)
+
+	return []StatementImportEvent{StatementImportRecorded{
+		ConnectionID:   c.ConnectionID,
+		AccountID:      c.AccountID,
+		FileHash:       c.FileHash,
+		MappingVersion: c.MappingVersion,
+		Currency:       currency.Code(),
+		ExportBalance:  c.ExportBalance,
+		RowsImported:   c.RowsImported,
+		RowsIgnored:    c.RowsIgnored,
+		RowsTotal:      c.RowsTotal,
+		OpeningBalance: &opening,
+		BalanceCheck:   BalanceCheckPassed,
+	}}, nil
+}
+
+func evolveStatementImport(s StatementImportState, e decider.Envelope[StatementImportEvent]) StatementImportState {
+	if ev, ok := e.Event.(StatementImportRecorded); ok {
+		s = StatementImportState{
+			Recorded:       true,
+			ConnectionID:   ev.ConnectionID,
+			AccountID:      ev.AccountID,
+			FileHash:       ev.FileHash,
+			MappingVersion: ev.MappingVersion,
+			Currency:       ev.Currency,
+			ExportBalance:  ev.ExportBalance,
+			RowsImported:   ev.RowsImported,
+			RowsIgnored:    ev.RowsIgnored,
+			RowsTotal:      ev.RowsTotal,
+			OpeningBalance: ev.OpeningBalance,
+			BalanceCheck:   ev.BalanceCheck,
+			RecordedAt:     e.Time,
+		}
+	}
+
+	return s
+}
+
+// ImportedState is where an Imported transaction is in its review.
+type ImportedState string
+
+// The Imported transaction states this slice has so far.
+const (
+	ImportedPending ImportedState = "pending"
+)
+
+var (
+	// ErrRowAlreadyImported is returned for importing a row twice.
+	ErrRowAlreadyImported = errors.New("imported transaction already recorded")
+	// ErrInvalidRowAmount is returned for a row whose amount isn't money in
+	// a known currency with that currency's decimal places.
+	ErrInvalidRowAmount = errors.New("invalid imported transaction amount")
+)
+
+// ImportedTransactionState is an Imported transaction's fold.
+type ImportedTransactionState struct {
+	Imported          bool
+	State             ImportedState
+	StatementImportID sharedkernel.ID
+	AccountID         sharedkernel.ID
+	Line              int
+	BookingDate       time.Time
+	TransactionDate   time.Time
+	// ValueDate is zero when the file has none.
+	ValueDate         time.Time
+	Amount            sharedkernel.Decimal
+	Currency          string
+	Description       string
+	Payee             string
+	BankTransactionID string
+}
+
+type (
+	// ImportedTransactionCommand is a command to an Imported transaction.
+	ImportedTransactionCommand interface{ isImportedTransactionCommand() }
+
+	// ImportRow records one row of a Statement import, in the Account
+	// currency. TransactionDate is the Booking date when the file has none;
+	// ValueDate may be zero.
+	ImportRow struct {
+		StatementImportID sharedkernel.ID
+		AccountID         sharedkernel.ID
+		Line              int
+		BookingDate       time.Time
+		TransactionDate   time.Time
+		ValueDate         time.Time
+		Amount            sharedkernel.Decimal
+		Currency          string
+		Description       string
+		Payee             string
+		BankTransactionID string
+	}
+)
+
+func (ImportRow) isImportedTransactionCommand() {}
+
+type (
+	// ImportedTransactionEvent is an Imported transaction's event.
+	ImportedTransactionEvent interface{ isImportedTransactionEvent() }
+
+	// TransactionImported is recorded when a row becomes a pending Imported
+	// transaction. Dates are written YYYY-MM-DD; ValueDate is empty when the
+	// file has none.
+	TransactionImported struct {
+		StatementImportID sharedkernel.ID      `json:"statementimportid"`
+		AccountID         sharedkernel.ID      `json:"accountid"`
+		Line              int                  `json:"line"`
+		BookingDate       string               `json:"bookingdate"`
+		TransactionDate   string               `json:"transactiondate"`
+		ValueDate         string               `json:"valuedate,omitempty"`
+		Amount            sharedkernel.Decimal `json:"amount"`
+		Currency          string               `json:"currency"`
+		Description       string               `json:"description"`
+		Payee             string               `json:"payee,omitempty"`
+		BankTransactionID string               `json:"banktransactionid,omitempty"`
+	}
+)
+
+func (TransactionImported) isImportedTransactionEvent() {}
+
+// DateLayout is how events write a calendar date.
+const DateLayout = time.DateOnly
+
+// ImportedTransaction is the Imported transaction Decider.
+var ImportedTransaction = decider.Decider[ImportedTransactionState, ImportedTransactionCommand, ImportedTransactionEvent]{
+	Decide: decideImportedTransaction,
+	Evolve: evolveImportedTransaction,
+}
+
+func decideImportedTransaction(s ImportedTransactionState, c ImportedTransactionCommand) ([]ImportedTransactionEvent, error) {
+	switch c := c.(type) {
+	case ImportRow:
+		return importRow(s, c)
+	default:
+		return nil, nil
+	}
+}
+
+func importRow(s ImportedTransactionState, c ImportRow) ([]ImportedTransactionEvent, error) {
+	if s.Imported {
+		return nil, ErrRowAlreadyImported
+	}
+
+	currency, err := sharedkernel.ParseCurrency(c.Currency)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidRowAmount, err)
+	}
+
+	if !c.Amount.Equal(c.Amount.Round(int32(currency.Decimals()))) { //nolint:gosec // at most 18 places
+		return nil, fmt.Errorf("%w: %s %s", ErrInvalidRowAmount, c.Amount, currency.Code())
+	}
+
+	transactionDate := c.TransactionDate
+	if transactionDate.IsZero() {
+		transactionDate = c.BookingDate
+	}
+
+	imported := TransactionImported{
+		StatementImportID: c.StatementImportID,
+		AccountID:         c.AccountID,
+		Line:              c.Line,
+		BookingDate:       c.BookingDate.Format(DateLayout),
+		TransactionDate:   transactionDate.Format(DateLayout),
+		Amount:            c.Amount,
+		Currency:          currency.Code(),
+		Description:       c.Description,
+		Payee:             c.Payee,
+		BankTransactionID: c.BankTransactionID,
+	}
+
+	if !c.ValueDate.IsZero() {
+		imported.ValueDate = c.ValueDate.Format(DateLayout)
+	}
+
+	return []ImportedTransactionEvent{imported}, nil
+}
+
+func evolveImportedTransaction(s ImportedTransactionState, e decider.Envelope[ImportedTransactionEvent]) ImportedTransactionState {
+	if ev, ok := e.Event.(TransactionImported); ok {
+		s = ImportedTransactionState{
+			Imported:          true,
+			State:             ImportedPending,
+			StatementImportID: ev.StatementImportID,
+			AccountID:         ev.AccountID,
+			Line:              ev.Line,
+			Amount:            ev.Amount,
+			Currency:          ev.Currency,
+			Description:       ev.Description,
+			Payee:             ev.Payee,
+			BankTransactionID: ev.BankTransactionID,
+		}
+		// The event was written with DateLayout, so the dates always parse.
+		s.BookingDate, _ = time.Parse(DateLayout, ev.BookingDate)
+		s.TransactionDate, _ = time.Parse(DateLayout, ev.TransactionDate)
+
+		if ev.ValueDate != "" {
+			s.ValueDate, _ = time.Parse(DateLayout, ev.ValueDate)
+		}
+	}
+
+	return s
+}

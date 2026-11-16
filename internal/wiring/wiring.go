@@ -121,11 +121,14 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 	contexts := NewContexts(pool)
 
 	handler, err := httpapi.NewHandler(apiHandler{
-		Handler:           householdshttp.NewHandler(contexts.Users, contexts.Households),
-		ledgerHandler:     ledgerhttp.NewHandler(contexts.Categories),
-		AccountHandler:    ledgerhttp.NewAccountHandler(contexts.Accounts),
-		ConnectionHandler: ingestionhttp.NewConnectionHandler(contexts.Connections),
-		Errors:            httpapi.Errors{Logger: tel.Logger},
+		Handler:            householdshttp.NewHandler(contexts.Users, contexts.Households),
+		ledgerHandler:      ledgerhttp.NewHandler(contexts.Categories),
+		AccountHandler:     ledgerhttp.NewAccountHandler(contexts.Accounts),
+		ConnectionHandler:  ingestionhttp.NewConnectionHandler(contexts.Connections),
+		TransactionHandler: ledgerhttp.NewTransactionHandler(contexts.Transactions),
+		StatementImportHandler: ingestionhttp.NewStatementImportHandler(contexts.StatementImports,
+			contexts.ImportedTransactions),
+		Errors: httpapi.Errors{Logger: tel.Logger},
 	}, auth, pool, tel)
 	if err != nil {
 		return err //nolint:wrapcheck // already wrapped by httpapi
@@ -293,6 +296,8 @@ type apiHandler struct {
 	*ledgerHandler
 	*ledgerhttp.AccountHandler
 	*ingestionhttp.ConnectionHandler
+	*ledgerhttp.TransactionHandler
+	*ingestionhttp.StatementImportHandler
 	httpapi.Errors
 }
 

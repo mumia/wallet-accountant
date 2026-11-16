@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -101,7 +104,7 @@ func (i *idempotency) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	keyID := hashOf(id.Issuer, id.Subject, key)
-	requestHash := hashOf(r.Method, r.URL.Path, r.URL.RawQuery, string(body))
+	requestHash := hashOf(r.Method, r.URL.Path, r.URL.RawQuery, bodyIdentity(r.Header.Get("Content-Type"), body))
 
 	stored, err := i.reserve(ctx, keyID, requestHash)
 	if err != nil {
@@ -346,6 +349,44 @@ func derefStatus(s *int) int {
 	}
 
 	return *s
+}
+
+// bodyIdentity is what makes two request bodies the same request. A
+// multipart form is compared by its parts (each part's name, file name,
+// content type and content, in any order), not its bytes: its boundary is
+// random, so a client that rebuilds the form to retry an upload sends other
+// bytes for the same request. Any other body is compared byte for byte.
+func bodyIdentity(contentType string, body []byte) string {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "multipart/form-data" || params["boundary"] == "" {
+		return string(body)
+	}
+
+	reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+
+	var parts []string
+
+	for {
+		part, err := reader.NextRawPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return string(body) // not a valid form: ogen refuses it
+		}
+
+		content, err := io.ReadAll(part)
+		if err != nil {
+			return string(body)
+		}
+
+		parts = append(parts, hashOf(part.FormName(), part.FileName(), part.Header.Get("Content-Type"), string(content)))
+	}
+
+	slices.Sort(parts)
+
+	return "multipart/form-data:" + strings.Join(parts, ",")
 }
 
 // hashOf hashes the parts, separated so that no two lists of parts collide.

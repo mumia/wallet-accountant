@@ -37,12 +37,13 @@ func TestANewAccountAwaitsItsFirstStatementImport(t *testing.T) {
 		Name: "Main", Kind: domain.AccountKindBankAccount, Currency: "BTC", StartDate: "2026-01-01",
 	})).State()
 
-	want := domain.AccountState{
-		Added: true, Name: "Main", Kind: domain.AccountKindBankAccount, Currency: "BTC",
-		StartDate: startDate, AwaitingFirstStatementImport: true,
+	if !s.Added || s.Name != "Main" || s.Kind != domain.AccountKindBankAccount || s.Currency != "BTC" ||
+		!s.StartDate.Equal(startDate) || !s.AwaitingFirstStatementImport {
+		t.Errorf("state = %+v", s)
 	}
-	if s != want {
-		t.Errorf("state = %+v, want %+v", s, want)
+
+	if s.HasBalance() || len(s.Months) != 0 {
+		t.Errorf("a new Account has a balance: %+v", s)
 	}
 }
 

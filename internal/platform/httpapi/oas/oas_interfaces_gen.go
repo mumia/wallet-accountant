@@ -37,6 +37,10 @@ type GetMeRes interface {
 	getMeRes()
 }
 
+type ListAccountTransactionsRes interface {
+	listAccountTransactionsRes()
+}
+
 type ListAccountsRes interface {
 	listAccountsRes()
 }
@@ -53,6 +57,22 @@ type ListHouseholdsRes interface {
 	listHouseholdsRes()
 }
 
+type ListImportedTransactionsRes interface {
+	listImportedTransactionsRes()
+}
+
+type ListStatementImportsRes interface {
+	listStatementImportsRes()
+}
+
+type PreviewStatementImportRes interface {
+	previewStatementImportRes()
+}
+
 type SaveCsvMappingRes interface {
 	saveCsvMappingRes()
+}
+
+type UploadStatementImportRes interface {
+	uploadStatementImportRes()
 }

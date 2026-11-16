@@ -29,6 +29,12 @@ tags:
     description: Places where money is held or owed (ADR-0004)
   - name: Connections
     description: Links between an Account and an outside source of its transactions
+  - name: Transactions
+    description: An Account's Transactions as a single-entry list (ADR-0001)
+  - name: Statement imports
+    description: Uploads of a bank statement file through a Connection (ADR-0018)
+  - name: Imported transactions
+    description: Rows brought in by Statement imports, waiting for review
 paths:
   /me:
     get:
@@ -456,6 +462,211 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/transactions:
+    get:
+      operationId: listAccountTransactions
+      summary: An Account's Transactions
+      description: |
+        Lists the Account's Transactions as a single-entry list (ADR-0001):
+        each with its signed amount on this Account (positive is money in),
+        Booking date, Transaction date, description and Category. Sorted by
+        Booking date, then in the order they were recorded, and paged with a
+        cursor. `booking_month` keeps only one Booking month. The list is
+        always current: it is read in the request's own transaction.
+      tags:
+        - Transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/BookingMonth'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of the Account's Transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountTransactionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/imported-transactions:
+    get:
+      operationId: listImportedTransactions
+      summary: An Account's Imported transactions
+      description: |
+        Lists the Account's Imported transactions, sorted by Booking date and
+        then in the order they were imported (a file's rows in line order),
+        paged with a cursor.
+        `state` keeps only those in one state (`PENDING`: waiting for
+        review) and `booking_month` only one Booking month.
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - name: state
+          in: query
+          required: false
+          description: Only Imported transactions in this state
+          schema:
+            type: string
+            x-extensible-enum:
+              - PENDING
+            example: PENDING
+        - $ref: '#/components/parameters/BookingMonth'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of the Account's Imported transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransactionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/connections/{connection_id}/statement-imports/previews:
+    post:
+      operationId: previewStatementImport
+      summary: Preview an Account's first Statement import
+      description: |
+        Reads a statement file with the Connection's CSV mapping and shows
+        the Opening balance the Account's first Statement import would
+        record (ADR-0018): the Export balance minus the total of the rows
+        booked on or after the start date. Records nothing. The Export
+        balance is typed twice; entries that differ get 422
+        `/problems/export-balance-mismatch`. A file with an unreadable row is
+        refused whole with 422 `/problems/unreadable-statement-file`, listing
+        every line and its reason. A file already imported through the
+        Connection gets 409 `/problems/duplicate-statement-import`, naming
+        the earlier import; an Account that already has its Opening balance
+        gets 409 `/problems/opening-balance-already-recorded`. Confirm the
+        import by uploading the same file and Export balance with the
+        returned `preview_id`.
+
+        Every amount is in the Account currency and may have no more decimal
+        places than it has: an Export balance with more gets 422
+        `/problems/invalid-export-balance`, and a row with more is an
+        unreadable row. A file with no rows at all gets 422
+        `/problems/empty-statement-file`, and a Connection without a CSV
+        mapping gets 422 `/problems/csv-mapping-required`.
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StatementImportPreviewUpload'
+      responses:
+        '200':
+          description: What the first Statement import would record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImportPreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/StatementImportConflict'
+        '422':
+          $ref: '#/components/responses/StatementFileRefused'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/connections/{connection_id}/statement-imports:
+    post:
+      operationId: uploadStatementImport
+      summary: Upload a statement file
+      description: |
+        Imports a statement file through the Connection: every row booked on
+        or after the Account's start date becomes a pending Imported
+        transaction, and the rows before it are ignored and counted. The
+        first import of an Account needs the `preview_id` of its preview
+        (422 `/problems/preview-required` without it). It is recomputed from
+        the uploaded file, its Export balance and the Connection's current
+        mapping version, and a difference gets 422
+        `/problems/preview-mismatch`. The first import also records the
+        Opening balance Transaction on the start date, in the same
+        transaction; an Account that got its Opening balance since the
+        preview gets 409 `/problems/opening-balance-already-recorded`. A file
+        with an unreadable row is refused whole (422
+        `/problems/unreadable-statement-file`), and a file already imported
+        through the Connection gets 409 `/problems/duplicate-statement-import`.
+        Later imports are not supported yet (422
+        `/problems/later-statement-imports-not-supported`). Amounts, an empty
+        file and a Connection without a mapping are refused as by the
+        preview. Retrying with the same Idempotency-Key and the same file and
+        fields returns the original result, however the form is rebuilt.
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StatementImportUpload'
+      responses:
+        '201':
+          description: The recorded Statement import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/StatementImportConflict'
+        '422':
+          $ref: '#/components/responses/StatementFileRefused'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listStatementImports
+      summary: A Connection's Statement imports
+      description: Lists every Statement import of the Connection, in the order they were recorded.
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+      responses:
+        '200':
+          description: The Connection's Statement imports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImportList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     IdempotencyKey:
@@ -503,6 +714,34 @@ components:
       schema:
         type: string
         format: uuid
+    BookingMonth:
+      name: booking_month
+      in: query
+      required: false
+      description: Only this Booking month, written YYYY-MM
+      schema:
+        type: string
+        pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+        example: 2026-01
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Where the page starts, the `next_cursor` of the previous page; absent for the first page
+      schema:
+        type: string
+        maxLength: 512
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: The most items a page holds
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 200
+        default: 50
   securitySchemes:
     bearer_auth:
       type: http
@@ -540,6 +779,29 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    BadRequest:
+      description: The request is malformed, for example an invalid cursor
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    StatementImportConflict:
+      description: |
+        The statement file was already imported through the Connection
+        (`statement_import_id` names the earlier import), or the Account
+        already has its Opening balance
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/StatementImportConflictProblem'
+    StatementFileRefused:
+      description: |
+        The statement file or its Export balance is refused; for unreadable
+        rows, `rows` lists every line and its reason
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/StatementFileProblem'
     Problem:
       description: An error
       content:
@@ -950,6 +1212,351 @@ components:
           format: int32
           description: The column's position, counted from 1
           example: 3
+    DecimalText:
+      type: string
+      description: An exact decimal written with `.` as the decimal separator and no thousands separator
+      pattern: '^-?[0-9]{1,30}(\.[0-9]{1,18})?$'
+      example: '1234.56'
+    StatementImportPreviewUpload:
+      type: object
+      description: A first statement file to preview, with its Export balance typed twice
+      required:
+        - file
+        - export_balance
+        - export_balance_confirmation
+      properties:
+        file:
+          type: string
+          format: binary
+          description: The statement file, as the bank exported it
+        export_balance:
+          $ref: '#/components/schemas/DecimalText'
+        export_balance_confirmation:
+          $ref: '#/components/schemas/DecimalText'
+    StatementImportUpload:
+      type: object
+      description: A statement file with its Export balance
+      required:
+        - file
+        - export_balance
+      properties:
+        file:
+          type: string
+          format: binary
+          description: The statement file, as the bank exported it
+        export_balance:
+          $ref: '#/components/schemas/DecimalText'
+        preview_id:
+          type: string
+          maxLength: 128
+          description: The preview's ID; required for the Account's first Statement import
+    StatementImportPreview:
+      type: object
+      description: What an Account's first Statement import would record; nothing is recorded yet
+      required:
+        - preview_id
+        - opening_balance
+        - start_date
+        - export_balance
+        - row_count
+        - rows_ignored_before_start_date
+        - rows_total
+      properties:
+        preview_id:
+          type: string
+          description: |
+            Ties a confirming upload to this preview: a hash of the Account,
+            the Connection, the file, the Export balance and the mapping
+            version, so the server keeps no state
+        opening_balance:
+          $ref: '#/components/schemas/Money'
+        start_date:
+          type: string
+          format: date
+          description: The Account's start date, the date of its Opening balance
+          example: '2026-01-01'
+        export_balance:
+          $ref: '#/components/schemas/Money'
+        row_count:
+          type: integer
+          format: int32
+          description: The rows that would become Imported transactions
+          example: 42
+        rows_ignored_before_start_date:
+          type: integer
+          format: int32
+          description: The rows booked before the Account's start date, which are ignored
+          example: 3
+        rows_total:
+          $ref: '#/components/schemas/Money'
+    StatementImport:
+      type: object
+      description: A Statement import
+      required:
+        - statement_import_id
+        - connection_id
+        - account_id
+        - export_balance
+        - rows_imported
+        - rows_ignored_before_start_date
+        - rows_total
+        - balance_check
+        - imported_at
+      properties:
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import's ID (UUIDv7)
+        connection_id:
+          type: string
+          format: uuid
+          description: The Connection the file came through
+        account_id:
+          type: string
+          format: uuid
+          description: The Account the rows belong to
+        export_balance:
+          $ref: '#/components/schemas/Money'
+        rows_imported:
+          type: integer
+          format: int32
+          description: The rows that became Imported transactions
+          example: 42
+        rows_ignored_before_start_date:
+          type: integer
+          format: int32
+          description: The rows booked before the Account's start date, which were ignored
+          example: 3
+        rows_total:
+          $ref: '#/components/schemas/Money'
+        opening_balance:
+          $ref: '#/components/schemas/Money'
+        balance_check:
+          type: string
+          description: The Balance check; the first import passes it by construction
+          x-extensible-enum:
+            - PASSED
+          example: PASSED
+        imported_at:
+          type: string
+          format: date-time
+          description: When the import was recorded
+          example: '2026-02-01T09:30:00Z'
+    StatementImportList:
+      type: object
+      description: A Connection's Statement imports
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Statement imports, in the order they were recorded
+          items:
+            $ref: '#/components/schemas/StatementImport'
+    StatementImportConflictProblem:
+      type: object
+      description: Problem details (RFC 9457) of a refused Statement import
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/duplicate-statement-import
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Duplicate statement file
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 409
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The earlier Statement import of the same file
+    StatementFileProblem:
+      type: object
+      description: Problem details (RFC 9457) of a refused statement file
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/unreadable-statement-file
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Unreadable statement file
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 422
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        rows:
+          type: array
+          description: Every line of the file that can't be read, with the reason
+          items:
+            $ref: '#/components/schemas/RowError'
+    RowError:
+      type: object
+      description: Why one line of a statement file can't be read
+      required:
+        - line
+        - reason
+      properties:
+        line:
+          type: integer
+          format: int32
+          description: The line in the file, counted from 1, including skipped lines and the header row
+          example: 7
+        reason:
+          type: string
+          description: Why the line can't be read
+    AccountTransaction:
+      type: object
+      description: A Transaction as one line of an Account's single-entry list
+      required:
+        - transaction_id
+        - amount
+        - booking_date
+        - transaction_date
+        - description
+        - category_id
+        - category_name
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction's ID (UUIDv7)
+        amount:
+          $ref: '#/components/schemas/Money'
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        transaction_date:
+          type: string
+          format: date
+          description: The date the purchase or payment happened
+          example: '2026-01-14'
+        description:
+          type: string
+          description: The Transaction's description
+          example: Opening balance
+        category_id:
+          type: string
+          format: uuid
+          description: The Category on the other side of the Transaction
+        category_name:
+          type: string
+          description: The Category's name
+          example: Opening balance
+    AccountTransactionPage:
+      type: object
+      description: A page of an Account's Transactions
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Transactions on this page
+          items:
+            $ref: '#/components/schemas/AccountTransaction'
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last page
+    ImportedTransaction:
+      type: object
+      description: A row brought in by a Statement import
+      required:
+        - imported_transaction_id
+        - statement_import_id
+        - state
+        - line
+        - booking_date
+        - transaction_date
+        - amount
+        - description
+      properties:
+        imported_transaction_id:
+          type: string
+          format: uuid
+          description: The Imported transaction's ID (UUIDv7)
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import that brought it in
+        state:
+          type: string
+          description: Where it is in its review
+          x-extensible-enum:
+            - PENDING
+          example: PENDING
+        line:
+          type: integer
+          format: int32
+          description: Its line in the statement file
+          example: 2
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        transaction_date:
+          type: string
+          format: date
+          description: The date the purchase or payment happened; the Booking date when the file has none
+          example: '2026-01-14'
+        value_date:
+          type: string
+          format: date
+          description: The date the money moved; absent when the file has none
+          example: '2026-01-16'
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: The bank's description
+        payee:
+          type: string
+          description: The payee, when the file has one
+        bank_transaction_id:
+          type: string
+          description: The bank's own transaction ID, when the file has one
+    ImportedTransactionPage:
+      type: object
+      description: A page of an Account's Imported transactions
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Imported transactions on this page
+          items:
+            $ref: '#/components/schemas/ImportedTransaction'
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last page
     Money:
       type: object
       description: |
@@ -963,7 +1570,11 @@ components:
         amount:
           type: number
           format: decimal
-          description: The exact amount; never a binary floating-point value
+          x-ogen-type: github.com/mumia/wallet-accountant/internal/platform/httpapi/amount.Amount
+          description: |
+            The exact amount, written with its currency's number of decimal
+            places (trailing zeros included); never a binary floating-point
+            value
           example: 1234.56
         currency:
           $ref: '#/components/schemas/CurrencyCode'

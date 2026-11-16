@@ -17,7 +17,9 @@ import (
 )
 
 var regexMap = map[string]ogenregex.Regexp{
-	"^[A-Z]{3,5}$": ogenregex.MustCompile("^[A-Z]{3,5}$"),
+	"^-?[0-9]{1,30}(\\.[0-9]{1,18})?$": ogenregex.MustCompile("^-?[0-9]{1,30}(\\.[0-9]{1,18})?$"),
+	"^[0-9]{4}-(0[1-9]|1[0-2])$":       ogenregex.MustCompile("^[0-9]{4}-(0[1-9]|1[0-2])$"),
+	"^[A-Z]{3,5}$":                     ogenregex.MustCompile("^[A-Z]{3,5}$"),
 }
 var (
 	// Allocate option closure once.

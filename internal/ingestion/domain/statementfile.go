@@ -64,6 +64,12 @@ var plainDecimal = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?$`)
 // every row, or a *RowsError listing every line it can't read with the
 // reason; an invalid mapping is refused as by Validate.
 func ParseStatementFile(m CSVMapping, file []byte) ([]StatementRow, error) {
+	return parseStatementFile(m, file, -1)
+}
+
+// parseStatementFile is ParseStatementFile that also refuses every amount
+// with more than places decimal places; a negative places checks none.
+func parseStatementFile(m CSVMapping, file []byte, places int32) ([]StatementRow, error) {
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
@@ -76,7 +82,7 @@ func ParseStatementFile(m CSVMapping, file []byte) ([]StatementRow, error) {
 	r.FieldsPerRecord = -1
 	r.ReuseRecord = false
 
-	p := parser{m: m, layout: dateFormats[m.DateFormat], columns: map[string]int{}}
+	p := parser{m: m, layout: dateFormats[m.DateFormat], columns: map[string]int{}, places: places}
 	rows := []StatementRow{}
 	header := m.HasHeaderRow
 
@@ -145,6 +151,7 @@ type parser struct {
 	m       CSVMapping
 	layout  string
 	columns map[string]int // header name (lower case) to index
+	places  int32          // the most decimal places an amount may have; none checked if negative
 	errors  []RowError
 }
 
@@ -239,6 +246,10 @@ func (p *parser) readRow(line int, record []string) (StatementRow, bool) {
 	row.BankTransactionID = text("bank transaction ID", p.m.BankTransactionID)
 
 	amount, problem := p.amount(text)
+	if problem == "" && p.places >= 0 && !amount.Equal(amount.Round(p.places)) {
+		problem = fmt.Sprintf("the amount %s has more than the %d decimal places of the Account currency", amount, p.places)
+	}
+
 	if problem != "" {
 		problems = append(problems, problem)
 	}

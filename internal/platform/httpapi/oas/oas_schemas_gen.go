@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
+	"github.com/mumia/wallet-accountant/internal/platform/httpapi/amount"
+	ht "github.com/ogen-go/ogen/http"
 )
 
 func (s *ProblemStatusCode) Error() string {
@@ -175,6 +176,125 @@ func (s *AccountList) SetItems(val []Account) {
 }
 
 func (*AccountList) listAccountsRes() {}
+
+// A Transaction as one line of an Account's single-entry list.
+// Ref: #/components/schemas/AccountTransaction
+type AccountTransaction struct {
+	// The Transaction's ID (UUIDv7).
+	TransactionID uuid.UUID `json:"transaction_id"`
+	Amount        Money     `json:"amount"`
+	// The date the bank recorded it on the Account.
+	BookingDate time.Time `json:"booking_date"`
+	// The date the purchase or payment happened.
+	TransactionDate time.Time `json:"transaction_date"`
+	// The Transaction's description.
+	Description string `json:"description"`
+	// The Category on the other side of the Transaction.
+	CategoryID uuid.UUID `json:"category_id"`
+	// The Category's name.
+	CategoryName string `json:"category_name"`
+}
+
+// GetTransactionID returns the value of TransactionID.
+func (s *AccountTransaction) GetTransactionID() uuid.UUID {
+	return s.TransactionID
+}
+
+// GetAmount returns the value of Amount.
+func (s *AccountTransaction) GetAmount() Money {
+	return s.Amount
+}
+
+// GetBookingDate returns the value of BookingDate.
+func (s *AccountTransaction) GetBookingDate() time.Time {
+	return s.BookingDate
+}
+
+// GetTransactionDate returns the value of TransactionDate.
+func (s *AccountTransaction) GetTransactionDate() time.Time {
+	return s.TransactionDate
+}
+
+// GetDescription returns the value of Description.
+func (s *AccountTransaction) GetDescription() string {
+	return s.Description
+}
+
+// GetCategoryID returns the value of CategoryID.
+func (s *AccountTransaction) GetCategoryID() uuid.UUID {
+	return s.CategoryID
+}
+
+// GetCategoryName returns the value of CategoryName.
+func (s *AccountTransaction) GetCategoryName() string {
+	return s.CategoryName
+}
+
+// SetTransactionID sets the value of TransactionID.
+func (s *AccountTransaction) SetTransactionID(val uuid.UUID) {
+	s.TransactionID = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *AccountTransaction) SetAmount(val Money) {
+	s.Amount = val
+}
+
+// SetBookingDate sets the value of BookingDate.
+func (s *AccountTransaction) SetBookingDate(val time.Time) {
+	s.BookingDate = val
+}
+
+// SetTransactionDate sets the value of TransactionDate.
+func (s *AccountTransaction) SetTransactionDate(val time.Time) {
+	s.TransactionDate = val
+}
+
+// SetDescription sets the value of Description.
+func (s *AccountTransaction) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetCategoryID sets the value of CategoryID.
+func (s *AccountTransaction) SetCategoryID(val uuid.UUID) {
+	s.CategoryID = val
+}
+
+// SetCategoryName sets the value of CategoryName.
+func (s *AccountTransaction) SetCategoryName(val string) {
+	s.CategoryName = val
+}
+
+// A page of an Account's Transactions.
+// Ref: #/components/schemas/AccountTransactionPage
+type AccountTransactionPage struct {
+	// The Transactions on this page.
+	Items []AccountTransaction `json:"items"`
+	// The cursor of the next page; absent on the last page.
+	NextCursor OptString `json:"next_cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *AccountTransactionPage) GetItems() []AccountTransaction {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *AccountTransactionPage) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// SetItems sets the value of Items.
+func (s *AccountTransactionPage) SetItems(val []AccountTransaction) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *AccountTransactionPage) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+func (*AccountTransactionPage) listAccountTransactionsRes() {}
 
 type AddAccountNotFound Problem
 
@@ -857,6 +977,8 @@ func (s *CsvMapping) SetColumns(val OptCsvColumns) {
 
 type CurrencyCode string
 
+type DecimalText string
+
 type GetAccountNotFound Problem
 
 func (*GetAccountNotFound) getAccountRes() {}
@@ -971,6 +1093,185 @@ func (s *HouseholdList) SetItems(val []Household) {
 
 func (*HouseholdList) listHouseholdsRes() {}
 
+// A row brought in by a Statement import.
+// Ref: #/components/schemas/ImportedTransaction
+type ImportedTransaction struct {
+	// The Imported transaction's ID (UUIDv7).
+	ImportedTransactionID uuid.UUID `json:"imported_transaction_id"`
+	// The Statement import that brought it in.
+	StatementImportID uuid.UUID `json:"statement_import_id"`
+	// Where it is in its review.
+	State string `json:"state"`
+	// Its line in the statement file.
+	Line int32 `json:"line"`
+	// The date the bank recorded it on the Account.
+	BookingDate time.Time `json:"booking_date"`
+	// The date the purchase or payment happened; the Booking date when the file has none.
+	TransactionDate time.Time `json:"transaction_date"`
+	// The date the money moved; absent when the file has none.
+	ValueDate OptDate `json:"value_date"`
+	Amount    Money   `json:"amount"`
+	// The bank's description.
+	Description string `json:"description"`
+	// The payee, when the file has one.
+	Payee OptString `json:"payee"`
+	// The bank's own transaction ID, when the file has one.
+	BankTransactionID OptString `json:"bank_transaction_id"`
+}
+
+// GetImportedTransactionID returns the value of ImportedTransactionID.
+func (s *ImportedTransaction) GetImportedTransactionID() uuid.UUID {
+	return s.ImportedTransactionID
+}
+
+// GetStatementImportID returns the value of StatementImportID.
+func (s *ImportedTransaction) GetStatementImportID() uuid.UUID {
+	return s.StatementImportID
+}
+
+// GetState returns the value of State.
+func (s *ImportedTransaction) GetState() string {
+	return s.State
+}
+
+// GetLine returns the value of Line.
+func (s *ImportedTransaction) GetLine() int32 {
+	return s.Line
+}
+
+// GetBookingDate returns the value of BookingDate.
+func (s *ImportedTransaction) GetBookingDate() time.Time {
+	return s.BookingDate
+}
+
+// GetTransactionDate returns the value of TransactionDate.
+func (s *ImportedTransaction) GetTransactionDate() time.Time {
+	return s.TransactionDate
+}
+
+// GetValueDate returns the value of ValueDate.
+func (s *ImportedTransaction) GetValueDate() OptDate {
+	return s.ValueDate
+}
+
+// GetAmount returns the value of Amount.
+func (s *ImportedTransaction) GetAmount() Money {
+	return s.Amount
+}
+
+// GetDescription returns the value of Description.
+func (s *ImportedTransaction) GetDescription() string {
+	return s.Description
+}
+
+// GetPayee returns the value of Payee.
+func (s *ImportedTransaction) GetPayee() OptString {
+	return s.Payee
+}
+
+// GetBankTransactionID returns the value of BankTransactionID.
+func (s *ImportedTransaction) GetBankTransactionID() OptString {
+	return s.BankTransactionID
+}
+
+// SetImportedTransactionID sets the value of ImportedTransactionID.
+func (s *ImportedTransaction) SetImportedTransactionID(val uuid.UUID) {
+	s.ImportedTransactionID = val
+}
+
+// SetStatementImportID sets the value of StatementImportID.
+func (s *ImportedTransaction) SetStatementImportID(val uuid.UUID) {
+	s.StatementImportID = val
+}
+
+// SetState sets the value of State.
+func (s *ImportedTransaction) SetState(val string) {
+	s.State = val
+}
+
+// SetLine sets the value of Line.
+func (s *ImportedTransaction) SetLine(val int32) {
+	s.Line = val
+}
+
+// SetBookingDate sets the value of BookingDate.
+func (s *ImportedTransaction) SetBookingDate(val time.Time) {
+	s.BookingDate = val
+}
+
+// SetTransactionDate sets the value of TransactionDate.
+func (s *ImportedTransaction) SetTransactionDate(val time.Time) {
+	s.TransactionDate = val
+}
+
+// SetValueDate sets the value of ValueDate.
+func (s *ImportedTransaction) SetValueDate(val OptDate) {
+	s.ValueDate = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *ImportedTransaction) SetAmount(val Money) {
+	s.Amount = val
+}
+
+// SetDescription sets the value of Description.
+func (s *ImportedTransaction) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetPayee sets the value of Payee.
+func (s *ImportedTransaction) SetPayee(val OptString) {
+	s.Payee = val
+}
+
+// SetBankTransactionID sets the value of BankTransactionID.
+func (s *ImportedTransaction) SetBankTransactionID(val OptString) {
+	s.BankTransactionID = val
+}
+
+// A page of an Account's Imported transactions.
+// Ref: #/components/schemas/ImportedTransactionPage
+type ImportedTransactionPage struct {
+	// The Imported transactions on this page.
+	Items []ImportedTransaction `json:"items"`
+	// The cursor of the next page; absent on the last page.
+	NextCursor OptString `json:"next_cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *ImportedTransactionPage) GetItems() []ImportedTransaction {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *ImportedTransactionPage) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// SetItems sets the value of Items.
+func (s *ImportedTransactionPage) SetItems(val []ImportedTransaction) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *ImportedTransactionPage) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+func (*ImportedTransactionPage) listImportedTransactionsRes() {}
+
+type ListAccountTransactionsBadRequest Problem
+
+func (*ListAccountTransactionsBadRequest) listAccountTransactionsRes() {}
+
+type ListAccountTransactionsNotFound Problem
+
+func (*ListAccountTransactionsNotFound) listAccountTransactionsRes() {}
+
+type ListAccountTransactionsUnauthorized Problem
+
+func (*ListAccountTransactionsUnauthorized) listAccountTransactionsRes() {}
+
 type ListAccountsNotFound Problem
 
 func (*ListAccountsNotFound) listAccountsRes() {}
@@ -1002,6 +1303,26 @@ func (*ListHouseholdsForbidden) listHouseholdsRes() {}
 type ListHouseholdsUnauthorized Problem
 
 func (*ListHouseholdsUnauthorized) listHouseholdsRes() {}
+
+type ListImportedTransactionsBadRequest Problem
+
+func (*ListImportedTransactionsBadRequest) listImportedTransactionsRes() {}
+
+type ListImportedTransactionsNotFound Problem
+
+func (*ListImportedTransactionsNotFound) listImportedTransactionsRes() {}
+
+type ListImportedTransactionsUnauthorized Problem
+
+func (*ListImportedTransactionsUnauthorized) listImportedTransactionsRes() {}
+
+type ListStatementImportsNotFound Problem
+
+func (*ListStatementImportsNotFound) listStatementImportsRes() {}
+
+type ListStatementImportsUnauthorized Problem
+
+func (*ListStatementImportsUnauthorized) listStatementImportsRes() {}
 
 // The signed-in User.
 // Ref: #/components/schemas/Me
@@ -1039,13 +1360,14 @@ func (*Me) getMeRes()              {}
 // (ADR-0007), for example EUR 2, JPY 0, BTC 8 and ETH 18.
 // Ref: #/components/schemas/Money
 type Money struct {
-	// The exact amount; never a binary floating-point value.
-	Amount   decimal.Decimal `json:"amount"`
-	Currency CurrencyCode    `json:"currency"`
+	// The exact amount, written with its currency's number of decimal places (trailing zeros included);
+	// never a binary floating-point value.
+	Amount   amount.Amount `json:"amount"`
+	Currency CurrencyCode  `json:"currency"`
 }
 
 // GetAmount returns the value of Amount.
-func (s *Money) GetAmount() decimal.Decimal {
+func (s *Money) GetAmount() amount.Amount {
 	return s.Amount
 }
 
@@ -1055,7 +1377,7 @@ func (s *Money) GetCurrency() CurrencyCode {
 }
 
 // SetAmount sets the value of Amount.
-func (s *Money) SetAmount(val decimal.Decimal) {
+func (s *Money) SetAmount(val amount.Amount) {
 	s.Amount = val
 }
 
@@ -1242,6 +1564,52 @@ func (o OptCsvMapping) Get() (v CsvMapping, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptCsvMapping) Or(d CsvMapping) CsvMapping {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptDate returns new OptDate with value set to v.
+func NewOptDate(v time.Time) OptDate {
+	return OptDate{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDate is optional time.Time.
+type OptDate struct {
+	Value time.Time
+	Set   bool
+}
+
+// IsSet returns true if OptDate was set.
+func (o OptDate) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDate) Reset() {
+	var v time.Time
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDate) SetTo(v time.Time) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDate) Get() (v time.Time, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDate) Or(d time.Time) time.Time {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -1500,6 +1868,14 @@ func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 	return d
 }
 
+type PreviewStatementImportNotFound Problem
+
+func (*PreviewStatementImportNotFound) previewStatementImportRes() {}
+
+type PreviewStatementImportUnauthorized Problem
+
+func (*PreviewStatementImportUnauthorized) previewStatementImportRes() {}
+
 // Problem details (RFC 9457).
 // Ref: #/components/schemas/Problem
 type Problem struct {
@@ -1608,6 +1984,35 @@ func (s *Registration) SetInvitationCode(val string) {
 	s.InvitationCode = val
 }
 
+// Why one line of a statement file can't be read.
+// Ref: #/components/schemas/RowError
+type RowError struct {
+	// The line in the file, counted from 1, including skipped lines and the header row.
+	Line int32 `json:"line"`
+	// Why the line can't be read.
+	Reason string `json:"reason"`
+}
+
+// GetLine returns the value of Line.
+func (s *RowError) GetLine() int32 {
+	return s.Line
+}
+
+// GetReason returns the value of Reason.
+func (s *RowError) GetReason() string {
+	return s.Reason
+}
+
+// SetLine sets the value of Line.
+func (s *RowError) SetLine(val int32) {
+	s.Line = val
+}
+
+// SetReason sets the value of Reason.
+func (s *RowError) SetReason(val string) {
+	s.Reason = val
+}
+
 type SaveCsvMappingNotFound Problem
 
 func (*SaveCsvMappingNotFound) saveCsvMappingRes() {}
@@ -1619,3 +2024,458 @@ func (*SaveCsvMappingUnauthorized) saveCsvMappingRes() {}
 type SaveCsvMappingUnprocessableEntity Problem
 
 func (*SaveCsvMappingUnprocessableEntity) saveCsvMappingRes() {}
+
+// Problem details (RFC 9457) of a refused statement file.
+// Ref: #/components/schemas/StatementFileProblem
+type StatementFileProblem struct {
+	// Identifies the problem type.
+	Type string `json:"type"`
+	// A short, human-readable summary of the problem type.
+	Title string `json:"title"`
+	// The HTTP status code.
+	Status int32 `json:"status"`
+	// A human-readable explanation of this occurrence.
+	Detail OptString `json:"detail"`
+	// Every line of the file that can't be read, with the reason.
+	Rows []RowError `json:"rows"`
+}
+
+// GetType returns the value of Type.
+func (s *StatementFileProblem) GetType() string {
+	return s.Type
+}
+
+// GetTitle returns the value of Title.
+func (s *StatementFileProblem) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *StatementFileProblem) GetStatus() int32 {
+	return s.Status
+}
+
+// GetDetail returns the value of Detail.
+func (s *StatementFileProblem) GetDetail() OptString {
+	return s.Detail
+}
+
+// GetRows returns the value of Rows.
+func (s *StatementFileProblem) GetRows() []RowError {
+	return s.Rows
+}
+
+// SetType sets the value of Type.
+func (s *StatementFileProblem) SetType(val string) {
+	s.Type = val
+}
+
+// SetTitle sets the value of Title.
+func (s *StatementFileProblem) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *StatementFileProblem) SetStatus(val int32) {
+	s.Status = val
+}
+
+// SetDetail sets the value of Detail.
+func (s *StatementFileProblem) SetDetail(val OptString) {
+	s.Detail = val
+}
+
+// SetRows sets the value of Rows.
+func (s *StatementFileProblem) SetRows(val []RowError) {
+	s.Rows = val
+}
+
+func (*StatementFileProblem) previewStatementImportRes() {}
+func (*StatementFileProblem) uploadStatementImportRes()  {}
+
+// A Statement import.
+// Ref: #/components/schemas/StatementImport
+type StatementImport struct {
+	// The Statement import's ID (UUIDv7).
+	StatementImportID uuid.UUID `json:"statement_import_id"`
+	// The Connection the file came through.
+	ConnectionID uuid.UUID `json:"connection_id"`
+	// The Account the rows belong to.
+	AccountID     uuid.UUID `json:"account_id"`
+	ExportBalance Money     `json:"export_balance"`
+	// The rows that became Imported transactions.
+	RowsImported int32 `json:"rows_imported"`
+	// The rows booked before the Account's start date, which were ignored.
+	RowsIgnoredBeforeStartDate int32    `json:"rows_ignored_before_start_date"`
+	RowsTotal                  Money    `json:"rows_total"`
+	OpeningBalance             OptMoney `json:"opening_balance"`
+	// The Balance check; the first import passes it by construction.
+	BalanceCheck string `json:"balance_check"`
+	// When the import was recorded.
+	ImportedAt time.Time `json:"imported_at"`
+}
+
+// GetStatementImportID returns the value of StatementImportID.
+func (s *StatementImport) GetStatementImportID() uuid.UUID {
+	return s.StatementImportID
+}
+
+// GetConnectionID returns the value of ConnectionID.
+func (s *StatementImport) GetConnectionID() uuid.UUID {
+	return s.ConnectionID
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *StatementImport) GetAccountID() uuid.UUID {
+	return s.AccountID
+}
+
+// GetExportBalance returns the value of ExportBalance.
+func (s *StatementImport) GetExportBalance() Money {
+	return s.ExportBalance
+}
+
+// GetRowsImported returns the value of RowsImported.
+func (s *StatementImport) GetRowsImported() int32 {
+	return s.RowsImported
+}
+
+// GetRowsIgnoredBeforeStartDate returns the value of RowsIgnoredBeforeStartDate.
+func (s *StatementImport) GetRowsIgnoredBeforeStartDate() int32 {
+	return s.RowsIgnoredBeforeStartDate
+}
+
+// GetRowsTotal returns the value of RowsTotal.
+func (s *StatementImport) GetRowsTotal() Money {
+	return s.RowsTotal
+}
+
+// GetOpeningBalance returns the value of OpeningBalance.
+func (s *StatementImport) GetOpeningBalance() OptMoney {
+	return s.OpeningBalance
+}
+
+// GetBalanceCheck returns the value of BalanceCheck.
+func (s *StatementImport) GetBalanceCheck() string {
+	return s.BalanceCheck
+}
+
+// GetImportedAt returns the value of ImportedAt.
+func (s *StatementImport) GetImportedAt() time.Time {
+	return s.ImportedAt
+}
+
+// SetStatementImportID sets the value of StatementImportID.
+func (s *StatementImport) SetStatementImportID(val uuid.UUID) {
+	s.StatementImportID = val
+}
+
+// SetConnectionID sets the value of ConnectionID.
+func (s *StatementImport) SetConnectionID(val uuid.UUID) {
+	s.ConnectionID = val
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *StatementImport) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
+
+// SetExportBalance sets the value of ExportBalance.
+func (s *StatementImport) SetExportBalance(val Money) {
+	s.ExportBalance = val
+}
+
+// SetRowsImported sets the value of RowsImported.
+func (s *StatementImport) SetRowsImported(val int32) {
+	s.RowsImported = val
+}
+
+// SetRowsIgnoredBeforeStartDate sets the value of RowsIgnoredBeforeStartDate.
+func (s *StatementImport) SetRowsIgnoredBeforeStartDate(val int32) {
+	s.RowsIgnoredBeforeStartDate = val
+}
+
+// SetRowsTotal sets the value of RowsTotal.
+func (s *StatementImport) SetRowsTotal(val Money) {
+	s.RowsTotal = val
+}
+
+// SetOpeningBalance sets the value of OpeningBalance.
+func (s *StatementImport) SetOpeningBalance(val OptMoney) {
+	s.OpeningBalance = val
+}
+
+// SetBalanceCheck sets the value of BalanceCheck.
+func (s *StatementImport) SetBalanceCheck(val string) {
+	s.BalanceCheck = val
+}
+
+// SetImportedAt sets the value of ImportedAt.
+func (s *StatementImport) SetImportedAt(val time.Time) {
+	s.ImportedAt = val
+}
+
+func (*StatementImport) uploadStatementImportRes() {}
+
+// Problem details (RFC 9457) of a refused Statement import.
+// Ref: #/components/schemas/StatementImportConflictProblem
+type StatementImportConflictProblem struct {
+	// Identifies the problem type.
+	Type string `json:"type"`
+	// A short, human-readable summary of the problem type.
+	Title string `json:"title"`
+	// The HTTP status code.
+	Status int32 `json:"status"`
+	// A human-readable explanation of this occurrence.
+	Detail OptString `json:"detail"`
+	// The earlier Statement import of the same file.
+	StatementImportID OptUUID `json:"statement_import_id"`
+}
+
+// GetType returns the value of Type.
+func (s *StatementImportConflictProblem) GetType() string {
+	return s.Type
+}
+
+// GetTitle returns the value of Title.
+func (s *StatementImportConflictProblem) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *StatementImportConflictProblem) GetStatus() int32 {
+	return s.Status
+}
+
+// GetDetail returns the value of Detail.
+func (s *StatementImportConflictProblem) GetDetail() OptString {
+	return s.Detail
+}
+
+// GetStatementImportID returns the value of StatementImportID.
+func (s *StatementImportConflictProblem) GetStatementImportID() OptUUID {
+	return s.StatementImportID
+}
+
+// SetType sets the value of Type.
+func (s *StatementImportConflictProblem) SetType(val string) {
+	s.Type = val
+}
+
+// SetTitle sets the value of Title.
+func (s *StatementImportConflictProblem) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *StatementImportConflictProblem) SetStatus(val int32) {
+	s.Status = val
+}
+
+// SetDetail sets the value of Detail.
+func (s *StatementImportConflictProblem) SetDetail(val OptString) {
+	s.Detail = val
+}
+
+// SetStatementImportID sets the value of StatementImportID.
+func (s *StatementImportConflictProblem) SetStatementImportID(val OptUUID) {
+	s.StatementImportID = val
+}
+
+func (*StatementImportConflictProblem) previewStatementImportRes() {}
+func (*StatementImportConflictProblem) uploadStatementImportRes()  {}
+
+// A Connection's Statement imports.
+// Ref: #/components/schemas/StatementImportList
+type StatementImportList struct {
+	// The Statement imports, in the order they were recorded.
+	Items []StatementImport `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *StatementImportList) GetItems() []StatementImport {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *StatementImportList) SetItems(val []StatementImport) {
+	s.Items = val
+}
+
+func (*StatementImportList) listStatementImportsRes() {}
+
+// What an Account's first Statement import would record; nothing is recorded yet.
+// Ref: #/components/schemas/StatementImportPreview
+type StatementImportPreview struct {
+	// Ties a confirming upload to this preview: a hash of the Account, the Connection, the file, the
+	// Export balance and the mapping version, so the server keeps no state.
+	PreviewID      string `json:"preview_id"`
+	OpeningBalance Money  `json:"opening_balance"`
+	// The Account's start date, the date of its Opening balance.
+	StartDate     time.Time `json:"start_date"`
+	ExportBalance Money     `json:"export_balance"`
+	// The rows that would become Imported transactions.
+	RowCount int32 `json:"row_count"`
+	// The rows booked before the Account's start date, which are ignored.
+	RowsIgnoredBeforeStartDate int32 `json:"rows_ignored_before_start_date"`
+	RowsTotal                  Money `json:"rows_total"`
+}
+
+// GetPreviewID returns the value of PreviewID.
+func (s *StatementImportPreview) GetPreviewID() string {
+	return s.PreviewID
+}
+
+// GetOpeningBalance returns the value of OpeningBalance.
+func (s *StatementImportPreview) GetOpeningBalance() Money {
+	return s.OpeningBalance
+}
+
+// GetStartDate returns the value of StartDate.
+func (s *StatementImportPreview) GetStartDate() time.Time {
+	return s.StartDate
+}
+
+// GetExportBalance returns the value of ExportBalance.
+func (s *StatementImportPreview) GetExportBalance() Money {
+	return s.ExportBalance
+}
+
+// GetRowCount returns the value of RowCount.
+func (s *StatementImportPreview) GetRowCount() int32 {
+	return s.RowCount
+}
+
+// GetRowsIgnoredBeforeStartDate returns the value of RowsIgnoredBeforeStartDate.
+func (s *StatementImportPreview) GetRowsIgnoredBeforeStartDate() int32 {
+	return s.RowsIgnoredBeforeStartDate
+}
+
+// GetRowsTotal returns the value of RowsTotal.
+func (s *StatementImportPreview) GetRowsTotal() Money {
+	return s.RowsTotal
+}
+
+// SetPreviewID sets the value of PreviewID.
+func (s *StatementImportPreview) SetPreviewID(val string) {
+	s.PreviewID = val
+}
+
+// SetOpeningBalance sets the value of OpeningBalance.
+func (s *StatementImportPreview) SetOpeningBalance(val Money) {
+	s.OpeningBalance = val
+}
+
+// SetStartDate sets the value of StartDate.
+func (s *StatementImportPreview) SetStartDate(val time.Time) {
+	s.StartDate = val
+}
+
+// SetExportBalance sets the value of ExportBalance.
+func (s *StatementImportPreview) SetExportBalance(val Money) {
+	s.ExportBalance = val
+}
+
+// SetRowCount sets the value of RowCount.
+func (s *StatementImportPreview) SetRowCount(val int32) {
+	s.RowCount = val
+}
+
+// SetRowsIgnoredBeforeStartDate sets the value of RowsIgnoredBeforeStartDate.
+func (s *StatementImportPreview) SetRowsIgnoredBeforeStartDate(val int32) {
+	s.RowsIgnoredBeforeStartDate = val
+}
+
+// SetRowsTotal sets the value of RowsTotal.
+func (s *StatementImportPreview) SetRowsTotal(val Money) {
+	s.RowsTotal = val
+}
+
+func (*StatementImportPreview) previewStatementImportRes() {}
+
+// A first statement file to preview, with its Export balance typed twice.
+// Ref: #/components/schemas/StatementImportPreviewUpload
+type StatementImportPreviewUploadMultipart struct {
+	// The statement file, as the bank exported it.
+	File                      ht.MultipartFile `json:"file"`
+	ExportBalance             DecimalText      `json:"export_balance"`
+	ExportBalanceConfirmation DecimalText      `json:"export_balance_confirmation"`
+}
+
+// GetFile returns the value of File.
+func (s *StatementImportPreviewUploadMultipart) GetFile() ht.MultipartFile {
+	return s.File
+}
+
+// GetExportBalance returns the value of ExportBalance.
+func (s *StatementImportPreviewUploadMultipart) GetExportBalance() DecimalText {
+	return s.ExportBalance
+}
+
+// GetExportBalanceConfirmation returns the value of ExportBalanceConfirmation.
+func (s *StatementImportPreviewUploadMultipart) GetExportBalanceConfirmation() DecimalText {
+	return s.ExportBalanceConfirmation
+}
+
+// SetFile sets the value of File.
+func (s *StatementImportPreviewUploadMultipart) SetFile(val ht.MultipartFile) {
+	s.File = val
+}
+
+// SetExportBalance sets the value of ExportBalance.
+func (s *StatementImportPreviewUploadMultipart) SetExportBalance(val DecimalText) {
+	s.ExportBalance = val
+}
+
+// SetExportBalanceConfirmation sets the value of ExportBalanceConfirmation.
+func (s *StatementImportPreviewUploadMultipart) SetExportBalanceConfirmation(val DecimalText) {
+	s.ExportBalanceConfirmation = val
+}
+
+// A statement file with its Export balance.
+// Ref: #/components/schemas/StatementImportUpload
+type StatementImportUploadMultipart struct {
+	// The statement file, as the bank exported it.
+	File          ht.MultipartFile `json:"file"`
+	ExportBalance DecimalText      `json:"export_balance"`
+	// The preview's ID; required for the Account's first Statement import.
+	PreviewID OptString `json:"preview_id"`
+}
+
+// GetFile returns the value of File.
+func (s *StatementImportUploadMultipart) GetFile() ht.MultipartFile {
+	return s.File
+}
+
+// GetExportBalance returns the value of ExportBalance.
+func (s *StatementImportUploadMultipart) GetExportBalance() DecimalText {
+	return s.ExportBalance
+}
+
+// GetPreviewID returns the value of PreviewID.
+func (s *StatementImportUploadMultipart) GetPreviewID() OptString {
+	return s.PreviewID
+}
+
+// SetFile sets the value of File.
+func (s *StatementImportUploadMultipart) SetFile(val ht.MultipartFile) {
+	s.File = val
+}
+
+// SetExportBalance sets the value of ExportBalance.
+func (s *StatementImportUploadMultipart) SetExportBalance(val DecimalText) {
+	s.ExportBalance = val
+}
+
+// SetPreviewID sets the value of PreviewID.
+func (s *StatementImportUploadMultipart) SetPreviewID(val OptString) {
+	s.PreviewID = val
+}
+
+type UploadStatementImportNotFound Problem
+
+func (*UploadStatementImportNotFound) uploadStatementImportRes() {}
+
+type UploadStatementImportUnauthorized Problem
+
+func (*UploadStatementImportUnauthorized) uploadStatementImportRes() {}

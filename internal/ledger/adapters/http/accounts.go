@@ -9,6 +9,7 @@ import (
 	"github.com/mumia/wallet-accountant/internal/ledger/app"
 	"github.com/mumia/wallet-accountant/internal/ledger/domain"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi"
+	"github.com/mumia/wallet-accountant/internal/platform/httpapi/amount"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi/oas"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 )
@@ -83,7 +84,7 @@ func (h *AccountHandler) AddAccount(ctx context.Context, req *oas.AccountCreatio
 		return nil, fmt.Errorf("add account: %w", err)
 	}
 
-	return accountResponse(added), nil
+	return accountResponse(added)
 }
 
 // ListAccounts implements listAccounts.
@@ -98,8 +99,14 @@ func (h *AccountHandler) ListAccounts(ctx context.Context, params oas.ListAccoun
 	}
 
 	items := make([]oas.Account, 0, len(list))
+
 	for _, a := range list {
-		items = append(items, *accountResponse(a))
+		res, err := accountResponse(a)
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(items, *res)
 	}
 
 	return &oas.AccountList{Items: items}, nil
@@ -116,13 +123,13 @@ func (h *AccountHandler) GetAccount(ctx context.Context, params oas.GetAccountPa
 		return nil, fmt.Errorf("get account: %w", err)
 	}
 
-	return accountResponse(got), nil
+	return accountResponse(got)
 }
 
-// accountResponse leaves the balance out: an Account awaiting its first
-// Statement import has none, and nothing records an Opening balance yet.
-func accountResponse(a app.Account) *oas.Account {
-	return &oas.Account{
+// accountResponse leaves the balance out while the Account awaits its first
+// Statement import: it has none until its Opening balance is recorded.
+func accountResponse(a app.Account) (*oas.Account, error) {
+	out := &oas.Account{
 		AccountID:                    a.ID,
 		Name:                         a.Name,
 		Kind:                         accountKindsOut[a.Kind],
@@ -130,4 +137,26 @@ func accountResponse(a app.Account) *oas.Account {
 		StartDate:                    a.StartDate,
 		AwaitingFirstStatementImport: a.AwaitingFirstStatementImport,
 	}
+
+	if a.Balance != nil {
+		balance, err := money(*a.Balance, a.Currency)
+		if err != nil {
+			return nil, err
+		}
+
+		out.Balance = oas.NewOptMoney(balance)
+	}
+
+	return out, nil
+}
+
+// money is an amount in the currency as the API writes it, with the
+// currency's decimal places (ADR-0007).
+func money(value sharedkernel.Decimal, currency string) (oas.Money, error) {
+	a, err := amount.Of(value, currency)
+	if err != nil {
+		return oas.Money{}, fmt.Errorf("write %s %s: %w", value, currency, err)
+	}
+
+	return oas.Money{Amount: a, Currency: oas.CurrencyCode(currency)}, nil
 }

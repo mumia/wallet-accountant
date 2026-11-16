@@ -17,6 +17,8 @@ import (
 const (
 	AccountStreamType = "ledger.account"
 	AccountAddedType  = "io.walletaccountant.ledger.account.added.v1"
+
+	AccountOpeningBalanceRecordedType = "io.walletaccountant.ledger.account.openingbalancerecorded.v1"
 )
 
 // ErrAccountNotFound is returned for an Account that is not in the Household.
@@ -29,18 +31,20 @@ type AccountAggregate = eventstore.Aggregate[domain.AccountState, domain.Account
 func NewAccountAggregate(folds eventstore.FoldStore[domain.AccountState]) AccountAggregate {
 	codec := eventstore.NewCodec[domain.AccountEvent](Source)
 	eventstore.Register[domain.AccountEvent, domain.AccountAdded](codec, AccountAddedType)
+	eventstore.Register[domain.AccountEvent, domain.OpeningBalanceRecorded](codec, AccountOpeningBalanceRecordedType)
 
 	return AccountAggregate{
-		StreamType:        AccountStreamType,
-		Decider:           domain.Account,
-		Codec:             codec,
-		Folds:             folds,
-		FoldSchemaVersion: 1,
+		StreamType: AccountStreamType,
+		Decider:    domain.Account,
+		Codec:      codec,
+		Folds:      folds,
+		// 2: the Opening balance and the running balance per Booking month.
+		FoldSchemaVersion: 2,
 	}
 }
 
 // Account is an Account as the API sees it. An Account awaiting its first
-// Statement import has no balance.
+// Statement import has no balance (Balance is nil).
 type Account struct {
 	ID                           uuid.UUID
 	Name                         string
@@ -48,6 +52,7 @@ type Account struct {
 	Currency                     string
 	StartDate                    time.Time
 	AwaitingFirstStatementImport bool
+	Balance                      *sharedkernel.Decimal
 }
 
 // AccountReader reads the Household's Account folds.
@@ -159,9 +164,31 @@ func (a *Accounts) AccountExists(ctx context.Context, tx *eventstore.Tx, account
 	return found, nil
 }
 
+// AccountForImport returns the Account as a Statement import needs it, read
+// from its fold in the caller's transaction; ErrAccountNotFound if it isn't
+// one of the Household's.
+func (a *Accounts) AccountForImport(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (Account, error) {
+	fold, found, err := a.accounts.Folds.Load(ctx, tx, account)
+	if err != nil {
+		return Account{}, fmt.Errorf("find account %s: %w", account, err)
+	}
+
+	if !found {
+		return Account{}, ErrAccountNotFound
+	}
+
+	return accountOf(account, fold.State), nil
+}
+
 func accountOf(id uuid.UUID, s domain.AccountState) Account {
-	return Account{
+	a := Account{
 		ID: id, Name: s.Name, Kind: s.Kind, Currency: s.Currency, StartDate: s.StartDate,
 		AwaitingFirstStatementImport: s.AwaitingFirstStatementImport,
 	}
+
+	if s.HasBalance() {
+		a.Balance = new(s.Balance())
+	}
+
+	return a
 }

@@ -35,6 +35,12 @@ type Contexts struct {
 	Accounts   *ledgerapp.Accounts
 	// Connections checks Accounts through the Ledger.
 	Connections *ingestionapp.Connections
+	// Transactions lists Accounts' Transactions and records Opening balances.
+	Transactions *ledgerapp.Transactions
+	// StatementImports records the first import's Opening balance through
+	// the Ledger.
+	StatementImports     *ingestionapp.StatementImports
+	ImportedTransactions *ingestionapp.ImportedTransactions
 }
 
 // NewContexts builds every bounded context's application services on pool,
@@ -56,16 +62,26 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		ledgerpg.CategoryReader{},
 	)
 
-	accounts := ledgerapp.NewAccounts(households,
-		ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}), ledgerpg.AccountReader{})
+	accountAggregate := ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{})
+	accounts := ledgerapp.NewAccounts(households, accountAggregate, ledgerpg.AccountReader{})
+	transactions := ledgerapp.NewTransactions(households, accountAggregate,
+		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}), ledgerpg.TransactionReader{}, ledgerpg.CategoryReader{})
+	connections := ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{})
 
 	return Contexts{
-		Users:      NewUsers(pool),
-		Households: households,
-		Categories: categories,
-		Accounts:   accounts,
-		Connections: ingestionapp.NewConnections(households, accounts,
-			ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{}), ingestionpg.ConnectionReader{}),
+		Users:        NewUsers(pool),
+		Households:   households,
+		Categories:   categories,
+		Accounts:     accounts,
+		Transactions: transactions,
+		Connections:  ingestionapp.NewConnections(households, accounts, connections, ingestionpg.ConnectionReader{}),
+		StatementImports: ingestionapp.NewStatementImports(households,
+			ingestionLedger{accounts: accounts, transactions: transactions}, connections,
+			ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{}),
+			ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{}),
+			ingestionpg.StatementImportReader{}),
+		ImportedTransactions: ingestionapp.NewImportedTransactions(households, accounts,
+			ingestionpg.ImportedTransactionReader{}),
 	}
 }
 
@@ -85,6 +101,9 @@ func rebuildTargets() []eventstore.RebuildTarget {
 		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}).RebuildTarget(),
 		ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}).RebuildTarget(),
 		ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{}).RebuildTarget(),
+		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}).RebuildTarget(),
+		ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{}).RebuildTarget(),
+		ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{}).RebuildTarget(),
 	}
 }
 

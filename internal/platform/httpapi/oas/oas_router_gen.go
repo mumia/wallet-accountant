@@ -29,8 +29,14 @@ var (
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
-	rn17AllowedHeaders = map[string]string{
+	rn25AllowedHeaders = map[string]string{
 		"PUT": "Authorization,Content-Type",
+	}
+	rn17AllowedHeaders = map[string]string{
+		"GET": "Authorization",
+	}
+	rn16AllowedHeaders = map[string]string{
+		"GET": "Authorization",
 	}
 	rn7AllowedHeaders = map[string]string{
 		"GET":  "Authorization",
@@ -38,6 +44,13 @@ var (
 	}
 	rn6AllowedHeaders = map[string]string{
 		"PATCH": "Authorization,Content-Type",
+	}
+	rn21AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key",
+	}
+	rn22AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
 	rn14AllowedHeaders = map[string]string{
 		"GET": "Authorization",
@@ -237,9 +250,271 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 									return
 								}
 								switch elem[0] {
-								case '/': // Prefix: "/connections"
+								case '/': // Prefix: "/"
 
-									if l := len("/connections"); len(elem) >= l && elem[0:l] == "/connections" {
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										break
+									}
+									switch elem[0] {
+									case 'c': // Prefix: "connections"
+
+										if l := len("connections"); len(elem) >= l && elem[0:l] == "connections" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											switch r.Method {
+											case "GET":
+												s.handleListConnectionsRequest([2]string{
+													args[0],
+													args[1],
+												}, elemIsEscaped, w, r)
+											case "POST":
+												s.handleCreateConnectionRequest([2]string{
+													args[0],
+													args[1],
+												}, elemIsEscaped, w, r)
+											default:
+												s.notAllowed(w, r, notAllowedParams{
+													allowedMethods: "GET,POST",
+													allowedHeaders: rn10AllowedHeaders,
+													acceptPost:     "application/json",
+													acceptPatch:    "",
+												})
+											}
+
+											return
+										}
+										switch elem[0] {
+										case '/': // Prefix: "/"
+
+											if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											// Param: "connection_id"
+											// Match until "/"
+											idx := strings.IndexByte(elem, '/')
+											if idx < 0 {
+												idx = len(elem)
+											}
+											args[2] = elem[:idx]
+											elem = elem[idx:]
+
+											if len(elem) == 0 {
+												break
+											}
+											switch elem[0] {
+											case '/': // Prefix: "/csv-mapping"
+
+												if l := len("/csv-mapping"); len(elem) >= l && elem[0:l] == "/csv-mapping" {
+													elem = elem[l:]
+												} else {
+													break
+												}
+
+												if len(elem) == 0 {
+													// Leaf node.
+													switch r.Method {
+													case "PUT":
+														s.handleSaveCsvMappingRequest([3]string{
+															args[0],
+															args[1],
+															args[2],
+														}, elemIsEscaped, w, r)
+													default:
+														s.notAllowed(w, r, notAllowedParams{
+															allowedMethods: "PUT",
+															allowedHeaders: rn25AllowedHeaders,
+															acceptPost:     "",
+															acceptPatch:    "",
+														})
+													}
+
+													return
+												}
+
+											}
+
+										}
+
+									case 'i': // Prefix: "imported-transactions"
+
+										if l := len("imported-transactions"); len(elem) >= l && elem[0:l] == "imported-transactions" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											// Leaf node.
+											switch r.Method {
+											case "GET":
+												s.handleListImportedTransactionsRequest([2]string{
+													args[0],
+													args[1],
+												}, elemIsEscaped, w, r)
+											default:
+												s.notAllowed(w, r, notAllowedParams{
+													allowedMethods: "GET",
+													allowedHeaders: rn17AllowedHeaders,
+													acceptPost:     "",
+													acceptPatch:    "",
+												})
+											}
+
+											return
+										}
+
+									case 't': // Prefix: "transactions"
+
+										if l := len("transactions"); len(elem) >= l && elem[0:l] == "transactions" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											// Leaf node.
+											switch r.Method {
+											case "GET":
+												s.handleListAccountTransactionsRequest([2]string{
+													args[0],
+													args[1],
+												}, elemIsEscaped, w, r)
+											default:
+												s.notAllowed(w, r, notAllowedParams{
+													allowedMethods: "GET",
+													allowedHeaders: rn16AllowedHeaders,
+													acceptPost:     "",
+													acceptPatch:    "",
+												})
+											}
+
+											return
+										}
+
+									}
+
+								}
+
+							}
+
+						case 'c': // Prefix: "c"
+
+							if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'a': // Prefix: "ategories"
+
+								if l := len("ategories"); len(elem) >= l && elem[0:l] == "ategories" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									switch r.Method {
+									case "GET":
+										s.handleListCategoriesRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									case "POST":
+										s.handleCreateCategoryRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "GET,POST",
+											allowedHeaders: rn7AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/"
+
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									// Param: "category_id"
+									// Leaf parameter, slashes are prohibited
+									idx := strings.IndexByte(elem, '/')
+									if idx >= 0 {
+										break
+									}
+									args[1] = elem
+									elem = ""
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch r.Method {
+										case "PATCH":
+											s.handleChangeCategoryRequest([2]string{
+												args[0],
+												args[1],
+											}, elemIsEscaped, w, r)
+										default:
+											s.notAllowed(w, r, notAllowedParams{
+												allowedMethods: "PATCH",
+												allowedHeaders: rn6AllowedHeaders,
+												acceptPost:     "",
+												acceptPatch:    "application/json",
+											})
+										}
+
+										return
+									}
+
+								}
+
+							case 'o': // Prefix: "onnections/"
+
+								if l := len("onnections/"); len(elem) >= l && elem[0:l] == "onnections/" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								// Param: "connection_id"
+								// Match until "/"
+								idx := strings.IndexByte(elem, '/')
+								if idx < 0 {
+									idx = len(elem)
+								}
+								args[1] = elem[:idx]
+								elem = elem[idx:]
+
+								if len(elem) == 0 {
+									break
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/statement-imports"
+
+									if l := len("/statement-imports"); len(elem) >= l && elem[0:l] == "/statement-imports" {
 										elem = elem[l:]
 									} else {
 										break
@@ -248,20 +523,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 									if len(elem) == 0 {
 										switch r.Method {
 										case "GET":
-											s.handleListConnectionsRequest([2]string{
+											s.handleListStatementImportsRequest([2]string{
 												args[0],
 												args[1],
 											}, elemIsEscaped, w, r)
 										case "POST":
-											s.handleCreateConnectionRequest([2]string{
+											s.handleUploadStatementImportRequest([2]string{
 												args[0],
 												args[1],
 											}, elemIsEscaped, w, r)
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "GET,POST",
-												allowedHeaders: rn10AllowedHeaders,
-												acceptPost:     "application/json",
+												allowedHeaders: rn21AllowedHeaders,
+												acceptPost:     "multipart/form-data",
 												acceptPatch:    "",
 											})
 										}
@@ -269,129 +544,36 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										return
 									}
 									switch elem[0] {
-									case '/': // Prefix: "/"
+									case '/': // Prefix: "/previews"
 
-										if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										if l := len("/previews"); len(elem) >= l && elem[0:l] == "/previews" {
 											elem = elem[l:]
 										} else {
 											break
 										}
 
-										// Param: "connection_id"
-										// Match until "/"
-										idx := strings.IndexByte(elem, '/')
-										if idx < 0 {
-											idx = len(elem)
-										}
-										args[2] = elem[:idx]
-										elem = elem[idx:]
-
 										if len(elem) == 0 {
-											break
-										}
-										switch elem[0] {
-										case '/': // Prefix: "/csv-mapping"
-
-											if l := len("/csv-mapping"); len(elem) >= l && elem[0:l] == "/csv-mapping" {
-												elem = elem[l:]
-											} else {
-												break
+											// Leaf node.
+											switch r.Method {
+											case "POST":
+												s.handlePreviewStatementImportRequest([2]string{
+													args[0],
+													args[1],
+												}, elemIsEscaped, w, r)
+											default:
+												s.notAllowed(w, r, notAllowedParams{
+													allowedMethods: "POST",
+													allowedHeaders: rn22AllowedHeaders,
+													acceptPost:     "multipart/form-data",
+													acceptPatch:    "",
+												})
 											}
 
-											if len(elem) == 0 {
-												// Leaf node.
-												switch r.Method {
-												case "PUT":
-													s.handleSaveCsvMappingRequest([3]string{
-														args[0],
-														args[1],
-														args[2],
-													}, elemIsEscaped, w, r)
-												default:
-													s.notAllowed(w, r, notAllowedParams{
-														allowedMethods: "PUT",
-														allowedHeaders: rn17AllowedHeaders,
-														acceptPost:     "",
-														acceptPatch:    "",
-													})
-												}
-
-												return
-											}
-
+											return
 										}
 
 									}
 
-								}
-
-							}
-
-						case 'c': // Prefix: "categories"
-
-							if l := len("categories"); len(elem) >= l && elem[0:l] == "categories" {
-								elem = elem[l:]
-							} else {
-								break
-							}
-
-							if len(elem) == 0 {
-								switch r.Method {
-								case "GET":
-									s.handleListCategoriesRequest([1]string{
-										args[0],
-									}, elemIsEscaped, w, r)
-								case "POST":
-									s.handleCreateCategoryRequest([1]string{
-										args[0],
-									}, elemIsEscaped, w, r)
-								default:
-									s.notAllowed(w, r, notAllowedParams{
-										allowedMethods: "GET,POST",
-										allowedHeaders: rn7AllowedHeaders,
-										acceptPost:     "application/json",
-										acceptPatch:    "",
-									})
-								}
-
-								return
-							}
-							switch elem[0] {
-							case '/': // Prefix: "/"
-
-								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
-									elem = elem[l:]
-								} else {
-									break
-								}
-
-								// Param: "category_id"
-								// Leaf parameter, slashes are prohibited
-								idx := strings.IndexByte(elem, '/')
-								if idx >= 0 {
-									break
-								}
-								args[1] = elem
-								elem = ""
-
-								if len(elem) == 0 {
-									// Leaf node.
-									switch r.Method {
-									case "PATCH":
-										s.handleChangeCategoryRequest([2]string{
-											args[0],
-											args[1],
-										}, elemIsEscaped, w, r)
-									default:
-										s.notAllowed(w, r, notAllowedParams{
-											allowedMethods: "PATCH",
-											allowedHeaders: rn6AllowedHeaders,
-											acceptPost:     "",
-											acceptPatch:    "application/json",
-										})
-									}
-
-									return
 								}
 
 							}
@@ -696,9 +878,262 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 									}
 								}
 								switch elem[0] {
-								case '/': // Prefix: "/connections"
+								case '/': // Prefix: "/"
 
-									if l := len("/connections"); len(elem) >= l && elem[0:l] == "/connections" {
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										break
+									}
+									switch elem[0] {
+									case 'c': // Prefix: "connections"
+
+										if l := len("connections"); len(elem) >= l && elem[0:l] == "connections" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											switch method {
+											case "GET":
+												r.name = ListConnectionsOperation
+												r.summary = "An Account's Connections"
+												r.operationID = "listConnections"
+												r.operationGroup = ""
+												r.pathPattern = "/households/{household_id}/accounts/{account_id}/connections"
+												r.args = args
+												r.count = 2
+												return r, true
+											case "POST":
+												r.name = CreateConnectionOperation
+												r.summary = "Create a Connection for an Account"
+												r.operationID = "createConnection"
+												r.operationGroup = ""
+												r.pathPattern = "/households/{household_id}/accounts/{account_id}/connections"
+												r.args = args
+												r.count = 2
+												return r, true
+											default:
+												return
+											}
+										}
+										switch elem[0] {
+										case '/': // Prefix: "/"
+
+											if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											// Param: "connection_id"
+											// Match until "/"
+											idx := strings.IndexByte(elem, '/')
+											if idx < 0 {
+												idx = len(elem)
+											}
+											args[2] = elem[:idx]
+											elem = elem[idx:]
+
+											if len(elem) == 0 {
+												break
+											}
+											switch elem[0] {
+											case '/': // Prefix: "/csv-mapping"
+
+												if l := len("/csv-mapping"); len(elem) >= l && elem[0:l] == "/csv-mapping" {
+													elem = elem[l:]
+												} else {
+													break
+												}
+
+												if len(elem) == 0 {
+													// Leaf node.
+													switch method {
+													case "PUT":
+														r.name = SaveCsvMappingOperation
+														r.summary = "Save a Connection's CSV mapping"
+														r.operationID = "saveCsvMapping"
+														r.operationGroup = ""
+														r.pathPattern = "/households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping"
+														r.args = args
+														r.count = 3
+														return r, true
+													default:
+														return
+													}
+												}
+
+											}
+
+										}
+
+									case 'i': // Prefix: "imported-transactions"
+
+										if l := len("imported-transactions"); len(elem) >= l && elem[0:l] == "imported-transactions" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											// Leaf node.
+											switch method {
+											case "GET":
+												r.name = ListImportedTransactionsOperation
+												r.summary = "An Account's Imported transactions"
+												r.operationID = "listImportedTransactions"
+												r.operationGroup = ""
+												r.pathPattern = "/households/{household_id}/accounts/{account_id}/imported-transactions"
+												r.args = args
+												r.count = 2
+												return r, true
+											default:
+												return
+											}
+										}
+
+									case 't': // Prefix: "transactions"
+
+										if l := len("transactions"); len(elem) >= l && elem[0:l] == "transactions" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											// Leaf node.
+											switch method {
+											case "GET":
+												r.name = ListAccountTransactionsOperation
+												r.summary = "An Account's Transactions"
+												r.operationID = "listAccountTransactions"
+												r.operationGroup = ""
+												r.pathPattern = "/households/{household_id}/accounts/{account_id}/transactions"
+												r.args = args
+												r.count = 2
+												return r, true
+											default:
+												return
+											}
+										}
+
+									}
+
+								}
+
+							}
+
+						case 'c': // Prefix: "c"
+
+							if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'a': // Prefix: "ategories"
+
+								if l := len("ategories"); len(elem) >= l && elem[0:l] == "ategories" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									switch method {
+									case "GET":
+										r.name = ListCategoriesOperation
+										r.summary = "The Household's Category tree"
+										r.operationID = "listCategories"
+										r.operationGroup = ""
+										r.pathPattern = "/households/{household_id}/categories"
+										r.args = args
+										r.count = 1
+										return r, true
+									case "POST":
+										r.name = CreateCategoryOperation
+										r.summary = "Create a Category"
+										r.operationID = "createCategory"
+										r.operationGroup = ""
+										r.pathPattern = "/households/{household_id}/categories"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/"
+
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									// Param: "category_id"
+									// Leaf parameter, slashes are prohibited
+									idx := strings.IndexByte(elem, '/')
+									if idx >= 0 {
+										break
+									}
+									args[1] = elem
+									elem = ""
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch method {
+										case "PATCH":
+											r.name = ChangeCategoryOperation
+											r.summary = "Rename or move a Category"
+											r.operationID = "changeCategory"
+											r.operationGroup = ""
+											r.pathPattern = "/households/{household_id}/categories/{category_id}"
+											r.args = args
+											r.count = 2
+											return r, true
+										default:
+											return
+										}
+									}
+
+								}
+
+							case 'o': // Prefix: "onnections/"
+
+								if l := len("onnections/"); len(elem) >= l && elem[0:l] == "onnections/" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								// Param: "connection_id"
+								// Match until "/"
+								idx := strings.IndexByte(elem, '/')
+								if idx < 0 {
+									idx = len(elem)
+								}
+								args[1] = elem[:idx]
+								elem = elem[idx:]
+
+								if len(elem) == 0 {
+									break
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/statement-imports"
+
+									if l := len("/statement-imports"); len(elem) >= l && elem[0:l] == "/statement-imports" {
 										elem = elem[l:]
 									} else {
 										break
@@ -707,20 +1142,20 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 									if len(elem) == 0 {
 										switch method {
 										case "GET":
-											r.name = ListConnectionsOperation
-											r.summary = "An Account's Connections"
-											r.operationID = "listConnections"
+											r.name = ListStatementImportsOperation
+											r.summary = "A Connection's Statement imports"
+											r.operationID = "listStatementImports"
 											r.operationGroup = ""
-											r.pathPattern = "/households/{household_id}/accounts/{account_id}/connections"
+											r.pathPattern = "/households/{household_id}/connections/{connection_id}/statement-imports"
 											r.args = args
 											r.count = 2
 											return r, true
 										case "POST":
-											r.name = CreateConnectionOperation
-											r.summary = "Create a Connection for an Account"
-											r.operationID = "createConnection"
+											r.name = UploadStatementImportOperation
+											r.summary = "Upload a statement file"
+											r.operationID = "uploadStatementImport"
 											r.operationGroup = ""
-											r.pathPattern = "/households/{household_id}/accounts/{account_id}/connections"
+											r.pathPattern = "/households/{household_id}/connections/{connection_id}/statement-imports"
 											r.args = args
 											r.count = 2
 											return r, true
@@ -729,125 +1164,33 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 										}
 									}
 									switch elem[0] {
-									case '/': // Prefix: "/"
+									case '/': // Prefix: "/previews"
 
-										if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										if l := len("/previews"); len(elem) >= l && elem[0:l] == "/previews" {
 											elem = elem[l:]
 										} else {
 											break
 										}
 
-										// Param: "connection_id"
-										// Match until "/"
-										idx := strings.IndexByte(elem, '/')
-										if idx < 0 {
-											idx = len(elem)
-										}
-										args[2] = elem[:idx]
-										elem = elem[idx:]
-
 										if len(elem) == 0 {
-											break
-										}
-										switch elem[0] {
-										case '/': // Prefix: "/csv-mapping"
-
-											if l := len("/csv-mapping"); len(elem) >= l && elem[0:l] == "/csv-mapping" {
-												elem = elem[l:]
-											} else {
-												break
+											// Leaf node.
+											switch method {
+											case "POST":
+												r.name = PreviewStatementImportOperation
+												r.summary = "Preview an Account's first Statement import"
+												r.operationID = "previewStatementImport"
+												r.operationGroup = ""
+												r.pathPattern = "/households/{household_id}/connections/{connection_id}/statement-imports/previews"
+												r.args = args
+												r.count = 2
+												return r, true
+											default:
+												return
 											}
-
-											if len(elem) == 0 {
-												// Leaf node.
-												switch method {
-												case "PUT":
-													r.name = SaveCsvMappingOperation
-													r.summary = "Save a Connection's CSV mapping"
-													r.operationID = "saveCsvMapping"
-													r.operationGroup = ""
-													r.pathPattern = "/households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping"
-													r.args = args
-													r.count = 3
-													return r, true
-												default:
-													return
-												}
-											}
-
 										}
 
 									}
 
-								}
-
-							}
-
-						case 'c': // Prefix: "categories"
-
-							if l := len("categories"); len(elem) >= l && elem[0:l] == "categories" {
-								elem = elem[l:]
-							} else {
-								break
-							}
-
-							if len(elem) == 0 {
-								switch method {
-								case "GET":
-									r.name = ListCategoriesOperation
-									r.summary = "The Household's Category tree"
-									r.operationID = "listCategories"
-									r.operationGroup = ""
-									r.pathPattern = "/households/{household_id}/categories"
-									r.args = args
-									r.count = 1
-									return r, true
-								case "POST":
-									r.name = CreateCategoryOperation
-									r.summary = "Create a Category"
-									r.operationID = "createCategory"
-									r.operationGroup = ""
-									r.pathPattern = "/households/{household_id}/categories"
-									r.args = args
-									r.count = 1
-									return r, true
-								default:
-									return
-								}
-							}
-							switch elem[0] {
-							case '/': // Prefix: "/"
-
-								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
-									elem = elem[l:]
-								} else {
-									break
-								}
-
-								// Param: "category_id"
-								// Leaf parameter, slashes are prohibited
-								idx := strings.IndexByte(elem, '/')
-								if idx >= 0 {
-									break
-								}
-								args[1] = elem
-								elem = ""
-
-								if len(elem) == 0 {
-									// Leaf node.
-									switch method {
-									case "PATCH":
-										r.name = ChangeCategoryOperation
-										r.summary = "Rename or move a Category"
-										r.operationID = "changeCategory"
-										r.operationGroup = ""
-										r.pathPattern = "/households/{household_id}/categories/{category_id}"
-										r.args = args
-										r.count = 2
-										return r, true
-									default:
-										return
-									}
 								}
 
 							}

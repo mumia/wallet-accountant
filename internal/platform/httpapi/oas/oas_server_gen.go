@@ -86,6 +86,16 @@ type Handler interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// ListAccountTransactions implements listAccountTransactions operation.
+	//
+	// Lists the Account's Transactions as a single-entry list (ADR-0001): each with its signed amount on
+	// this Account (positive is money in), Booking date, Transaction date, description and Category.
+	// Sorted by Booking date, then in the order they were recorded, and paged with a cursor.
+	// `booking_month` keeps only one Booking month. The list is always current: it is read in the
+	// request's own transaction.
+	//
+	// GET /households/{household_id}/accounts/{account_id}/transactions
+	ListAccountTransactions(ctx context.Context, params ListAccountTransactionsParams) (ListAccountTransactionsRes, error)
 	// ListAccounts implements listAccounts operation.
 	//
 	// Lists every Account of the Household, in the order they were added.
@@ -112,6 +122,39 @@ type Handler interface {
 	//
 	// GET /households
 	ListHouseholds(ctx context.Context) (ListHouseholdsRes, error)
+	// ListImportedTransactions implements listImportedTransactions operation.
+	//
+	// Lists the Account's Imported transactions, sorted by Booking date and then in the order they were
+	// imported (a file's rows in line order), paged with a cursor. `state` keeps only those in one state
+	// (`PENDING`: waiting for review) and `booking_month` only one Booking month.
+	//
+	// GET /households/{household_id}/accounts/{account_id}/imported-transactions
+	ListImportedTransactions(ctx context.Context, params ListImportedTransactionsParams) (ListImportedTransactionsRes, error)
+	// ListStatementImports implements listStatementImports operation.
+	//
+	// Lists every Statement import of the Connection, in the order they were recorded.
+	//
+	// GET /households/{household_id}/connections/{connection_id}/statement-imports
+	ListStatementImports(ctx context.Context, params ListStatementImportsParams) (ListStatementImportsRes, error)
+	// PreviewStatementImport implements previewStatementImport operation.
+	//
+	// Reads a statement file with the Connection's CSV mapping and shows the Opening balance the Account's
+	// first Statement import would record (ADR-0018): the Export balance minus the total of the rows
+	// booked on or after the start date. Records nothing. The Export balance is typed twice; entries that
+	// differ get 422 `/problems/export-balance-mismatch`. A file with an unreadable row is refused whole
+	// with 422 `/problems/unreadable-statement-file`, listing every line and its reason. A file already
+	// imported through the Connection gets 409 `/problems/duplicate-statement-import`, naming the earlier
+	// import; an Account that already has its Opening balance gets 409
+	// `/problems/opening-balance-already-recorded`. Confirm the import by uploading the same file and
+	// Export balance with the returned `preview_id`.
+	//
+	// Every amount is in the Account currency and may have no more decimal places than it has: an Export
+	// balance with more gets 422 `/problems/invalid-export-balance`, and a row with more is an unreadable
+	// row. A file with no rows at all gets 422 `/problems/empty-statement-file`, and a Connection without
+	// a CSV mapping gets 422 `/problems/csv-mapping-required`.
+	//
+	// POST /households/{household_id}/connections/{connection_id}/statement-imports/previews
+	PreviewStatementImport(ctx context.Context, req *StatementImportPreviewUploadMultipart, params PreviewStatementImportParams) (PreviewStatementImportRes, error)
 	// SaveCsvMapping implements saveCsvMapping operation.
 	//
 	// Replaces the Connection's CSV mapping. The mapping is validated as a whole: a missing required
@@ -121,6 +164,24 @@ type Handler interface {
 	//
 	// PUT /households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping
 	SaveCsvMapping(ctx context.Context, req *CsvMapping, params SaveCsvMappingParams) (SaveCsvMappingRes, error)
+	// UploadStatementImport implements uploadStatementImport operation.
+	//
+	// Imports a statement file through the Connection: every row booked on or after the Account's start
+	// date becomes a pending Imported transaction, and the rows before it are ignored and counted. The
+	// first import of an Account needs the `preview_id` of its preview (422 `/problems/preview-required`
+	// without it). It is recomputed from the uploaded file, its Export balance and the Connection's
+	// current mapping version, and a difference gets 422 `/problems/preview-mismatch`. The first import
+	// also records the Opening balance Transaction on the start date, in the same transaction; an Account
+	// that got its Opening balance since the preview gets 409
+	// `/problems/opening-balance-already-recorded`. A file with an unreadable row is refused whole (422
+	// `/problems/unreadable-statement-file`), and a file already imported through the Connection gets 409
+	// `/problems/duplicate-statement-import`. Later imports are not supported yet (422
+	// `/problems/later-statement-imports-not-supported`). Amounts, an empty file and a Connection without
+	// a mapping are refused as by the preview. Retrying with the same Idempotency-Key and the same file
+	// and fields returns the original result, however the form is rebuilt.
+	//
+	// POST /households/{household_id}/connections/{connection_id}/statement-imports
+	UploadStatementImport(ctx context.Context, req *StatementImportUploadMultipart, params UploadStatementImportParams) (UploadStatementImportRes, error)
 	// NewError creates *ProblemStatusCode from error returned by handler.
 	//
 	// Used for common default response.
