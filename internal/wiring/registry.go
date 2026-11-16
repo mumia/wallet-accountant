@@ -80,7 +80,7 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		ledgerpg.TransactionReader{}, ledgerpg.CategoryReader{}, ledgerIngestion{imported: imported})
 	months := ledgerapp.NewMonths(households, accountAggregate, ledgerIngestion{imported: imported})
 	connections := ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{})
-	ledger := ingestionLedger{accounts: accounts, transactions: transactions}
+	ledger := ingestionLedger{accounts: accounts, transactions: transactions, months: months}
 	rows := ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{})
 	statementImports := ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{})
 	*imported = *ingestionapp.NewImportedTransactions(households, accounts, ledger, rows,
