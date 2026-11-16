@@ -237,6 +237,48 @@ func TestEventsAreForwardedExactlyOnceInOrder(t *testing.T) {
 	}
 }
 
+// Transaction IDs order numerically, not as text: Drain once compared them
+// as text, so "1003" < "992" and it returned before the newer events were
+// handled whenever the transaction ID gained a digit.
+func TestDrainWaitsForEventsWhoseTransactionIDGainedADigit(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	rec := &recorder{group: "projection"}
+	e.start(t, rec.handler())
+
+	before := e.add(t, t.Context(), uuid.Nil)
+	e.drain(t, rec.group)
+
+	var txid uint64
+	if err := e.owner.QueryRow(t.Context(), `SELECT transaction_id::text::bigint FROM event_store WHERE id = $1`, before).Scan(&txid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Use up transaction IDs until the next one has one more digit.
+	next := uint64(10)
+	for next <= txid {
+		next *= 10
+	}
+
+	_, err := e.owner.Exec(t.Context(), fmt.Sprintf(`
+		DO $$
+		BEGIN
+			WHILE pg_current_xact_id()::text::bigint < %d LOOP
+				COMMIT;
+			END LOOP;
+		END $$`, next), pgx.QueryExecModeSimpleProtocol)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after := e.add(t, t.Context(), uuid.Nil)
+	e.drain(t, rec.group)
+
+	if n := e.effects(t, rec.group)[after]; n != 1 {
+		t.Errorf("event of a transaction past %d: %d effects after Drain, want 1", next, n)
+	}
+}
+
 func TestAnEventCommittedAfterASlowerTransactionWaitsForIt(t *testing.T) {
 	t.Parallel()
 	e := setup(t)

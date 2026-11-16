@@ -21,10 +21,11 @@ func Drain(ctx context.Context, reader eventstore.Querier, groups ...string) err
 	}
 
 	// The last committed event, in delivery order. Events of transactions
-	// still running are not committed yet, so they are not pending.
+	// still running are not committed yet, so they are not pending. Order by
+	// the xid8 column, not the text output column: as text "1003" < "992".
 	rows, err := reader.Query(ctx, `
-		SELECT transaction_id::text, global_position FROM event_store
-		ORDER BY transaction_id DESC, global_position DESC LIMIT 1`)
+		SELECT e.transaction_id::text AS txid, e.global_position FROM event_store e
+		ORDER BY e.transaction_id DESC, e.global_position DESC LIMIT 1`)
 	if err != nil {
 		return fmt.Errorf("drain: last event: %w", err)
 	}
