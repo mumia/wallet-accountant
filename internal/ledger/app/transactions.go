@@ -18,8 +18,10 @@ import (
 
 // Stream type and event types of the Transaction aggregate (ADR-0015).
 const (
-	TransactionStreamType   = "ledger.transaction"
-	TransactionRecordedType = "io.walletaccountant.ledger.transaction.recorded.v1"
+	TransactionStreamType      = "ledger.transaction"
+	TransactionRecordedType    = "io.walletaccountant.ledger.transaction.recorded.v1"
+	TransactionReversedType    = "io.walletaccountant.ledger.transaction.reversed.v1"
+	TransactionCategorySetType = "io.walletaccountant.ledger.transaction.categoryset.v1"
 )
 
 // OpeningBalanceDescription describes every Opening balance Transaction.
@@ -37,6 +39,21 @@ var (
 	// ErrCurrencyMismatch is returned for booking an amount in another
 	// currency than the Account's.
 	ErrCurrencyMismatch = errors.New("amount isn't in the account currency")
+	// ErrTransactionNotFound is returned for a Transaction that is not in
+	// the Household.
+	ErrTransactionNotFound = errors.New("transaction not found")
+	// ErrOpeningBalanceTransaction is returned for reversing or
+	// recategorising the Opening balance Transaction (ADR-0018).
+	ErrOpeningBalanceTransaction = domain.ErrOpeningBalanceTransaction
+	// ErrTransactionIsAReversal is returned for reversing or recategorising
+	// a reversal.
+	ErrTransactionIsAReversal = domain.ErrTransactionIsAReversal
+	// ErrTransactionAlreadyReversed is returned for reversing a Transaction
+	// twice.
+	ErrTransactionAlreadyReversed = domain.ErrTransactionAlreadyReversed
+	// ErrTransactionReversed is returned for recategorising a reversed
+	// Transaction.
+	ErrTransactionReversed = domain.ErrTransactionReversed
 )
 
 // TransactionAggregate is the Transaction Decider wired to the runtime.
@@ -47,6 +64,8 @@ type TransactionAggregate = eventstore.Aggregate[domain.TransactionState, domain
 func NewTransactionAggregate(folds eventstore.FoldStore[domain.TransactionState]) TransactionAggregate {
 	codec := eventstore.NewCodec[domain.TransactionEvent](Source)
 	eventstore.Register[domain.TransactionEvent, domain.TransactionRecorded](codec, TransactionRecordedType)
+	eventstore.Register[domain.TransactionEvent, domain.TransactionReversed](codec, TransactionReversedType)
+	eventstore.Register[domain.TransactionEvent, domain.TransactionCategorySet](codec, TransactionCategorySetType)
 
 	return TransactionAggregate{
 		StreamType: TransactionStreamType,
@@ -54,7 +73,8 @@ func NewTransactionAggregate(folds eventstore.FoldStore[domain.TransactionState]
 		Codec:      codec,
 		Folds:      folds,
 		// 2: the link to the Imported transaction an Accept booked.
-		FoldSchemaVersion: 2,
+		// 3: the links between a reversed Transaction and its reversal.
+		FoldSchemaVersion: 3,
 	}
 }
 
@@ -71,6 +91,12 @@ type AccountTransaction struct {
 	Currency        string
 	CategoryID      uuid.UUID
 	CategoryName    string
+	// ReversalOf is the Transaction this one reverses; uuid.Nil unless it is
+	// a reversal.
+	ReversalOf uuid.UUID
+	// ReversedBy is the Transaction that reversed this one; uuid.Nil while
+	// it isn't reversed.
+	ReversedBy uuid.UUID
 }
 
 // TransactionFilter picks a page of an Account's Transactions. Month is the
@@ -111,7 +137,15 @@ type InternalCategories interface {
 	InternalCategory(ctx context.Context, tx *eventstore.Tx, role domain.InternalRole) (uuid.UUID, error)
 }
 
-// Transactions records and lists a Household's Transactions.
+// Ingestion is the Ledger's port to Ingestion.
+type Ingestion interface {
+	// ReturnToPending returns the Imported transaction, Accepted by the
+	// Transaction that was just reversed, to pending, in the caller's
+	// transaction (consistency map: Reverse Transaction).
+	ReturnToPending(ctx context.Context, tx *eventstore.Tx, importedTransaction, transaction uuid.UUID) error
+}
+
+// Transactions records, corrects and lists a Household's Transactions.
 type Transactions struct {
 	scope        HouseholdScope
 	accounts     AccountAggregate
@@ -119,15 +153,16 @@ type Transactions struct {
 	categories   CategoryAggregate
 	reader       TransactionReader
 	internal     InternalCategories
+	ingestion    Ingestion
 }
 
 // NewTransactions returns the Transactions service.
 func NewTransactions(scope HouseholdScope, accounts AccountAggregate, transactions TransactionAggregate,
-	categories CategoryAggregate, reader TransactionReader, internal InternalCategories,
+	categories CategoryAggregate, reader TransactionReader, internal InternalCategories, ingestion Ingestion,
 ) *Transactions {
 	return &Transactions{
 		scope: scope, accounts: accounts, transactions: transactions, categories: categories, reader: reader,
-		internal: internal,
+		internal: internal, ingestion: ingestion,
 	}
 }
 
@@ -157,27 +192,9 @@ type ImportedBooking struct {
 // Household ErrCategoryNotFound. Ingestion calls it when a User Accepts
 // (consistency map: Accept imported transaction).
 func (t *Transactions) RecordImported(ctx context.Context, tx *eventstore.Tx, b ImportedBooking) error {
-	uncategorised, err := t.internal.InternalCategory(ctx, tx, domain.RoleUncategorised)
+	category, uncategorised, err := t.chooseCategory(ctx, tx, b.Category)
 	if err != nil {
-		return fmt.Errorf("find the uncategorised category: %w", err)
-	}
-
-	category := uncategorised
-
-	if b.Category != nil && *b.Category != uncategorised {
-		fold, found, err := t.categories.Folds.Load(ctx, tx, *b.Category)
-		if err != nil {
-			return fmt.Errorf("load category %s: %w", *b.Category, err)
-		}
-
-		switch {
-		case !found:
-			return ErrCategoryNotFound
-		case fold.State.Kind == domain.KindInternal:
-			return fmt.Errorf("%w: only Uncategorised can be chosen when accepting", ErrInternalCategory)
-		}
-
-		category = *b.Category
+		return err
 	}
 
 	fold, found, err := t.accounts.Folds.Load(ctx, tx, b.Account)

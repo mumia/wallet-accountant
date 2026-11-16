@@ -18,18 +18,23 @@ import (
 // the Ledger's, as creating a Category answers them.
 const (
 	ImportedTransactionAlreadyAcceptedType = "/problems/imported-transaction-already-accepted"
-	InternalCategoryType                   = "/problems/internal-category"
-	InvalidCategoryType                    = "/problems/invalid-category"
+	ImportedTransactionDiscardedType       = "/problems/imported-transaction-discarded"
+	// ImportedTransactionAlreadyDiscardedType is for discarding twice.
+	ImportedTransactionAlreadyDiscardedType = "/problems/imported-transaction-already-discarded"
+	InternalCategoryType                    = "/problems/internal-category"
+	InvalidCategoryType                     = "/problems/invalid-category"
 )
 
 var importedStatesOut = map[domain.ImportedState]string{
-	domain.ImportedPending:  "PENDING",
-	domain.ImportedAccepted: "ACCEPTED",
+	domain.ImportedPending:   "PENDING",
+	domain.ImportedAccepted:  "ACCEPTED",
+	domain.ImportedDiscarded: "DISCARDED",
 }
 
 var importedStatesIn = map[string]domain.ImportedState{
-	"PENDING":  domain.ImportedPending,
-	"ACCEPTED": domain.ImportedAccepted,
+	"PENDING":   domain.ImportedPending,
+	"ACCEPTED":  domain.ImportedAccepted,
+	"DISCARDED": domain.ImportedDiscarded,
 }
 
 // AcceptImportedTransaction implements acceptImportedTransaction.
@@ -51,6 +56,10 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 		return new(oas.AcceptImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
 			ImportedTransactionAlreadyAcceptedType, "Imported transaction already Accepted",
 			"The Imported transaction is already booked in the Ledger."))), nil
+	case errors.Is(err, app.ErrImportedTransactionDiscarded):
+		return new(oas.AcceptImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+			ImportedTransactionDiscardedType, "Imported transaction Discarded",
+			"The Imported transaction is Discarded, which is final."))), nil
 	case errors.Is(err, app.ErrInternalCategory):
 		return new(oas.AcceptImportedTransactionUnprocessableEntity(httpapi.Problem(http.StatusUnprocessableEntity,
 			InternalCategoryType, "Internal Category",
@@ -63,6 +72,35 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 	}
 
 	out, err := importedTransactionOut(accepted)
+	if err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+// DiscardImportedTransaction implements discardImportedTransaction.
+func (h *StatementImportHandler) DiscardImportedTransaction(ctx context.Context,
+	params oas.DiscardImportedTransactionParams,
+) (oas.DiscardImportedTransactionRes, error) {
+	discarded, err := h.imported.Discard(ctx, params.HouseholdID, params.ImportedTransactionID)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound):
+		return new(oas.DiscardImportedTransactionNotFound(httpapi.NotFoundProblem())), nil
+	case errors.Is(err, app.ErrImportedTransactionAlreadyDiscarded):
+		return new(oas.DiscardImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+			ImportedTransactionAlreadyDiscardedType, "Imported transaction already Discarded",
+			"The Imported transaction is already Discarded."))), nil
+	case errors.Is(err, app.ErrImportedTransactionAlreadyAccepted):
+		return new(oas.DiscardImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+			ImportedTransactionAlreadyAcceptedType, "Imported transaction already Accepted",
+			"The Imported transaction is booked in the Ledger: reverse its Transaction first."))), nil
+	case err != nil:
+		return nil, fmt.Errorf("discard imported transaction: %w", err)
+	}
+
+	out, err := importedTransactionOut(discarded)
 	if err != nil {
 		return nil, err
 	}

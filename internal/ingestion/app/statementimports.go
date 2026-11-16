@@ -19,9 +19,11 @@ const (
 	StatementImportStreamType   = "ingestion.statementimport"
 	StatementImportRecordedType = "io.walletaccountant.ingestion.statementimport.recorded.v1"
 
-	ImportedTransactionStreamType   = "ingestion.importedtransaction"
-	TransactionImportedType         = "io.walletaccountant.ingestion.importedtransaction.imported.v1"
-	ImportedTransactionAcceptedType = "io.walletaccountant.ingestion.importedtransaction.accepted.v1"
+	ImportedTransactionStreamType            = "ingestion.importedtransaction"
+	TransactionImportedType                  = "io.walletaccountant.ingestion.importedtransaction.imported.v1"
+	ImportedTransactionAcceptedType          = "io.walletaccountant.ingestion.importedtransaction.accepted.v1"
+	ImportedTransactionReturnedToPendingType = "io.walletaccountant.ingestion.importedtransaction.returnedtopending.v1"
+	ImportedTransactionDiscardedType         = "io.walletaccountant.ingestion.importedtransaction.discarded.v1"
 )
 
 var (
@@ -116,6 +118,10 @@ func NewImportedTransactionAggregate(folds eventstore.FoldStore[domain.ImportedT
 	eventstore.Register[domain.ImportedTransactionEvent, domain.TransactionImported](codec, TransactionImportedType)
 	eventstore.Register[domain.ImportedTransactionEvent, domain.ImportedTransactionAccepted](codec,
 		ImportedTransactionAcceptedType)
+	eventstore.Register[domain.ImportedTransactionEvent, domain.ImportedTransactionReturnedToPending](codec,
+		ImportedTransactionReturnedToPendingType)
+	eventstore.Register[domain.ImportedTransactionEvent, domain.ImportedTransactionDiscarded](codec,
+		ImportedTransactionDiscardedType)
 
 	return ImportedTransactionAggregate{
 		StreamType: ImportedTransactionStreamType,

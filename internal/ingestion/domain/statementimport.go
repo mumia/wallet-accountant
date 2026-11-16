@@ -224,6 +224,9 @@ type ImportedState string
 const (
 	ImportedPending  ImportedState = "pending"
 	ImportedAccepted ImportedState = "accepted"
+	// ImportedDiscarded never reaches the Ledger, and is final. The Balance
+	// check leaves it out by this stored value.
+	ImportedDiscarded ImportedState = "discarded"
 )
 
 var (
@@ -244,6 +247,18 @@ var (
 	// ErrImportedTransactionNotPending is returned for accepting an
 	// Imported transaction that isn't waiting for review.
 	ErrImportedTransactionNotPending = errors.New("imported transaction is not pending")
+	// ErrImportedTransactionNotAccepted is returned for returning an
+	// Imported transaction to pending that isn't Accepted.
+	ErrImportedTransactionNotAccepted = errors.New("imported transaction is not accepted")
+	// ErrNotBookedByTransaction is returned for returning an Imported
+	// transaction to pending for a Transaction that didn't book it.
+	ErrNotBookedByTransaction = errors.New("imported transaction was not booked by that transaction")
+	// ErrImportedTransactionDiscarded is returned for accepting a Discarded
+	// Imported transaction: Discarded is final.
+	ErrImportedTransactionDiscarded = errors.New("imported transaction is discarded")
+	// ErrImportedTransactionAlreadyDiscarded is returned for discarding an
+	// Imported transaction twice.
+	ErrImportedTransactionAlreadyDiscarded = errors.New("imported transaction already discarded")
 )
 
 // ImportedTransactionState is an Imported transaction's fold.
@@ -294,10 +309,23 @@ type (
 	AcceptImportedTransaction struct {
 		TransactionID sharedkernel.ID
 	}
+
+	// ReturnToPending returns an Accepted Imported transaction to pending
+	// when the Ledger Transaction TransactionID that booked it is reversed,
+	// in the same database transaction (ADR-0018).
+	ReturnToPending struct {
+		TransactionID sharedkernel.ID
+	}
+
+	// DiscardImportedTransaction Discards a pending Imported transaction,
+	// so it never reaches the Ledger.
+	DiscardImportedTransaction struct{}
 )
 
-func (ImportRow) isImportedTransactionCommand()                 {}
-func (AcceptImportedTransaction) isImportedTransactionCommand() {}
+func (ImportRow) isImportedTransactionCommand()                  {}
+func (AcceptImportedTransaction) isImportedTransactionCommand()  {}
+func (ReturnToPending) isImportedTransactionCommand()            {}
+func (DiscardImportedTransaction) isImportedTransactionCommand() {}
 
 type (
 	// ImportedTransactionEvent is an Imported transaction's event.
@@ -326,10 +354,22 @@ type (
 	ImportedTransactionAccepted struct {
 		TransactionID sharedkernel.ID `json:"transactionid"`
 	}
+
+	// ImportedTransactionReturnedToPending is recorded when the Ledger
+	// Transaction TransactionID that booked it is reversed.
+	ImportedTransactionReturnedToPending struct {
+		TransactionID sharedkernel.ID `json:"transactionid"`
+	}
+
+	// ImportedTransactionDiscarded is recorded when a pending Imported
+	// transaction is Discarded.
+	ImportedTransactionDiscarded struct{}
 )
 
-func (TransactionImported) isImportedTransactionEvent()         {}
-func (ImportedTransactionAccepted) isImportedTransactionEvent() {}
+func (TransactionImported) isImportedTransactionEvent()                  {}
+func (ImportedTransactionAccepted) isImportedTransactionEvent()          {}
+func (ImportedTransactionReturnedToPending) isImportedTransactionEvent() {}
+func (ImportedTransactionDiscarded) isImportedTransactionEvent()         {}
 
 // DateLayout is how events write a calendar date.
 const DateLayout = time.DateOnly
@@ -346,6 +386,10 @@ func decideImportedTransaction(s ImportedTransactionState, c ImportedTransaction
 		return importRow(s, c)
 	case AcceptImportedTransaction:
 		return acceptImportedTransaction(s, c)
+	case ReturnToPending:
+		return returnToPending(s, c)
+	case DiscardImportedTransaction:
+		return discardImportedTransaction(s)
 	default:
 		return nil, nil
 	}
@@ -398,6 +442,8 @@ func acceptImportedTransaction(s ImportedTransactionState, c AcceptImportedTrans
 		return nil, ErrImportedTransactionNotImported
 	case s.State == ImportedAccepted:
 		return nil, ErrImportedTransactionAlreadyAccepted
+	case s.State == ImportedDiscarded:
+		return nil, ErrImportedTransactionDiscarded
 	case s.State != ImportedPending:
 		return nil, fmt.Errorf("%w: it is %s", ErrImportedTransactionNotPending, s.State)
 	case c.TransactionID == sharedkernel.NilID:
@@ -407,10 +453,46 @@ func acceptImportedTransaction(s ImportedTransactionState, c AcceptImportedTrans
 	return []ImportedTransactionEvent{ImportedTransactionAccepted(c)}, nil
 }
 
+// returnToPending unlinks an Accepted Imported transaction from the
+// Transaction that booked it, which was reversed (spec story 51d).
+func returnToPending(s ImportedTransactionState, c ReturnToPending) ([]ImportedTransactionEvent, error) {
+	switch {
+	case !s.Imported:
+		return nil, ErrImportedTransactionNotImported
+	case s.State != ImportedAccepted:
+		return nil, fmt.Errorf("%w: it is %s", ErrImportedTransactionNotAccepted, s.State)
+	case s.TransactionID != c.TransactionID:
+		return nil, ErrNotBookedByTransaction
+	}
+
+	return []ImportedTransactionEvent{ImportedTransactionReturnedToPending(c)}, nil
+}
+
+// discardImportedTransaction Discards a pending Imported transaction; an
+// Accepted one is reversed instead, and Discarded is final (spec story 51e).
+func discardImportedTransaction(s ImportedTransactionState) ([]ImportedTransactionEvent, error) {
+	switch {
+	case !s.Imported:
+		return nil, ErrImportedTransactionNotImported
+	case s.State == ImportedDiscarded:
+		return nil, ErrImportedTransactionAlreadyDiscarded
+	case s.State == ImportedAccepted:
+		return nil, ErrImportedTransactionAlreadyAccepted
+	case s.State != ImportedPending:
+		return nil, fmt.Errorf("%w: it is %s", ErrImportedTransactionNotPending, s.State)
+	}
+
+	return []ImportedTransactionEvent{ImportedTransactionDiscarded{}}, nil
+}
+
 func evolveImportedTransaction(s ImportedTransactionState, e decider.Envelope[ImportedTransactionEvent]) ImportedTransactionState {
 	switch ev := e.Event.(type) {
 	case ImportedTransactionAccepted:
 		s.State, s.TransactionID = ImportedAccepted, ev.TransactionID
+	case ImportedTransactionReturnedToPending:
+		s.State, s.TransactionID = ImportedPending, sharedkernel.NilID
+	case ImportedTransactionDiscarded:
+		s.State = ImportedDiscarded
 	case TransactionImported:
 		s = ImportedTransactionState{
 			Imported:          true,

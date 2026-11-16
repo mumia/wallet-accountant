@@ -505,8 +505,8 @@ paths:
         then in the order they were imported (a file's rows in line order),
         paged with a cursor.
         `state` keeps only those in one state (`PENDING`: waiting for
-        review; `ACCEPTED`: booked in the Ledger) and `booking_month` only
-        one Booking month.
+        review; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to reach
+        the Ledger) and `booking_month` only one Booking month.
       tags:
         - Imported transactions
       parameters:
@@ -521,6 +521,7 @@ paths:
             x-extensible-enum:
               - PENDING
               - ACCEPTED
+              - DISCARDED
             example: PENDING
         - $ref: '#/components/parameters/BookingMonth'
         - $ref: '#/components/parameters/Cursor'
@@ -552,7 +553,8 @@ paths:
         side waits in Uncategorised. The Account's balance and its
         Transaction list reflect it immediately. An Imported transaction
         already Accepted gets 409
-        `/problems/imported-transaction-already-accepted`; any other Internal
+        `/problems/imported-transaction-already-accepted`, and a Discarded
+        one 409 `/problems/imported-transaction-discarded`; any other Internal
         Category gets 422 `/problems/internal-category`, and a Category that
         isn't one of the Household's gets 422 `/problems/invalid-category`.
         Retrying with the same Idempotency-Key and body returns the original
@@ -584,6 +586,121 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/transactions/{transaction_id}:
+    patch:
+      operationId: changeTransaction
+      summary: Set a Transaction's Category
+      description: |
+        Sets the Category on the non-Account side of the Transaction, for
+        example to categorise one Accepted into Uncategorised or to correct
+        a wrong Category. Its amount never changes. The Account's
+        Uncategorised count and Transaction list reflect it immediately. The
+        Category rules are Accept's: the Uncategorised Category is allowed,
+        any other Internal Category gets 422 `/problems/internal-category`,
+        and a Category that isn't one of the Household's gets 422
+        `/problems/invalid-category`. A reversed Transaction gets 409
+        `/problems/transaction-reversed`; a reversal gets 422
+        `/problems/transaction-is-a-reversal`, and the Opening balance
+        Transaction 422 `/problems/opening-balance-transaction`.
+      tags:
+        - Transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/TransactionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionChange'
+      responses:
+        '200':
+          description: The Transaction with its new Category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/transactions/{transaction_id}/reverse:
+    post:
+      operationId: reverseTransaction
+      summary: Reverse a Transaction
+      description: |
+        Reverses a mistaken Transaction without editing or deleting it
+        (ADR-0018): a reversing Transaction is recorded with the opposite
+        Postings, the same Booking date and a link to the original, and both
+        appear in the Account's Transaction list. Neither counts as
+        Uncategorised any more. When an Accept recorded the Transaction, its
+        Imported transaction goes back to pending in the same transaction,
+        to be Accepted again or Discarded. A Transaction already reversed
+        gets 409 `/problems/transaction-already-reversed`; a reversal gets
+        422 `/problems/transaction-is-a-reversal`, and the Opening balance
+        Transaction 422 `/problems/opening-balance-transaction` (only
+        voiding the first Statement import changes it).
+      tags:
+        - Transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/TransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: The reversing Transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/imported-transactions/{imported_transaction_id}/discard:
+    post:
+      operationId: discardImportedTransaction
+      summary: Discard a pending Imported transaction
+      description: |
+        Discards a pending Imported transaction, for example one whose
+        Transaction was reversed, so it never reaches the Ledger. Discarded
+        is final: it doesn't count in later Balance checks. One already
+        Discarded gets 409 `/problems/imported-transaction-already-discarded`,
+        and an Accepted one 409 `/problems/imported-transaction-already-accepted`
+        (reverse its Transaction first).
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ImportedTransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The Discarded Imported transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Problem'
   /households/{household_id}/connections/{connection_id}/statement-imports/previews:
@@ -776,6 +893,14 @@ components:
       in: path
       required: true
       description: The Imported transaction's ID
+      schema:
+        type: string
+        format: uuid
+    TransactionID:
+      name: transaction_id
+      in: path
+      required: true
+      description: The Transaction's ID
       schema:
         type: string
         format: uuid
@@ -1558,6 +1683,91 @@ components:
           type: string
           description: The Category's name
           example: Opening balance
+        reversal_of_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction this one reverses, when it is a reversal
+        reversed_by_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction that reversed this one, once it is reversed
+    Transaction:
+      type: object
+      description: |
+        A Transaction as seen from its Account: its signed amount there
+        (positive is money in) and the Category on the other side
+      required:
+        - transaction_id
+        - account_id
+        - amount
+        - booking_date
+        - transaction_date
+        - description
+        - category_id
+        - category_name
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction's ID (UUIDv7)
+        account_id:
+          type: string
+          format: uuid
+          description: The Account it moves money on
+        amount:
+          $ref: '#/components/schemas/Money'
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        transaction_date:
+          type: string
+          format: date
+          description: The date the purchase or payment happened
+          example: '2026-01-14'
+        value_date:
+          type: string
+          format: date
+          description: The date the money moved, when known
+          example: '2026-01-16'
+        description:
+          type: string
+          description: The Transaction's description
+          example: Coffee
+        payee:
+          type: string
+          description: The payee, when known
+        category_id:
+          type: string
+          format: uuid
+          description: The Category on the other side of the Transaction
+        category_name:
+          type: string
+          description: The Category's name
+          example: Uncategorised
+        imported_transaction_id:
+          type: string
+          format: uuid
+          description: The Imported transaction whose Accept recorded it
+        reversal_of_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction this one reverses, when it is a reversal
+        reversed_by_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction that reversed this one, once it is reversed
+    TransactionChange:
+      type: object
+      description: A change to a Transaction
+      required:
+        - category_id
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: The Category for the non-Account side; the Uncategorised Category is allowed
     AccountTransactionPage:
       type: object
       description: A page of an Account's Transactions
@@ -1599,6 +1809,7 @@ components:
           x-extensible-enum:
             - PENDING
             - ACCEPTED
+            - DISCARDED
           example: PENDING
         line:
           type: integer

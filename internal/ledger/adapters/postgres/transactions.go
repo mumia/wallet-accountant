@@ -30,13 +30,15 @@ func (TransactionFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 		valueDate *time.Time
 		postings  []byte
 		imported  *uuid.UUID
+		of, by    *uuid.UUID
 	)
 
 	err := tx.QueryRow(ctx, `SELECT opening_balance, booking_date, transaction_date, value_date, description, payee,
-		postings, imported_transaction_id, version, schema_version
+		postings, imported_transaction_id, reversal_of_transaction_id, reversed_by_transaction_id, version,
+		schema_version
 		FROM ledger_transactions WHERE household_id = $1 AND id = $2`, tx.HouseholdID(), id).
 		Scan(&f.State.OpeningBalance, &f.State.BookingDate, &f.State.TransactionDate, &valueDate,
-			&f.State.Description, &f.State.Payee, &postings, &imported, &f.Version, &f.SchemaVersion)
+			&f.State.Description, &f.State.Payee, &postings, &imported, &of, &by, &f.Version, &f.SchemaVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return eventstore.Fold[domain.TransactionState]{}, false, nil
 	}
@@ -49,6 +51,14 @@ func (TransactionFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 
 	if imported != nil {
 		f.State.ImportedTransactionID = *imported
+	}
+
+	if of != nil {
+		f.State.ReversalOf = *of
+	}
+
+	if by != nil {
+		f.State.ReversedBy = *by
 	}
 
 	if valueDate != nil {
@@ -83,18 +93,19 @@ func (TransactionFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 
 	args := []any{
 		tx.HouseholdID(), id, s.OpeningBalance, s.BookingDate, s.TransactionDate, valueDate, s.Description, s.Payee,
-		postings, f.Version, f.SchemaVersion, imported,
+		postings, f.Version, f.SchemaVersion, imported, optionalID(s.ReversalOf), optionalID(s.ReversedBy),
 	}
 	q := `INSERT INTO ledger_transactions (household_id, id, opening_balance, booking_date, transaction_date, value_date,
-	          description, payee, postings, version, schema_version, imported_transaction_id)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (id) DO NOTHING`
+	          description, payee, postings, version, schema_version, imported_transaction_id,
+	          reversal_of_transaction_id, reversed_by_transaction_id)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
 		args = append(args, expected)
 		q = `UPDATE ledger_transactions SET opening_balance = $3, booking_date = $4, transaction_date = $5,
 		         value_date = $6, description = $7, payee = $8, postings = $9, version = $10, schema_version = $11,
-		         imported_transaction_id = $12
-		     WHERE household_id = $1 AND id = $2 AND version = $13`
+		         imported_transaction_id = $12, reversal_of_transaction_id = $13, reversed_by_transaction_id = $14
+		     WHERE household_id = $1 AND id = $2 AND version = $15`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
@@ -129,6 +140,15 @@ func (TransactionFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 	return nil
 }
 
+// optionalID is NULL for the zero ID.
+func optionalID(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+
+	return &id
+}
+
 // TransactionReader implements app.TransactionReader.
 type TransactionReader struct{}
 
@@ -158,8 +178,11 @@ func (TransactionReader) AccountTransactions(ctx context.Context, tx *eventstore
 
 	rows, err := tx.Query(ctx, `SELECT p.transaction_id, p.ordinal, p.booking_date, p.transaction_date, p.description,
 			p.amount::text, p.currency, COALESCE(p.category_id, '00000000-0000-0000-0000-000000000000'),
-			COALESCE(c.name, '')
+			COALESCE(c.name, ''),
+			COALESCE(t.reversal_of_transaction_id, '00000000-0000-0000-0000-000000000000'),
+			COALESCE(t.reversed_by_transaction_id, '00000000-0000-0000-0000-000000000000')
 		FROM account_postings p
+		JOIN ledger_transactions t ON t.household_id = p.household_id AND t.id = p.transaction_id
 		LEFT JOIN categories c ON c.household_id = p.household_id AND c.id = p.category_id
 		WHERE p.household_id = $1 AND p.account_id = $2
 		  AND ($3::date IS NULL OR (p.booking_date >= $3 AND p.booking_date < $4))
@@ -178,7 +201,7 @@ func (TransactionReader) AccountTransactions(ctx context.Context, tx *eventstore
 		)
 
 		if err := r.Scan(&t.TransactionID, &t.Ordinal, &t.BookingDate, &t.TransactionDate, &t.Description, &amount,
-			&t.Currency, &t.CategoryID, &t.CategoryName); err != nil {
+			&t.Currency, &t.CategoryID, &t.CategoryName, &t.ReversalOf, &t.ReversedBy); err != nil {
 			return t, err //nolint:wrapcheck // wrapped below
 		}
 

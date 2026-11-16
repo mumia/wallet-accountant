@@ -14,10 +14,11 @@ type Handler interface {
 	// transaction, with exactly the row's amount, dates, description and payee, between the Account and
 	// `category_id`. Without `category_id`, or with the Uncategorised Category, the other side waits in
 	// Uncategorised. The Account's balance and its Transaction list reflect it immediately. An Imported
-	// transaction already Accepted gets 409 `/problems/imported-transaction-already-accepted`; any other
-	// Internal Category gets 422 `/problems/internal-category`, and a Category that isn't one of the
-	// Household's gets 422 `/problems/invalid-category`. Retrying with the same Idempotency-Key and body
-	// returns the original result and never books twice.
+	// transaction already Accepted gets 409 `/problems/imported-transaction-already-accepted`, and a
+	// Discarded one 409 `/problems/imported-transaction-discarded`; any other Internal Category gets 422
+	// `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
+	// `/problems/invalid-category`. Retrying with the same Idempotency-Key and body returns the original
+	// result and never books twice.
 	//
 	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/accept
 	AcceptImportedTransaction(ctx context.Context, req OptImportedTransactionAcceptance, params AcceptImportedTransactionParams) (AcceptImportedTransactionRes, error)
@@ -41,6 +42,19 @@ type Handler interface {
 	//
 	// PATCH /households/{household_id}/categories/{category_id}
 	ChangeCategory(ctx context.Context, req *CategoryChange, params ChangeCategoryParams) (ChangeCategoryRes, error)
+	// ChangeTransaction implements changeTransaction operation.
+	//
+	// Sets the Category on the non-Account side of the Transaction, for example to categorise one Accepted
+	// into Uncategorised or to correct a wrong Category. Its amount never changes. The Account's
+	// Uncategorised count and Transaction list reflect it immediately. The Category rules are Accept's:
+	// the Uncategorised Category is allowed, any other Internal Category gets 422
+	// `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
+	// `/problems/invalid-category`. A reversed Transaction gets 409 `/problems/transaction-reversed`; a
+	// reversal gets 422 `/problems/transaction-is-a-reversal`, and the Opening balance Transaction 422
+	// `/problems/opening-balance-transaction`.
+	//
+	// PATCH /households/{household_id}/transactions/{transaction_id}
+	ChangeTransaction(ctx context.Context, req *TransactionChange, params ChangeTransactionParams) (ChangeTransactionRes, error)
 	// CreateCategory implements createCategory operation.
 	//
 	// Creates an Income or Expense Category, at the root or under `parent_id`. A sub-Category takes its
@@ -77,6 +91,15 @@ type Handler interface {
 	//
 	// POST /registrations
 	CreateRegistration(ctx context.Context, req *Registration, params CreateRegistrationParams) (CreateRegistrationRes, error)
+	// DiscardImportedTransaction implements discardImportedTransaction operation.
+	//
+	// Discards a pending Imported transaction, for example one whose Transaction was reversed, so it never
+	// reaches the Ledger. Discarded is final: it doesn't count in later Balance checks. One already
+	// Discarded gets 409 `/problems/imported-transaction-already-discarded`, and an Accepted one 409
+	// `/problems/imported-transaction-already-accepted` (reverse its Transaction first).
+	//
+	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/discard
+	DiscardImportedTransaction(ctx context.Context, params DiscardImportedTransactionParams) (DiscardImportedTransactionRes, error)
 	// GetAccount implements getAccount operation.
 	//
 	// Returns an Account of the Household with its current balance, or that it is awaiting its first
@@ -139,8 +162,8 @@ type Handler interface {
 	//
 	// Lists the Account's Imported transactions, sorted by Booking date and then in the order they were
 	// imported (a file's rows in line order), paged with a cursor. `state` keeps only those in one state
-	// (`PENDING`: waiting for review; `ACCEPTED`: booked in the Ledger) and `booking_month` only one
-	// Booking month.
+	// (`PENDING`: waiting for review; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to reach the
+	// Ledger) and `booking_month` only one Booking month.
 	//
 	// GET /households/{household_id}/accounts/{account_id}/imported-transactions
 	ListImportedTransactions(ctx context.Context, params ListImportedTransactionsParams) (ListImportedTransactionsRes, error)
@@ -169,6 +192,19 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports/previews
 	PreviewStatementImport(ctx context.Context, req *StatementImportPreviewUploadMultipart, params PreviewStatementImportParams) (PreviewStatementImportRes, error)
+	// ReverseTransaction implements reverseTransaction operation.
+	//
+	// Reverses a mistaken Transaction without editing or deleting it (ADR-0018): a reversing Transaction
+	// is recorded with the opposite Postings, the same Booking date and a link to the original, and both
+	// appear in the Account's Transaction list. Neither counts as Uncategorised any more. When an Accept
+	// recorded the Transaction, its Imported transaction goes back to pending in the same transaction, to
+	// be Accepted again or Discarded. A Transaction already reversed gets 409
+	// `/problems/transaction-already-reversed`; a reversal gets 422 `/problems/transaction-is-a-reversal`,
+	// and the Opening balance Transaction 422 `/problems/opening-balance-transaction` (only voiding the
+	// first Statement import changes it).
+	//
+	// POST /households/{household_id}/transactions/{transaction_id}/reverse
+	ReverseTransaction(ctx context.Context, params ReverseTransactionParams) (ReverseTransactionRes, error)
 	// SaveCsvMapping implements saveCsvMapping operation.
 	//
 	// Replaces the Connection's CSV mapping. The mapping is validated as a whole: a missing required

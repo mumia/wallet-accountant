@@ -25,6 +25,12 @@ var (
 	// ErrImportedTransactionAlreadyAccepted is returned for accepting an
 	// Imported transaction twice: it is booked once.
 	ErrImportedTransactionAlreadyAccepted = domain.ErrImportedTransactionAlreadyAccepted
+	// ErrImportedTransactionDiscarded is returned for accepting a Discarded
+	// Imported transaction: Discarded is final.
+	ErrImportedTransactionDiscarded = domain.ErrImportedTransactionDiscarded
+	// ErrImportedTransactionAlreadyDiscarded is returned for discarding an
+	// Imported transaction twice.
+	ErrImportedTransactionAlreadyDiscarded = domain.ErrImportedTransactionAlreadyDiscarded
 	// ErrCategoryNotFound is returned for accepting with a Category that is
 	// not in the Household.
 	ErrCategoryNotFound = errors.New("category not found")
@@ -130,6 +136,46 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 	}
 
 	return accepted, nil
+}
+
+// ReturnToPending returns the Imported transaction, Accepted by the Ledger
+// Transaction transaction, to pending, in the caller's transaction. The
+// Ledger calls it when it reverses that Transaction, so the row can be
+// Accepted again or Discarded (ADR-0013, ADR-0018; consistency map: Reverse
+// Transaction).
+func (s *ImportedTransactions) ReturnToPending(ctx context.Context, tx *eventstore.Tx, id, transaction uuid.UUID) error {
+	if _, err := s.rows.Execute(ctx, tx, id, domain.ReturnToPending{TransactionID: transaction}); err != nil {
+		return fmt.Errorf("return imported transaction %s to pending: %w", id, err)
+	}
+
+	return nil
+}
+
+// Discard Discards a pending Imported transaction so it never reaches the
+// Ledger. Discarded is final (consistency map: Keep or Discard Imported
+// transaction).
+func (s *ImportedTransactions) Discard(ctx context.Context, household, id uuid.UUID) (ImportedTransaction, error) {
+	var discarded ImportedTransaction
+
+	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		res, err := s.rows.Execute(ctx, tx, id, domain.DiscardImportedTransaction{})
+		if errors.Is(err, domain.ErrImportedTransactionNotImported) {
+			return ErrImportedTransactionNotFound
+		}
+
+		if err != nil {
+			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		discarded = ImportedTransaction{ID: id, State: res.State}
+
+		return nil
+	})
+	if err != nil {
+		return ImportedTransaction{}, fmt.Errorf("discard imported transaction %s: %w", id, err)
+	}
+
+	return discarded, nil
 }
 
 // List returns a page of the Account's Imported transactions.

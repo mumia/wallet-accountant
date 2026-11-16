@@ -89,3 +89,17 @@ func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b 
 		return err //nolint:wrapcheck // already wrapped by the Ledger
 	}
 }
+
+// ledgerIngestion is the Ledger's Ingestion port, served by Ingestion's
+// application services.
+type ledgerIngestion struct {
+	imported *ingestionapp.ImportedTransactions
+}
+
+var _ ledgerapp.Ingestion = ledgerIngestion{}
+
+// ReturnToPending implements ledgerapp.Ingestion.
+func (i ledgerIngestion) ReturnToPending(ctx context.Context, tx *eventstore.Tx, importedTransaction, transaction uuid.UUID,
+) error {
+	return i.imported.ReturnToPending(ctx, tx, importedTransaction, transaction) //nolint:wrapcheck // already wrapped by Ingestion
+}

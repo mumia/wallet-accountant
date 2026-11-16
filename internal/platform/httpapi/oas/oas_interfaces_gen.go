@@ -13,6 +13,10 @@ type ChangeCategoryRes interface {
 	changeCategoryRes()
 }
 
+type ChangeTransactionRes interface {
+	changeTransactionRes()
+}
+
 type CreateCategoryRes interface {
 	createCategoryRes()
 }
@@ -27,6 +31,10 @@ type CreateHouseholdRes interface {
 
 type CreateRegistrationRes interface {
 	createRegistrationRes()
+}
+
+type DiscardImportedTransactionRes interface {
+	discardImportedTransactionRes()
 }
 
 type GetAccountRes interface {
@@ -71,6 +79,10 @@ type ListStatementImportsRes interface {
 
 type PreviewStatementImportRes interface {
 	previewStatementImportRes()
+}
+
+type ReverseTransactionRes interface {
+	reverseTransactionRes()
 }
 
 type SaveCsvMappingRes interface {

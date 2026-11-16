@@ -26,6 +26,30 @@ var (
 	// ErrBookingDateRequired is returned for a Transaction without a Booking
 	// date.
 	ErrBookingDateRequired = errors.New("booking date required")
+	// ErrTransactionNotRecorded is returned for a command to a Transaction
+	// that doesn't exist.
+	ErrTransactionNotRecorded = errors.New("transaction not recorded")
+	// ErrOpeningBalanceTransaction is returned for reversing or
+	// recategorising the Opening balance Transaction: only voiding the first
+	// Statement import changes it (ADR-0018).
+	ErrOpeningBalanceTransaction = errors.New("the opening balance transaction can't be changed")
+	// ErrTransactionIsAReversal is returned for reversing or recategorising
+	// a reversal, so corrections can't pile up.
+	ErrTransactionIsAReversal = errors.New("transaction is a reversal")
+	// ErrTransactionAlreadyReversed is returned for reversing a Transaction
+	// twice.
+	ErrTransactionAlreadyReversed = errors.New("transaction already reversed")
+	// ErrTransactionReversed is returned for recategorising a reversed
+	// Transaction.
+	ErrTransactionReversed = errors.New("transaction is reversed")
+	// ErrReversalIDRequired is returned for reversing without the
+	// Transaction that reverses it.
+	ErrReversalIDRequired = errors.New("reversing transaction ID required")
+	// ErrCategoryRequired is returned for setting no Category.
+	ErrCategoryRequired = errors.New("category required")
+	// ErrNotOneCategory is returned for setting the Category of a
+	// Transaction whose non-Account side isn't exactly one Category.
+	ErrNotOneCategory = errors.New("the transaction's other side isn't exactly one category")
 )
 
 // Posting is one line of a Transaction: the amount it moves into (positive)
@@ -51,6 +75,52 @@ type TransactionState struct {
 	// ImportedTransactionID is the Imported transaction whose Accept
 	// recorded it; the zero ID otherwise.
 	ImportedTransactionID sharedkernel.ID
+	// ReversalOf is the Transaction this one reverses; the zero ID unless it
+	// is a reversal.
+	ReversalOf sharedkernel.ID
+	// ReversedBy is the Transaction that reversed this one; the zero ID
+	// while it isn't reversed.
+	ReversedBy sharedkernel.ID
+}
+
+// CategoryID returns the Category of the non-Account side, or the zero ID
+// when that side isn't exactly one Category.
+func (s TransactionState) CategoryID() sharedkernel.ID {
+	category, n := sharedkernel.NilID, 0
+
+	for _, p := range s.Postings {
+		if p.CategoryID != sharedkernel.NilID {
+			category = p.CategoryID
+			n++
+		}
+	}
+
+	if n != 1 {
+		return sharedkernel.NilID
+	}
+
+	return category
+}
+
+// Reversal returns the command that records the reversal of this
+// Transaction, id: the opposite Postings on the same dates, with the same
+// description and payee, linked to it (ADR-0018).
+func (s TransactionState) Reversal(id sharedkernel.ID) RecordTransaction {
+	postings := make([]Posting, 0, len(s.Postings))
+	for _, p := range s.Postings {
+		p.Amount = p.Amount.Neg()
+		postings = append(postings, p)
+	}
+
+	return RecordTransaction{
+		ReversalOf:      id,
+		BookingDate:     s.BookingDate,
+		TransactionDate: s.TransactionDate,
+		ValueDate:       s.ValueDate,
+		Description:     s.Description,
+		Payee:           s.Payee,
+		Postings:        postings,
+	}
 }
 
 // AccountLine is a Transaction as one line of an Account's single-entry
@@ -70,19 +140,7 @@ type AccountLine struct {
 // AccountLines returns one line per Account Posting, in Posting order. Its
 // fold stores them as lookup rows (ADR-0011 "Reads").
 func (s TransactionState) AccountLines() []AccountLine {
-	category := sharedkernel.NilID
-	categories := 0
-
-	for _, p := range s.Postings {
-		if p.CategoryID != sharedkernel.NilID {
-			category = p.CategoryID
-			categories++
-		}
-	}
-
-	if categories != 1 {
-		category = sharedkernel.NilID
-	}
+	category := s.CategoryID()
 
 	var lines []AccountLine
 
@@ -106,9 +164,11 @@ type (
 
 	// RecordTransaction records a balanced Transaction. TransactionDate
 	// defaults to the Booking date; ValueDate may be zero.
-	// ImportedTransactionID links it to the Imported transaction it books.
+	// ImportedTransactionID links it to the Imported transaction it books;
+	// ReversalOf to the Transaction it reverses.
 	RecordTransaction struct {
 		ImportedTransactionID sharedkernel.ID
+		ReversalOf            sharedkernel.ID
 		OpeningBalance        bool
 		BookingDate           time.Time
 		TransactionDate       time.Time
@@ -117,9 +177,22 @@ type (
 		Payee                 string
 		Postings              []Posting
 	}
+
+	// ReverseTransaction reverses a Transaction: ReversalID is the
+	// Transaction that records the opposite Postings.
+	ReverseTransaction struct {
+		ReversalID sharedkernel.ID
+	}
+
+	// SetTransactionCategory sets the Category of the non-Account side.
+	SetTransactionCategory struct {
+		CategoryID sharedkernel.ID
+	}
 )
 
-func (RecordTransaction) isTransactionCommand() {}
+func (RecordTransaction) isTransactionCommand()      {}
+func (ReverseTransaction) isTransactionCommand()     {}
+func (SetTransactionCategory) isTransactionCommand() {}
 
 type (
 	// TransactionEvent is a Transaction's event.
@@ -129,6 +202,7 @@ type (
 	// are written with DateLayout; ValueDate is empty when unknown.
 	TransactionRecorded struct {
 		ImportedTransactionID sharedkernel.ID `json:"importedtransactionid,omitzero"`
+		ReversalOf            sharedkernel.ID `json:"reversalof,omitzero"`
 		OpeningBalance        bool            `json:"openingbalance,omitempty"`
 		BookingDate           string          `json:"bookingdate"`
 		TransactionDate       string          `json:"transactiondate"`
@@ -137,9 +211,24 @@ type (
 		Payee                 string          `json:"payee,omitempty"`
 		Postings              []Posting       `json:"postings"`
 	}
+
+	// TransactionReversed is recorded when a Transaction is reversed by the
+	// Transaction ReversalID.
+	TransactionReversed struct {
+		ReversalID sharedkernel.ID `json:"reversalid"`
+	}
+
+	// TransactionCategorySet is recorded when the Category of the
+	// non-Account side changes from PreviousCategoryID to CategoryID.
+	TransactionCategorySet struct {
+		CategoryID         sharedkernel.ID `json:"categoryid"`
+		PreviousCategoryID sharedkernel.ID `json:"previouscategoryid"`
+	}
 )
 
-func (TransactionRecorded) isTransactionEvent() {}
+func (TransactionRecorded) isTransactionEvent()    {}
+func (TransactionReversed) isTransactionEvent()    {}
+func (TransactionCategorySet) isTransactionEvent() {}
 
 // Transaction is the Transaction Decider (ADR-0001, ADR-0011): its Postings
 // always sum to zero per currency.
@@ -152,6 +241,10 @@ func decideTransaction(s TransactionState, c TransactionCommand) ([]TransactionE
 	switch c := c.(type) {
 	case RecordTransaction:
 		return recordTransaction(s, c)
+	case ReverseTransaction:
+		return reverseTransaction(s, c)
+	case SetTransactionCategory:
+		return setTransactionCategory(s, c)
 	default:
 		return nil, nil
 	}
@@ -193,6 +286,7 @@ func recordTransaction(s TransactionState, c RecordTransaction) ([]TransactionEv
 
 	recorded := TransactionRecorded{
 		ImportedTransactionID: c.ImportedTransactionID,
+		ReversalOf:            c.ReversalOf,
 		OpeningBalance:        c.OpeningBalance,
 		BookingDate:           c.BookingDate.Format(DateLayout),
 		TransactionDate:       transactionDate.Format(DateLayout),
@@ -206,6 +300,60 @@ func recordTransaction(s TransactionState, c RecordTransaction) ([]TransactionEv
 	}
 
 	return []TransactionEvent{recorded}, nil
+}
+
+// correctable refuses changing a Transaction that only voiding changes, or
+// that is itself a correction (ADR-0018).
+func correctable(s TransactionState) error {
+	switch {
+	case !s.Recorded:
+		return ErrTransactionNotRecorded
+	case s.OpeningBalance:
+		return ErrOpeningBalanceTransaction
+	case s.ReversalOf != sharedkernel.NilID:
+		return ErrTransactionIsAReversal
+	default:
+		return nil
+	}
+}
+
+// reverseTransaction reverses a Transaction once (spec story 51f).
+func reverseTransaction(s TransactionState, c ReverseTransaction) ([]TransactionEvent, error) {
+	if err := correctable(s); err != nil {
+		return nil, err
+	}
+
+	switch {
+	case s.ReversedBy != sharedkernel.NilID:
+		return nil, ErrTransactionAlreadyReversed
+	case c.ReversalID == sharedkernel.NilID:
+		return nil, ErrReversalIDRequired
+	}
+
+	return []TransactionEvent{TransactionReversed(c)}, nil
+}
+
+// setTransactionCategory changes the Category of the non-Account side; the
+// Category it already has changes nothing.
+func setTransactionCategory(s TransactionState, c SetTransactionCategory) ([]TransactionEvent, error) {
+	if err := correctable(s); err != nil {
+		return nil, err
+	}
+
+	previous := s.CategoryID()
+
+	switch {
+	case s.ReversedBy != sharedkernel.NilID:
+		return nil, ErrTransactionReversed
+	case c.CategoryID == sharedkernel.NilID:
+		return nil, ErrCategoryRequired
+	case previous == sharedkernel.NilID:
+		return nil, ErrNotOneCategory
+	case previous == c.CategoryID:
+		return nil, nil
+	}
+
+	return []TransactionEvent{TransactionCategorySet{CategoryID: c.CategoryID, PreviousCategoryID: previous}}, nil
 }
 
 func checkPosting(p Posting) error {
@@ -227,7 +375,21 @@ func checkPosting(p Posting) error {
 }
 
 func evolveTransaction(s TransactionState, e decider.Envelope[TransactionEvent]) TransactionState {
-	if ev, ok := e.Event.(TransactionRecorded); ok {
+	switch ev := e.Event.(type) {
+	case TransactionReversed:
+		s.ReversedBy = ev.ReversalID
+	case TransactionCategorySet:
+		postings := make([]Posting, len(s.Postings))
+		for i, p := range s.Postings {
+			if p.CategoryID != sharedkernel.NilID {
+				p.CategoryID = ev.CategoryID
+			}
+
+			postings[i] = p
+		}
+
+		s.Postings = postings
+	case TransactionRecorded:
 		s.Recorded, s.OpeningBalance = true, ev.OpeningBalance
 		// The event was written with DateLayout, so the dates always parse.
 		s.BookingDate, _ = time.Parse(DateLayout, ev.BookingDate)
@@ -239,7 +401,7 @@ func evolveTransaction(s TransactionState, e decider.Envelope[TransactionEvent])
 		}
 
 		s.Description, s.Payee, s.Postings = ev.Description, ev.Payee, ev.Postings
-		s.ImportedTransactionID = ev.ImportedTransactionID
+		s.ImportedTransactionID, s.ReversalOf = ev.ImportedTransactionID, ev.ReversalOf
 	}
 
 	return s

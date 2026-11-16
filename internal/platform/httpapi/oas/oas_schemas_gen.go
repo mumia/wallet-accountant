@@ -209,6 +209,10 @@ type AccountTransaction struct {
 	CategoryID uuid.UUID `json:"category_id"`
 	// The Category's name.
 	CategoryName string `json:"category_name"`
+	// The Transaction this one reverses, when it is a reversal.
+	ReversalOfTransactionID OptUUID `json:"reversal_of_transaction_id"`
+	// The Transaction that reversed this one, once it is reversed.
+	ReversedByTransactionID OptUUID `json:"reversed_by_transaction_id"`
 }
 
 // GetTransactionID returns the value of TransactionID.
@@ -246,6 +250,16 @@ func (s *AccountTransaction) GetCategoryName() string {
 	return s.CategoryName
 }
 
+// GetReversalOfTransactionID returns the value of ReversalOfTransactionID.
+func (s *AccountTransaction) GetReversalOfTransactionID() OptUUID {
+	return s.ReversalOfTransactionID
+}
+
+// GetReversedByTransactionID returns the value of ReversedByTransactionID.
+func (s *AccountTransaction) GetReversedByTransactionID() OptUUID {
+	return s.ReversedByTransactionID
+}
+
 // SetTransactionID sets the value of TransactionID.
 func (s *AccountTransaction) SetTransactionID(val uuid.UUID) {
 	s.TransactionID = val
@@ -279,6 +293,16 @@ func (s *AccountTransaction) SetCategoryID(val uuid.UUID) {
 // SetCategoryName sets the value of CategoryName.
 func (s *AccountTransaction) SetCategoryName(val string) {
 	s.CategoryName = val
+}
+
+// SetReversalOfTransactionID sets the value of ReversalOfTransactionID.
+func (s *AccountTransaction) SetReversalOfTransactionID(val OptUUID) {
+	s.ReversalOfTransactionID = val
+}
+
+// SetReversedByTransactionID sets the value of ReversedByTransactionID.
+func (s *AccountTransaction) SetReversedByTransactionID(val OptUUID) {
+	s.ReversedByTransactionID = val
 }
 
 // A page of an Account's Transactions.
@@ -574,6 +598,22 @@ func (*ChangeCategoryUnauthorized) changeCategoryRes() {}
 type ChangeCategoryUnprocessableEntity Problem
 
 func (*ChangeCategoryUnprocessableEntity) changeCategoryRes() {}
+
+type ChangeTransactionConflict Problem
+
+func (*ChangeTransactionConflict) changeTransactionRes() {}
+
+type ChangeTransactionNotFound Problem
+
+func (*ChangeTransactionNotFound) changeTransactionRes() {}
+
+type ChangeTransactionUnauthorized Problem
+
+func (*ChangeTransactionUnauthorized) changeTransactionRes() {}
+
+type ChangeTransactionUnprocessableEntity Problem
+
+func (*ChangeTransactionUnprocessableEntity) changeTransactionRes() {}
 
 // A Connection between an Account and a source of its transactions.
 // Ref: #/components/schemas/Connection
@@ -995,6 +1035,18 @@ type CurrencyCode string
 
 type DecimalText string
 
+type DiscardImportedTransactionConflict Problem
+
+func (*DiscardImportedTransactionConflict) discardImportedTransactionRes() {}
+
+type DiscardImportedTransactionNotFound Problem
+
+func (*DiscardImportedTransactionNotFound) discardImportedTransactionRes() {}
+
+type DiscardImportedTransactionUnauthorized Problem
+
+func (*DiscardImportedTransactionUnauthorized) discardImportedTransactionRes() {}
+
 type GetAccountNotFound Problem
 
 func (*GetAccountNotFound) getAccountRes() {}
@@ -1257,7 +1309,8 @@ func (s *ImportedTransaction) SetTransactionID(val OptUUID) {
 	s.TransactionID = val
 }
 
-func (*ImportedTransaction) acceptImportedTransactionRes() {}
+func (*ImportedTransaction) acceptImportedTransactionRes()  {}
+func (*ImportedTransaction) discardImportedTransactionRes() {}
 
 // How to Accept an Imported transaction.
 // Ref: #/components/schemas/ImportedTransactionAcceptance
@@ -2078,6 +2131,22 @@ func (s *Registration) SetInvitationCode(val string) {
 	s.InvitationCode = val
 }
 
+type ReverseTransactionConflict Problem
+
+func (*ReverseTransactionConflict) reverseTransactionRes() {}
+
+type ReverseTransactionNotFound Problem
+
+func (*ReverseTransactionNotFound) reverseTransactionRes() {}
+
+type ReverseTransactionUnauthorized Problem
+
+func (*ReverseTransactionUnauthorized) reverseTransactionRes() {}
+
+type ReverseTransactionUnprocessableEntity Problem
+
+func (*ReverseTransactionUnprocessableEntity) reverseTransactionRes() {}
+
 // Why one line of a statement file can't be read.
 // Ref: #/components/schemas/RowError
 type RowError struct {
@@ -2614,6 +2683,187 @@ func (s *StatementImportUploadMultipart) SetExportBalance(val DecimalText) {
 // SetPreviewID sets the value of PreviewID.
 func (s *StatementImportUploadMultipart) SetPreviewID(val OptString) {
 	s.PreviewID = val
+}
+
+// A Transaction as seen from its Account: its signed amount there (positive is money in) and the
+// Category on the other side.
+// Ref: #/components/schemas/Transaction
+type Transaction struct {
+	// The Transaction's ID (UUIDv7).
+	TransactionID uuid.UUID `json:"transaction_id"`
+	// The Account it moves money on.
+	AccountID uuid.UUID `json:"account_id"`
+	Amount    Money     `json:"amount"`
+	// The date the bank recorded it on the Account.
+	BookingDate time.Time `json:"booking_date"`
+	// The date the purchase or payment happened.
+	TransactionDate time.Time `json:"transaction_date"`
+	// The date the money moved, when known.
+	ValueDate OptDate `json:"value_date"`
+	// The Transaction's description.
+	Description string `json:"description"`
+	// The payee, when known.
+	Payee OptString `json:"payee"`
+	// The Category on the other side of the Transaction.
+	CategoryID uuid.UUID `json:"category_id"`
+	// The Category's name.
+	CategoryName string `json:"category_name"`
+	// The Imported transaction whose Accept recorded it.
+	ImportedTransactionID OptUUID `json:"imported_transaction_id"`
+	// The Transaction this one reverses, when it is a reversal.
+	ReversalOfTransactionID OptUUID `json:"reversal_of_transaction_id"`
+	// The Transaction that reversed this one, once it is reversed.
+	ReversedByTransactionID OptUUID `json:"reversed_by_transaction_id"`
+}
+
+// GetTransactionID returns the value of TransactionID.
+func (s *Transaction) GetTransactionID() uuid.UUID {
+	return s.TransactionID
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *Transaction) GetAccountID() uuid.UUID {
+	return s.AccountID
+}
+
+// GetAmount returns the value of Amount.
+func (s *Transaction) GetAmount() Money {
+	return s.Amount
+}
+
+// GetBookingDate returns the value of BookingDate.
+func (s *Transaction) GetBookingDate() time.Time {
+	return s.BookingDate
+}
+
+// GetTransactionDate returns the value of TransactionDate.
+func (s *Transaction) GetTransactionDate() time.Time {
+	return s.TransactionDate
+}
+
+// GetValueDate returns the value of ValueDate.
+func (s *Transaction) GetValueDate() OptDate {
+	return s.ValueDate
+}
+
+// GetDescription returns the value of Description.
+func (s *Transaction) GetDescription() string {
+	return s.Description
+}
+
+// GetPayee returns the value of Payee.
+func (s *Transaction) GetPayee() OptString {
+	return s.Payee
+}
+
+// GetCategoryID returns the value of CategoryID.
+func (s *Transaction) GetCategoryID() uuid.UUID {
+	return s.CategoryID
+}
+
+// GetCategoryName returns the value of CategoryName.
+func (s *Transaction) GetCategoryName() string {
+	return s.CategoryName
+}
+
+// GetImportedTransactionID returns the value of ImportedTransactionID.
+func (s *Transaction) GetImportedTransactionID() OptUUID {
+	return s.ImportedTransactionID
+}
+
+// GetReversalOfTransactionID returns the value of ReversalOfTransactionID.
+func (s *Transaction) GetReversalOfTransactionID() OptUUID {
+	return s.ReversalOfTransactionID
+}
+
+// GetReversedByTransactionID returns the value of ReversedByTransactionID.
+func (s *Transaction) GetReversedByTransactionID() OptUUID {
+	return s.ReversedByTransactionID
+}
+
+// SetTransactionID sets the value of TransactionID.
+func (s *Transaction) SetTransactionID(val uuid.UUID) {
+	s.TransactionID = val
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *Transaction) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *Transaction) SetAmount(val Money) {
+	s.Amount = val
+}
+
+// SetBookingDate sets the value of BookingDate.
+func (s *Transaction) SetBookingDate(val time.Time) {
+	s.BookingDate = val
+}
+
+// SetTransactionDate sets the value of TransactionDate.
+func (s *Transaction) SetTransactionDate(val time.Time) {
+	s.TransactionDate = val
+}
+
+// SetValueDate sets the value of ValueDate.
+func (s *Transaction) SetValueDate(val OptDate) {
+	s.ValueDate = val
+}
+
+// SetDescription sets the value of Description.
+func (s *Transaction) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetPayee sets the value of Payee.
+func (s *Transaction) SetPayee(val OptString) {
+	s.Payee = val
+}
+
+// SetCategoryID sets the value of CategoryID.
+func (s *Transaction) SetCategoryID(val uuid.UUID) {
+	s.CategoryID = val
+}
+
+// SetCategoryName sets the value of CategoryName.
+func (s *Transaction) SetCategoryName(val string) {
+	s.CategoryName = val
+}
+
+// SetImportedTransactionID sets the value of ImportedTransactionID.
+func (s *Transaction) SetImportedTransactionID(val OptUUID) {
+	s.ImportedTransactionID = val
+}
+
+// SetReversalOfTransactionID sets the value of ReversalOfTransactionID.
+func (s *Transaction) SetReversalOfTransactionID(val OptUUID) {
+	s.ReversalOfTransactionID = val
+}
+
+// SetReversedByTransactionID sets the value of ReversedByTransactionID.
+func (s *Transaction) SetReversedByTransactionID(val OptUUID) {
+	s.ReversedByTransactionID = val
+}
+
+func (*Transaction) changeTransactionRes()  {}
+func (*Transaction) reverseTransactionRes() {}
+
+// A change to a Transaction.
+// Ref: #/components/schemas/TransactionChange
+type TransactionChange struct {
+	// The Category for the non-Account side; the Uncategorised Category is allowed.
+	CategoryID uuid.UUID `json:"category_id"`
+}
+
+// GetCategoryID returns the value of CategoryID.
+func (s *TransactionChange) GetCategoryID() uuid.UUID {
+	return s.CategoryID
+}
+
+// SetCategoryID sets the value of CategoryID.
+func (s *TransactionChange) SetCategoryID(val uuid.UUID) {
+	s.CategoryID = val
 }
 
 type UploadStatementImportNotFound Problem

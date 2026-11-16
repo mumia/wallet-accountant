@@ -130,11 +130,36 @@ type (
 		Amount        sharedkernel.Decimal
 		Uncategorised bool
 	}
+
+	// BookReversal moves the Account's balance by the reversal ReversalID of
+	// the Transaction TransactionID, in their Booking month. Amount is the
+	// reversal's Posting on the Account. WasUncategorised says the reversed
+	// Transaction was counted in Uncategorised: neither it nor its reversal
+	// counts any more.
+	BookReversal struct {
+		TransactionID    sharedkernel.ID
+		ReversalID       sharedkernel.ID
+		BookingDate      time.Time
+		Amount           sharedkernel.Decimal
+		WasUncategorised bool
+	}
+
+	// RecategoriseTransaction records that a Transaction booked on the
+	// Account changed Category, moving it in or out of its Booking month's
+	// Uncategorised count.
+	RecategoriseTransaction struct {
+		TransactionID    sharedkernel.ID
+		BookingDate      time.Time
+		WasUncategorised bool
+		Uncategorised    bool
+	}
 )
 
-func (AddAccount) isAccountCommand()           {}
-func (RecordOpeningBalance) isAccountCommand() {}
-func (BookTransaction) isAccountCommand()      {}
+func (AddAccount) isAccountCommand()              {}
+func (RecordOpeningBalance) isAccountCommand()    {}
+func (BookTransaction) isAccountCommand()         {}
+func (BookReversal) isAccountCommand()            {}
+func (RecategoriseTransaction) isAccountCommand() {}
 
 type (
 	// AccountEvent is an Account's event.
@@ -164,11 +189,32 @@ type (
 		Amount        sharedkernel.Decimal `json:"amount"`
 		Uncategorised bool                 `json:"uncategorised,omitempty"`
 	}
+
+	// ReversalBooked is recorded when a reversal moves the Account's
+	// balance back. BookingDate is written with DateLayout.
+	ReversalBooked struct {
+		TransactionID    sharedkernel.ID      `json:"transactionid"`
+		ReversalID       sharedkernel.ID      `json:"reversalid"`
+		BookingDate      string               `json:"bookingdate"`
+		Amount           sharedkernel.Decimal `json:"amount"`
+		WasUncategorised bool                 `json:"wasuncategorised,omitempty"`
+	}
+
+	// TransactionRecategorised is recorded when a Transaction booked on the
+	// Account changes Category. BookingDate is written with DateLayout.
+	TransactionRecategorised struct {
+		TransactionID    sharedkernel.ID `json:"transactionid"`
+		BookingDate      string          `json:"bookingdate"`
+		WasUncategorised bool            `json:"wasuncategorised,omitempty"`
+		Uncategorised    bool            `json:"uncategorised,omitempty"`
+	}
 )
 
-func (AccountAdded) isAccountEvent()           {}
-func (OpeningBalanceRecorded) isAccountEvent() {}
-func (TransactionBooked) isAccountEvent()      {}
+func (AccountAdded) isAccountEvent()             {}
+func (OpeningBalanceRecorded) isAccountEvent()   {}
+func (TransactionBooked) isAccountEvent()        {}
+func (ReversalBooked) isAccountEvent()           {}
+func (TransactionRecategorised) isAccountEvent() {}
 
 // Account is the Account Decider (ADR-0004, ADR-0011).
 var Account = decider.Decider[AccountState, AccountCommand, AccountEvent]{
@@ -184,6 +230,10 @@ func decideAccount(s AccountState, c AccountCommand) ([]AccountEvent, error) {
 		return recordOpeningBalance(s, c)
 	case BookTransaction:
 		return bookTransaction(s, c)
+	case BookReversal:
+		return bookReversal(s, c)
+	case RecategoriseTransaction:
+		return recategoriseTransaction(s, c)
 	default:
 		return nil, nil
 	}
@@ -278,6 +328,52 @@ func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) 
 	}}, nil
 }
 
+// bookReversal moves the balance back by a reversal of a Transaction the
+// Account booked.
+func bookReversal(s AccountState, c BookReversal) ([]AccountEvent, error) {
+	switch {
+	case !s.Added:
+		return nil, ErrAccountNotAdded
+	case c.BookingDate.IsZero():
+		return nil, ErrBookingDateRequired
+	}
+
+	currency, err := sharedkernel.ParseCurrency(s.Currency)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // the shared kernel's own refusal
+	}
+
+	if !c.Amount.Equal(c.Amount.Round(int32(currency.Decimals()))) { //nolint:gosec // at most 18 places
+		return nil, fmt.Errorf("%w: %s %s", ErrTooManyDecimalPlaces, c.Amount, currency.Code())
+	}
+
+	return []AccountEvent{ReversalBooked{
+		TransactionID:    c.TransactionID,
+		ReversalID:       c.ReversalID,
+		BookingDate:      c.BookingDate.Format(DateLayout),
+		Amount:           c.Amount,
+		WasUncategorised: c.WasUncategorised,
+	}}, nil
+}
+
+// recategoriseTransaction records a Category change of a Transaction the
+// Account booked.
+func recategoriseTransaction(s AccountState, c RecategoriseTransaction) ([]AccountEvent, error) {
+	switch {
+	case !s.Added:
+		return nil, ErrAccountNotAdded
+	case c.BookingDate.IsZero():
+		return nil, ErrBookingDateRequired
+	}
+
+	return []AccountEvent{TransactionRecategorised{
+		TransactionID:    c.TransactionID,
+		BookingDate:      c.BookingDate.Format(DateLayout),
+		WasUncategorised: c.WasUncategorised,
+		Uncategorised:    c.Uncategorised,
+	}}, nil
+}
+
 func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountState {
 	switch ev := e.Event.(type) {
 	case AccountAdded:
@@ -299,9 +395,33 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 		if ev.Uncategorised {
 			s.Uncategorised = counted(s.Uncategorised, month, 1)
 		}
+	case ReversalBooked:
+		month := bookingMonth(ev.BookingDate)
+		s.Months = moved(s.Months, month, ev.Amount)
+
+		if ev.WasUncategorised {
+			s.Uncategorised = counted(s.Uncategorised, month, -1)
+		}
+	case TransactionRecategorised:
+		month := bookingMonth(ev.BookingDate)
+
+		switch {
+		case ev.WasUncategorised && !ev.Uncategorised:
+			s.Uncategorised = counted(s.Uncategorised, month, -1)
+		case !ev.WasUncategorised && ev.Uncategorised:
+			s.Uncategorised = counted(s.Uncategorised, month, 1)
+		}
 	}
 
 	return s
+}
+
+// bookingMonth is the Booking month of a date an event wrote with
+// DateLayout, so it always parses.
+func bookingMonth(date string) string {
+	d, _ := time.Parse(DateLayout, date)
+
+	return d.Format(MonthLayout)
 }
 
 // moved returns a copy of months with month moved by amount, so a fold

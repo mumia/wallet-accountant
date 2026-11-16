@@ -83,6 +83,9 @@ func (h *TransactionHandler) ListAccountTransactions(ctx context.Context, params
 			Description:     t.Description,
 			CategoryID:      t.CategoryID,
 			CategoryName:    t.CategoryName,
+
+			ReversalOfTransactionID: optionalID(t.ReversalOf),
+			ReversedByTransactionID: optionalID(t.ReversedBy),
 		})
 	}
 

@@ -35,7 +35,9 @@ type Contexts struct {
 	Accounts   *ledgerapp.Accounts
 	// Connections checks Accounts through the Ledger.
 	Connections *ingestionapp.Connections
-	// Transactions lists Accounts' Transactions and records Opening balances.
+	// Transactions lists Accounts' Transactions, records Opening balances,
+	// and recategorises and reverses Transactions, returning reversed
+	// Imported transactions to pending through Ingestion.
 	Transactions *ledgerapp.Transactions
 	// StatementImports records the first import's Opening balance through
 	// the Ledger.
@@ -62,15 +64,21 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		ledgerpg.CategoryReader{},
 	)
 
+	// Accepting books through the Ledger, and reversing returns Imported
+	// transactions to pending through Ingestion: imported is filled in once
+	// the Ledger port exists.
+	imported := &ingestionapp.ImportedTransactions{}
 	accountAggregate := ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{})
 	accounts := ledgerapp.NewAccounts(households, accountAggregate, ledgerpg.AccountReader{})
 	transactions := ledgerapp.NewTransactions(households, accountAggregate,
 		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}),
 		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}),
-		ledgerpg.TransactionReader{}, ledgerpg.CategoryReader{})
+		ledgerpg.TransactionReader{}, ledgerpg.CategoryReader{}, ledgerIngestion{imported: imported})
 	connections := ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{})
 	ledger := ingestionLedger{accounts: accounts, transactions: transactions}
 	rows := ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{})
+	*imported = *ingestionapp.NewImportedTransactions(households, accounts, ledger, rows,
+		ingestionpg.ImportedTransactionReader{})
 
 	return Contexts{
 		Users:        NewUsers(pool),
@@ -82,8 +90,7 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		StatementImports: ingestionapp.NewStatementImports(households, ledger, connections,
 			ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{}), rows,
 			ingestionpg.StatementImportReader{}),
-		ImportedTransactions: ingestionapp.NewImportedTransactions(households, accounts, ledger, rows,
-			ingestionpg.ImportedTransactionReader{}),
+		ImportedTransactions: imported,
 	}
 }
 
