@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 (Accounts)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `POST/GET …/accounts/{account_id}/connections` and `PUT …/connections/{connection_id}/csv-mapping`
 - [ ] The mapping covers delimiter, header row, leading lines to skip, date format, decimal separator, thousands separator; each field's column by header name or by position; one signed amount column or separate debit and credit columns; optional Transaction date, Value date, payee and bank transaction ID; and whether the sign means money in or out
