@@ -30,6 +30,7 @@ type Contexts struct {
 	Users      *householdsapp.Users
 	Households *householdsapp.Households
 	Categories *ledgerapp.Categories
+	Accounts   *ledgerapp.Accounts
 }
 
 // NewContexts builds every bounded context's application services on pool,
@@ -55,6 +56,8 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		Users:      NewUsers(pool),
 		Households: households,
 		Categories: categories,
+		Accounts: ledgerapp.NewAccounts(households,
+			ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}), ledgerpg.AccountReader{}),
 	}
 }
 
@@ -72,6 +75,7 @@ func rebuildTargets() []eventstore.RebuildTarget {
 		householdsapp.NewUserAggregate(householdspg.UserFolds{}).RebuildTarget(),
 		householdsapp.NewHouseholdAggregate(householdspg.HouseholdFolds{}).RebuildTarget(),
 		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}).RebuildTarget(),
+		ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}).RebuildTarget(),
 	}
 }
 

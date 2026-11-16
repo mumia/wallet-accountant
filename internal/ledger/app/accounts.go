@@ -1,0 +1,156 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/mumia/wallet-accountant/internal/ledger/domain"
+	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
+	"github.com/mumia/wallet-accountant/internal/sharedkernel"
+)
+
+// Stream type and event types of the Account aggregate (ADR-0015).
+const (
+	AccountStreamType = "ledger.account"
+	AccountAddedType  = "io.walletaccountant.ledger.account.added.v1"
+)
+
+// ErrAccountNotFound is returned for an Account that is not in the Household.
+var ErrAccountNotFound = errors.New("account not found")
+
+// AccountAggregate is the Account Decider wired to the runtime.
+type AccountAggregate = eventstore.Aggregate[domain.AccountState, domain.AccountCommand, domain.AccountEvent]
+
+// NewAccountAggregate wires the Account Decider to its fold store.
+func NewAccountAggregate(folds eventstore.FoldStore[domain.AccountState]) AccountAggregate {
+	codec := eventstore.NewCodec[domain.AccountEvent](Source)
+	eventstore.Register[domain.AccountEvent, domain.AccountAdded](codec, AccountAddedType)
+
+	return AccountAggregate{
+		StreamType:        AccountStreamType,
+		Decider:           domain.Account,
+		Codec:             codec,
+		Folds:             folds,
+		FoldSchemaVersion: 1,
+	}
+}
+
+// Account is an Account as the API sees it. An Account awaiting its first
+// Statement import has no balance.
+type Account struct {
+	ID                           uuid.UUID
+	Name                         string
+	Kind                         domain.AccountKind
+	Currency                     string
+	StartDate                    time.Time
+	AwaitingFirstStatementImport bool
+}
+
+// AccountReader reads the Household's Account folds.
+type AccountReader interface {
+	// Accounts returns every Account of the Household the transaction is set
+	// to, in the order they were added.
+	Accounts(ctx context.Context, tx *eventstore.Tx) ([]Account, error)
+}
+
+// NewAccount is the request to add an Account.
+type NewAccount struct {
+	Name      string
+	Kind      domain.AccountKind
+	Currency  string
+	StartDate time.Time
+}
+
+// Accounts manages a Household's Accounts.
+type Accounts struct {
+	scope    HouseholdScope
+	accounts AccountAggregate
+	reader   AccountReader
+}
+
+// NewAccounts returns the Accounts service.
+func NewAccounts(scope HouseholdScope, accounts AccountAggregate, reader AccountReader) *Accounts {
+	return &Accounts{scope: scope, accounts: accounts, reader: reader}
+}
+
+// Add adds an Account to the Household, awaiting its first Statement import
+// (consistency map: Add Account).
+func (a *Accounts) Add(ctx context.Context, household uuid.UUID, req NewAccount) (Account, error) {
+	id, err := sharedkernel.NewID()
+	if err != nil {
+		return Account{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	var added Account
+
+	err = a.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		res, err := a.accounts.Execute(ctx, tx, id, domain.AddAccount{
+			Name: req.Name, Kind: req.Kind, Currency: req.Currency, StartDate: req.StartDate,
+		})
+		if err != nil {
+			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		added = accountOf(id, res.State)
+
+		return nil
+	})
+	if err != nil {
+		return Account{}, fmt.Errorf("add account: %w", err)
+	}
+
+	return added, nil
+}
+
+// List returns every Account of the Household.
+func (a *Accounts) List(ctx context.Context, household uuid.UUID) ([]Account, error) {
+	var list []Account
+
+	err := a.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		var err error
+		list, err = a.reader.Accounts(ctx, tx)
+
+		return err //nolint:wrapcheck // the adapter's error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list accounts: %w", err)
+	}
+
+	return list, nil
+}
+
+// Get returns one Account of the Household, read from its fold.
+func (a *Accounts) Get(ctx context.Context, household, account uuid.UUID) (Account, error) {
+	var got Account
+
+	err := a.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		fold, found, err := a.accounts.Folds.Load(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !found {
+			return ErrAccountNotFound
+		}
+
+		got = accountOf(account, fold.State)
+
+		return nil
+	})
+	if err != nil {
+		return Account{}, fmt.Errorf("get account %s: %w", account, err)
+	}
+
+	return got, nil
+}
+
+func accountOf(id uuid.UUID, s domain.AccountState) Account {
+	return Account{
+		ID: id, Name: s.Name, Kind: s.Kind, Currency: s.Currency, StartDate: s.StartDate,
+		AwaitingFirstStatementImport: s.AwaitingFirstStatementImport,
+	}
+}

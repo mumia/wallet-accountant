@@ -4,13 +4,189 @@ package oas
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
+
+// An Account.
+// Ref: #/components/schemas/Account
+type Account struct {
+	// The Account's ID (UUIDv7).
+	AccountID uuid.UUID `json:"account_id"`
+	// The Account's name.
+	Name     string       `json:"name"`
+	Kind     AccountKind  `json:"kind"`
+	Currency CurrencyCode `json:"currency"`
+	// The day the Account's history begins, and the date of its Opening balance.
+	StartDate time.Time `json:"start_date"`
+	// Whether the Account still awaits the first Statement import that records its Opening balance.
+	AwaitingFirstStatementImport bool     `json:"awaiting_first_statement_import"`
+	Balance                      OptMoney `json:"balance"`
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *Account) GetAccountID() uuid.UUID {
+	return s.AccountID
+}
+
+// GetName returns the value of Name.
+func (s *Account) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *Account) GetKind() AccountKind {
+	return s.Kind
+}
+
+// GetCurrency returns the value of Currency.
+func (s *Account) GetCurrency() CurrencyCode {
+	return s.Currency
+}
+
+// GetStartDate returns the value of StartDate.
+func (s *Account) GetStartDate() time.Time {
+	return s.StartDate
+}
+
+// GetAwaitingFirstStatementImport returns the value of AwaitingFirstStatementImport.
+func (s *Account) GetAwaitingFirstStatementImport() bool {
+	return s.AwaitingFirstStatementImport
+}
+
+// GetBalance returns the value of Balance.
+func (s *Account) GetBalance() OptMoney {
+	return s.Balance
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *Account) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
+
+// SetName sets the value of Name.
+func (s *Account) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *Account) SetKind(val AccountKind) {
+	s.Kind = val
+}
+
+// SetCurrency sets the value of Currency.
+func (s *Account) SetCurrency(val CurrencyCode) {
+	s.Currency = val
+}
+
+// SetStartDate sets the value of StartDate.
+func (s *Account) SetStartDate(val time.Time) {
+	s.StartDate = val
+}
+
+// SetAwaitingFirstStatementImport sets the value of AwaitingFirstStatementImport.
+func (s *Account) SetAwaitingFirstStatementImport(val bool) {
+	s.AwaitingFirstStatementImport = val
+}
+
+// SetBalance sets the value of Balance.
+func (s *Account) SetBalance(val OptMoney) {
+	s.Balance = val
+}
+
+func (*Account) addAccountRes() {}
+func (*Account) getAccountRes() {}
+
+// A new Account. There is no Opening balance field; the first Statement import works it out
+// (ADR-0018).
+// Ref: #/components/schemas/AccountCreation
+type AccountCreation struct {
+	// The Account's name.
+	Name     string       `json:"name"`
+	Kind     AccountKind  `json:"kind"`
+	Currency CurrencyCode `json:"currency"`
+	// The day the Account's history begins, and the date of its Opening balance.
+	StartDate time.Time `json:"start_date"`
+}
+
+// GetName returns the value of Name.
+func (s *AccountCreation) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *AccountCreation) GetKind() AccountKind {
+	return s.Kind
+}
+
+// GetCurrency returns the value of Currency.
+func (s *AccountCreation) GetCurrency() CurrencyCode {
+	return s.Currency
+}
+
+// GetStartDate returns the value of StartDate.
+func (s *AccountCreation) GetStartDate() time.Time {
+	return s.StartDate
+}
+
+// SetName sets the value of Name.
+func (s *AccountCreation) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *AccountCreation) SetKind(val AccountKind) {
+	s.Kind = val
+}
+
+// SetCurrency sets the value of Currency.
+func (s *AccountCreation) SetCurrency(val CurrencyCode) {
+	s.Currency = val
+}
+
+// SetStartDate sets the value of StartDate.
+func (s *AccountCreation) SetStartDate(val time.Time) {
+	s.StartDate = val
+}
+
+type AccountKind string
+
+// A Household's Accounts.
+// Ref: #/components/schemas/AccountList
+type AccountList struct {
+	// The Accounts, in the order they were added.
+	Items []Account `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *AccountList) GetItems() []Account {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *AccountList) SetItems(val []Account) {
+	s.Items = val
+}
+
+func (*AccountList) listAccountsRes() {}
+
+type AddAccountNotFound Problem
+
+func (*AddAccountNotFound) addAccountRes() {}
+
+type AddAccountUnauthorized Problem
+
+func (*AddAccountUnauthorized) addAccountRes() {}
+
+type AddAccountUnprocessableEntity Problem
+
+func (*AddAccountUnprocessableEntity) addAccountRes() {}
 
 type BearerAuth struct {
 	Token string
@@ -135,6 +311,14 @@ func (*CreateRegistrationUnprocessableEntity) createRegistrationRes() {}
 
 type CurrencyCode string
 
+type GetAccountNotFound Problem
+
+func (*GetAccountNotFound) getAccountRes() {}
+
+type GetAccountUnauthorized Problem
+
+func (*GetAccountUnauthorized) getAccountRes() {}
+
 type GetHouseholdNotFound Problem
 
 func (*GetHouseholdNotFound) getHouseholdRes() {}
@@ -241,6 +425,14 @@ func (s *HouseholdList) SetItems(val []Household) {
 
 func (*HouseholdList) listHouseholdsRes() {}
 
+type ListAccountsNotFound Problem
+
+func (*ListAccountsNotFound) listAccountsRes() {}
+
+type ListAccountsUnauthorized Problem
+
+func (*ListAccountsUnauthorized) listAccountsRes() {}
+
 type ListCategoriesNotFound Problem
 
 func (*ListCategoriesNotFound) listCategoriesRes() {}
@@ -288,6 +480,81 @@ func (s *Me) SetIsInstanceAdministrator(val bool) {
 
 func (*Me) createRegistrationRes() {}
 func (*Me) getMeRes()              {}
+
+// An amount of money: an exact decimal in its currency, with that currency's number of decimal places
+// (ADR-0007), for example EUR 2, JPY 0, BTC 8 and ETH 18.
+// Ref: #/components/schemas/Money
+type Money struct {
+	// The exact amount; never a binary floating-point value.
+	Amount   decimal.Decimal `json:"amount"`
+	Currency CurrencyCode    `json:"currency"`
+}
+
+// GetAmount returns the value of Amount.
+func (s *Money) GetAmount() decimal.Decimal {
+	return s.Amount
+}
+
+// GetCurrency returns the value of Currency.
+func (s *Money) GetCurrency() CurrencyCode {
+	return s.Currency
+}
+
+// SetAmount sets the value of Amount.
+func (s *Money) SetAmount(val decimal.Decimal) {
+	s.Amount = val
+}
+
+// SetCurrency sets the value of Currency.
+func (s *Money) SetCurrency(val CurrencyCode) {
+	s.Currency = val
+}
+
+// NewOptMoney returns new OptMoney with value set to v.
+func NewOptMoney(v Money) OptMoney {
+	return OptMoney{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptMoney is optional Money.
+type OptMoney struct {
+	Value Money
+	Set   bool
+}
+
+// IsSet returns true if OptMoney was set.
+func (o OptMoney) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptMoney) Reset() {
+	var v Money
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptMoney) SetTo(v Money) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptMoney) Get() (v Money, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptMoney) Or(d Money) Money {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
 
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {

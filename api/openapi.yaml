@@ -25,6 +25,8 @@ tags:
     description: Households, the only ownership and privacy boundary (ADR-0003)
   - name: Categories
     description: What money was received for or spent on (ADR-0004)
+  - name: Accounts
+    description: Places where money is held or owed (ADR-0004)
 paths:
   /me:
     get:
@@ -189,6 +191,89 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts:
+    post:
+      operationId: addAccount
+      summary: Add an Account
+      description: |
+        Adds an Account with a name, a kind, an Account currency and a start
+        date. The new Account awaits its first Statement import and has no
+        balance: its Opening balance is worked out from that import, never
+        typed (ADR-0018). Cash Accounts are not supported yet; a `CASH` or
+        unknown kind, an unknown currency or a blank name gets 422 with the
+        problem type `/problems/invalid-account`.
+      tags:
+        - Accounts
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreation'
+      responses:
+        '201':
+          description: The new Account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listAccounts
+      summary: The Household's Accounts
+      description: Lists every Account of the Household, in the order they were added.
+      tags:
+        - Accounts
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household's Accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}:
+    get:
+      operationId: getAccount
+      summary: An Account
+      description: |
+        Returns an Account of the Household with its current balance, or
+        that it is awaiting its first Statement import.
+      tags:
+        - Accounts
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+      responses:
+        '200':
+          description: The Account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     IdempotencyKey:
@@ -209,6 +294,14 @@ components:
       in: path
       required: true
       description: The Household's ID
+      schema:
+        type: string
+        format: uuid
+    AccountID:
+      name: account_id
+      in: path
+      required: true
+      description: The Account's ID
       schema:
         type: string
         format: uuid
@@ -364,6 +457,100 @@ components:
           description: Every Category of the Household
           items:
             $ref: '#/components/schemas/Category'
+    AccountCreation:
+      type: object
+      description: A new Account. There is no Opening balance field; the first Statement import works it out (ADR-0018).
+      required:
+        - name
+        - kind
+        - currency
+        - start_date
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The Account's name
+          example: Main
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        start_date:
+          type: string
+          format: date
+          description: The day the Account's history begins, and the date of its Opening balance
+          example: '2026-01-01'
+    Account:
+      type: object
+      description: An Account
+      required:
+        - account_id
+        - name
+        - kind
+        - currency
+        - start_date
+        - awaiting_first_statement_import
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: The Account's ID (UUIDv7)
+        name:
+          type: string
+          description: The Account's name
+          example: Main
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        start_date:
+          type: string
+          format: date
+          description: The day the Account's history begins, and the date of its Opening balance
+          example: '2026-01-01'
+        awaiting_first_statement_import:
+          type: boolean
+          description: Whether the Account still awaits the first Statement import that records its Opening balance
+        balance:
+          $ref: '#/components/schemas/Money'
+    AccountList:
+      type: object
+      description: A Household's Accounts
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Accounts, in the order they were added
+          items:
+            $ref: '#/components/schemas/Account'
+    AccountKind:
+      type: string
+      description: What sort of place the Account is. `CASH` is not supported yet and is refused.
+      x-extensible-enum:
+        - BANK_ACCOUNT
+        - CREDIT_CARD
+        - LOAN
+        - CRYPTO_WALLET
+      example: BANK_ACCOUNT
+    Money:
+      type: object
+      description: |
+        An amount of money: an exact decimal in its currency, with that
+        currency's number of decimal places (ADR-0007), for example EUR 2,
+        JPY 0, BTC 8 and ETH 18.
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: number
+          format: decimal
+          description: The exact amount; never a binary floating-point value
+          example: 1234.56
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
     CurrencyCode:
       type: string
       description: A currency code, such as an ISO 4217 code

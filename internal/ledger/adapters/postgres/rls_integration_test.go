@@ -29,3 +29,19 @@ func TestCategoriesAreIsolatedByRowLevelSecurity(t *testing.T) {
 		},
 	})
 }
+
+func TestAccountsAreIsolatedByRowLevelSecurity(t *testing.T) {
+	t.Parallel()
+	urls := databasetest.New(t)
+
+	databasetest.AssertHouseholdIsolation(t, urls, databasetest.HouseholdTable{
+		Name: "accounts",
+		Insert: func(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
+			_, err := tx.Exec(ctx, `INSERT INTO accounts (household_id, id, name, kind, currency, start_date,
+				awaiting_first_statement_import, version, schema_version)
+				VALUES ($1, $2, 'Main', 'bank_account', 'EUR', '2026-01-01', true, 1, 1)`, household, uuid.New())
+
+			return err
+		},
+	})
+}

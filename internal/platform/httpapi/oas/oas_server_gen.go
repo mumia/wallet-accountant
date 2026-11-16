@@ -8,6 +8,15 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// AddAccount implements addAccount operation.
+	//
+	// Adds an Account with a name, a kind, an Account currency and a start date. The new Account awaits
+	// its first Statement import and has no balance: its Opening balance is worked out from that import,
+	// never typed (ADR-0018). Cash Accounts are not supported yet; a `CASH` or unknown kind, an unknown
+	// currency or a blank name gets 422 with the problem type `/problems/invalid-account`.
+	//
+	// POST /households/{household_id}/accounts
+	AddAccount(ctx context.Context, req *AccountCreation, params AddAccountParams) (AddAccountRes, error)
 	// CreateHousehold implements createHousehold operation.
 	//
 	// Creates a Household with a name and a Base currency. The caller becomes its first member, and its
@@ -24,6 +33,13 @@ type Handler interface {
 	//
 	// POST /registrations
 	CreateRegistration(ctx context.Context, req *Registration, params CreateRegistrationParams) (CreateRegistrationRes, error)
+	// GetAccount implements getAccount operation.
+	//
+	// Returns an Account of the Household with its current balance, or that it is awaiting its first
+	// Statement import.
+	//
+	// GET /households/{household_id}/accounts/{account_id}
+	GetAccount(ctx context.Context, params GetAccountParams) (GetAccountRes, error)
 	// GetHousehold implements getHousehold operation.
 	//
 	// Returns a Household the caller is a member of. Any other Household, and every Household for an
@@ -39,6 +55,12 @@ type Handler interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// ListAccounts implements listAccounts operation.
+	//
+	// Lists every Account of the Household, in the order they were added.
+	//
+	// GET /households/{household_id}/accounts
+	ListAccounts(ctx context.Context, params ListAccountsParams) (ListAccountsRes, error)
 	// ListCategories implements listCategories operation.
 	//
 	// Lists every Category of the Household, Internal Categories included. The tree is given by each
