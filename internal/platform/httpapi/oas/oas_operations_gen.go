@@ -7,6 +7,8 @@ type OperationName = string
 
 const (
 	AddAccountOperation         OperationName = "AddAccount"
+	ChangeCategoryOperation     OperationName = "ChangeCategory"
+	CreateCategoryOperation     OperationName = "CreateCategory"
 	CreateHouseholdOperation    OperationName = "CreateHousehold"
 	CreateRegistrationOperation OperationName = "CreateRegistration"
 	GetAccountOperation         OperationName = "GetAccount"

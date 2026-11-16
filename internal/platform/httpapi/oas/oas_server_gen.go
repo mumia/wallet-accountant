@@ -17,6 +17,28 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/accounts
 	AddAccount(ctx context.Context, req *AccountCreation, params AddAccountParams) (AddAccountRes, error)
+	// ChangeCategory implements changeCategory operation.
+	//
+	// Renames the Category when `name` is given, and moves it when `parent_id` is given: under that
+	// Category, or to the root when it is `null`. A Category keeps its kind, so it can only move under a
+	// parent of the same kind, and never under itself or one of its sub-Categories. Internal Categories
+	// can't be renamed or moved, and nothing can be moved under one (422, `/problems/internal-category`).
+	// A name already used by a sibling in the place the Category ends up gets 409
+	// (`/problems/category-name-taken`); any other refusal is 422 (`/problems/invalid-category`).
+	//
+	// PATCH /households/{household_id}/categories/{category_id}
+	ChangeCategory(ctx context.Context, req *CategoryChange, params ChangeCategoryParams) (ChangeCategoryRes, error)
+	// CreateCategory implements createCategory operation.
+	//
+	// Creates an Income or Expense Category, at the root or under `parent_id`. A sub-Category takes its
+	// parent's kind, so `kind` may be left out; a different kind is refused. Internal Categories belong to
+	// the system: creating one, or a Category under one, gets 422 with the problem type
+	// `/problems/internal-category`. A name already used by a sibling (ignoring case and surrounding
+	// spaces) gets 409 with the problem type `/problems/category-name-taken`. Any other refusal is 422
+	// with the problem type `/problems/invalid-category`.
+	//
+	// POST /households/{household_id}/categories
+	CreateCategory(ctx context.Context, req *CategoryCreation, params CreateCategoryParams) (CreateCategoryRes, error)
 	// CreateHousehold implements createHousehold operation.
 	//
 	// Creates a Household with a name and a Base currency. The caller becomes its first member, and its
@@ -63,8 +85,8 @@ type Handler interface {
 	ListAccounts(ctx context.Context, params ListAccountsParams) (ListAccountsRes, error)
 	// ListCategories implements listCategories operation.
 	//
-	// Lists every Category of the Household, Internal Categories included. The tree is given by each
-	// Category's `parent_id`.
+	// Lists every Category of the Household as a tree, Internal Categories included: the root Categories,
+	// each with its sub-Categories in `children`. Siblings are sorted by name.
 	//
 	// GET /households/{household_id}/categories
 	ListCategories(ctx context.Context, params ListCategoriesParams) (ListCategoriesRes, error)

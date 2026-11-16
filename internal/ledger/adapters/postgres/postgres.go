@@ -41,7 +41,7 @@ func (CategoryFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) 
 		return eventstore.Fold[domain.CategoryState]{}, false, fmt.Errorf("load category: %w", err)
 	}
 
-	f.State.Created = true
+	f.State.Created, f.State.ID = true, id
 
 	if parent != nil {
 		f.State.ParentID = *parent
@@ -95,11 +95,25 @@ type CategoryReader struct{}
 
 var _ app.CategoryReader = CategoryReader{}
 
-// Categories implements app.CategoryReader. Category IDs are UUIDv7, so the
-// Categories come in the order they were created.
+// LockTree implements app.CategoryReader with a transaction-level advisory
+// lock on the Household's Category tree. A unique index can't stand in for
+// it: sibling names are compared ignoring case, cycles span rows, and a
+// rebuild saves each Category's fold in its own transaction, where a swap
+// of two names would briefly break any such index.
+func (CategoryReader) LockTree(ctx context.Context, tx *eventstore.Tx) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('ledger.category-tree:' || $1::text, 0))`,
+		tx.HouseholdID()); err != nil {
+		return fmt.Errorf("lock category tree: %w", err)
+	}
+
+	return nil
+}
+
+// Categories implements app.CategoryReader. Siblings are sorted by name,
+// ignoring case, then by ID (UUIDv7: the order they were created).
 func (CategoryReader) Categories(ctx context.Context, tx *eventstore.Tx) ([]app.Category, error) {
 	rows, err := tx.Query(ctx, `SELECT id, name, kind, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000')
-		FROM categories WHERE household_id = $1 ORDER BY id`, tx.HouseholdID())
+		FROM categories WHERE household_id = $1 ORDER BY lower(name), id`, tx.HouseholdID())
 	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
 	}

@@ -5,6 +5,14 @@ type AddAccountRes interface {
 	addAccountRes()
 }
 
+type ChangeCategoryRes interface {
+	changeCategoryRes()
+}
+
+type CreateCategoryRes interface {
+	createCategoryRes()
+}
+
 type CreateHouseholdRes interface {
 	createHouseholdRes()
 }
