@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 (Bootstrap and registration)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `compose.yaml` runs migrations in the `migrate` run mode before the app starts
 - [ ] `make up`, `make down`, `make up-observability` (the `observability` profile), `make logs`, `make bootstrap`, `make docker-build`
