@@ -4,7 +4,7 @@
 
 **Blocked by:** 10 (Recategorise, reverse Transactions and Discard pending Imported transactions), 12 (Suspected duplicates, Keep, and the waiting Balance check)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `GET …/accounts/{account_id}/months/{booking_month}` returns open or closed, Statement balance, computed balance, pending count, undecided Suspected duplicate count, Uncategorised count and flagged
 - [ ] `POST …/accounts/{account_id}/months/{booking_month}/close` with the Statement balance; months are decided by Booking date
