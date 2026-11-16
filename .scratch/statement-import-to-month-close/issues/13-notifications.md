@@ -4,7 +4,7 @@
 
 **Blocked by:** 12 (Suspected duplicates, Keep, and the waiting Balance check)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] A deferred Watermill handler on the Statement import's event creates a "suspected duplicates found" Notification with a link to the import
 - [ ] `GET /households/{household_id}/notifications` and `POST …/notifications/{notification_id}/read`; read state is per User
