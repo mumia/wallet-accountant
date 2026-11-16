@@ -177,7 +177,8 @@ type ImportedState string
 
 // The Imported transaction states this slice has so far.
 const (
-	ImportedPending ImportedState = "pending"
+	ImportedPending  ImportedState = "pending"
+	ImportedAccepted ImportedState = "accepted"
 )
 
 var (
@@ -186,6 +187,18 @@ var (
 	// ErrInvalidRowAmount is returned for a row whose amount isn't money in
 	// a known currency with that currency's decimal places.
 	ErrInvalidRowAmount = errors.New("invalid imported transaction amount")
+	// ErrImportedTransactionNotImported is returned for a command to an
+	// Imported transaction that doesn't exist.
+	ErrImportedTransactionNotImported = errors.New("imported transaction not imported")
+	// ErrImportedTransactionAlreadyAccepted is returned for accepting an
+	// Imported transaction that is already Accepted: it is booked once.
+	ErrImportedTransactionAlreadyAccepted = errors.New("imported transaction already accepted")
+	// ErrTransactionIDRequired is returned for accepting without the Ledger
+	// Transaction that books it.
+	ErrTransactionIDRequired = errors.New("ledger transaction ID required")
+	// ErrImportedTransactionNotPending is returned for accepting an
+	// Imported transaction that isn't waiting for review.
+	ErrImportedTransactionNotPending = errors.New("imported transaction is not pending")
 )
 
 // ImportedTransactionState is an Imported transaction's fold.
@@ -204,6 +217,9 @@ type ImportedTransactionState struct {
 	Description       string
 	Payee             string
 	BankTransactionID string
+	// TransactionID is the Ledger Transaction that booked it while it is
+	// Accepted; the zero ID otherwise.
+	TransactionID sharedkernel.ID
 }
 
 type (
@@ -226,9 +242,17 @@ type (
 		Payee             string
 		BankTransactionID string
 	}
+
+	// AcceptImportedTransaction Accepts a pending Imported transaction,
+	// booked by the Ledger Transaction TransactionID in the same database
+	// transaction (ADR-0013).
+	AcceptImportedTransaction struct {
+		TransactionID sharedkernel.ID
+	}
 )
 
-func (ImportRow) isImportedTransactionCommand() {}
+func (ImportRow) isImportedTransactionCommand()                 {}
+func (AcceptImportedTransaction) isImportedTransactionCommand() {}
 
 type (
 	// ImportedTransactionEvent is an Imported transaction's event.
@@ -250,9 +274,17 @@ type (
 		Payee             string               `json:"payee,omitempty"`
 		BankTransactionID string               `json:"banktransactionid,omitempty"`
 	}
+
+	// ImportedTransactionAccepted is recorded when a User Accepts a pending
+	// Imported transaction: TransactionID is the Ledger Transaction that
+	// booked it.
+	ImportedTransactionAccepted struct {
+		TransactionID sharedkernel.ID `json:"transactionid"`
+	}
 )
 
-func (TransactionImported) isImportedTransactionEvent() {}
+func (TransactionImported) isImportedTransactionEvent()         {}
+func (ImportedTransactionAccepted) isImportedTransactionEvent() {}
 
 // DateLayout is how events write a calendar date.
 const DateLayout = time.DateOnly
@@ -267,6 +299,8 @@ func decideImportedTransaction(s ImportedTransactionState, c ImportedTransaction
 	switch c := c.(type) {
 	case ImportRow:
 		return importRow(s, c)
+	case AcceptImportedTransaction:
+		return acceptImportedTransaction(s, c)
 	default:
 		return nil, nil
 	}
@@ -311,8 +345,28 @@ func importRow(s ImportedTransactionState, c ImportRow) ([]ImportedTransactionEv
 	return []ImportedTransactionEvent{imported}, nil
 }
 
+// acceptImportedTransaction Accepts a pending Imported transaction once, so
+// its money is never booked twice (spec story 48).
+func acceptImportedTransaction(s ImportedTransactionState, c AcceptImportedTransaction) ([]ImportedTransactionEvent, error) {
+	switch {
+	case !s.Imported:
+		return nil, ErrImportedTransactionNotImported
+	case s.State == ImportedAccepted:
+		return nil, ErrImportedTransactionAlreadyAccepted
+	case s.State != ImportedPending:
+		return nil, fmt.Errorf("%w: it is %s", ErrImportedTransactionNotPending, s.State)
+	case c.TransactionID == sharedkernel.NilID:
+		return nil, ErrTransactionIDRequired
+	}
+
+	return []ImportedTransactionEvent{ImportedTransactionAccepted(c)}, nil
+}
+
 func evolveImportedTransaction(s ImportedTransactionState, e decider.Envelope[ImportedTransactionEvent]) ImportedTransactionState {
-	if ev, ok := e.Event.(TransactionImported); ok {
+	switch ev := e.Event.(type) {
+	case ImportedTransactionAccepted:
+		s.State, s.TransactionID = ImportedAccepted, ev.TransactionID
+	case TransactionImported:
 		s = ImportedTransactionState{
 			Imported:          true,
 			State:             ImportedPending,

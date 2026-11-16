@@ -12,10 +12,26 @@ import (
 
 	"github.com/mumia/wallet-accountant/internal/ingestion/domain"
 	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
+	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 )
 
-// ErrInvalidCursor is returned for a page cursor this API didn't hand out.
-var ErrInvalidCursor = errors.New("invalid cursor")
+var (
+	// ErrInvalidCursor is returned for a page cursor this API didn't hand
+	// out.
+	ErrInvalidCursor = errors.New("invalid cursor")
+	// ErrImportedTransactionNotFound is returned for an Imported transaction
+	// that is not in the Household.
+	ErrImportedTransactionNotFound = errors.New("imported transaction not found")
+	// ErrImportedTransactionAlreadyAccepted is returned for accepting an
+	// Imported transaction twice: it is booked once.
+	ErrImportedTransactionAlreadyAccepted = domain.ErrImportedTransactionAlreadyAccepted
+	// ErrCategoryNotFound is returned for accepting with a Category that is
+	// not in the Household.
+	ErrCategoryNotFound = errors.New("category not found")
+	// ErrInternalCategory is returned for accepting with an Internal
+	// Category other than Uncategorised.
+	ErrInternalCategory = errors.New("internal categories other than uncategorised can't be chosen")
+)
 
 // ImportedTransaction is an Imported transaction as the API sees it.
 type ImportedTransaction struct {
@@ -56,16 +72,64 @@ type ImportedTransactionReader interface {
 	ImportedTransactions(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, filter ImportedFilter) ([]ImportedTransaction, error)
 }
 
-// ImportedTransactions lists Accounts' Imported transactions.
+// ImportedTransactions lists Accounts' Imported transactions and Accepts
+// them into the Ledger.
 type ImportedTransactions struct {
 	scope    HouseholdScope
 	accounts Accounts
+	ledger   Ledger
+	rows     ImportedTransactionAggregate
 	reader   ImportedTransactionReader
 }
 
 // NewImportedTransactions returns the ImportedTransactions service.
-func NewImportedTransactions(scope HouseholdScope, accounts Accounts, reader ImportedTransactionReader) *ImportedTransactions {
-	return &ImportedTransactions{scope: scope, accounts: accounts, reader: reader}
+func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Ledger, rows ImportedTransactionAggregate,
+	reader ImportedTransactionReader,
+) *ImportedTransactions {
+	return &ImportedTransactions{scope: scope, accounts: accounts, ledger: ledger, rows: rows, reader: reader}
+}
+
+// Accept Accepts a pending Imported transaction and, through the Ledger in
+// the same database transaction, books it with exactly its amount: to the
+// Category, or to Uncategorised when category is nil. The Imported
+// transaction, the Ledger Transaction and the Account each check their own
+// version, and a conflict retries the whole transaction with the same
+// Transaction ID (ADR-0011, ADR-0013; consistency map: Accept imported
+// transaction).
+func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, category *uuid.UUID,
+) (ImportedTransaction, error) {
+	transaction, err := sharedkernel.NewID()
+	if err != nil {
+		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	var accepted ImportedTransaction
+
+	err = s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		res, err := s.rows.Execute(ctx, tx, id, domain.AcceptImportedTransaction{TransactionID: transaction})
+		if errors.Is(err, domain.ErrImportedTransactionNotImported) {
+			return ErrImportedTransactionNotFound
+		}
+
+		if err != nil {
+			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		if err := s.ledger.BookAccepted(ctx, tx, Booking{
+			Transaction: transaction, ImportedTransaction: id, Category: category, Row: res.State,
+		}); err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		accepted = ImportedTransaction{ID: id, State: res.State}
+
+		return nil
+	})
+	if err != nil {
+		return ImportedTransaction{}, fmt.Errorf("accept imported transaction %s: %w", id, err)
+	}
+
+	return accepted, nil
 }
 
 // List returns a page of the Account's Imported transactions.

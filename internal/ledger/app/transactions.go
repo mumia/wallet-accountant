@@ -31,6 +31,12 @@ var (
 	// ErrOpeningBalanceAlreadyRecorded is returned for recording an
 	// Account's Opening balance a second time.
 	ErrOpeningBalanceAlreadyRecorded = domain.ErrOpeningBalanceAlreadyRecorded
+	// ErrInternalCategory is returned for booking an Imported transaction to
+	// an Internal Category other than Uncategorised.
+	ErrInternalCategory = domain.ErrInternalCategory
+	// ErrCurrencyMismatch is returned for booking an amount in another
+	// currency than the Account's.
+	ErrCurrencyMismatch = errors.New("amount isn't in the account currency")
 )
 
 // TransactionAggregate is the Transaction Decider wired to the runtime.
@@ -43,11 +49,12 @@ func NewTransactionAggregate(folds eventstore.FoldStore[domain.TransactionState]
 	eventstore.Register[domain.TransactionEvent, domain.TransactionRecorded](codec, TransactionRecordedType)
 
 	return TransactionAggregate{
-		StreamType:        TransactionStreamType,
-		Decider:           domain.Transaction,
-		Codec:             codec,
-		Folds:             folds,
-		FoldSchemaVersion: 1,
+		StreamType: TransactionStreamType,
+		Decider:    domain.Transaction,
+		Codec:      codec,
+		Folds:      folds,
+		// 2: the link to the Imported transaction an Accept booked.
+		FoldSchemaVersion: 2,
 	}
 }
 
@@ -109,15 +116,105 @@ type Transactions struct {
 	scope        HouseholdScope
 	accounts     AccountAggregate
 	transactions TransactionAggregate
+	categories   CategoryAggregate
 	reader       TransactionReader
 	internal     InternalCategories
 }
 
 // NewTransactions returns the Transactions service.
 func NewTransactions(scope HouseholdScope, accounts AccountAggregate, transactions TransactionAggregate,
-	reader TransactionReader, internal InternalCategories,
+	categories CategoryAggregate, reader TransactionReader, internal InternalCategories,
 ) *Transactions {
-	return &Transactions{scope: scope, accounts: accounts, transactions: transactions, reader: reader, internal: internal}
+	return &Transactions{
+		scope: scope, accounts: accounts, transactions: transactions, categories: categories, reader: reader,
+		internal: internal,
+	}
+}
+
+// ImportedBooking is an Accepted Imported transaction to book: its row
+// exactly as imported, and the Category for the other side (nil for
+// Uncategorised).
+type ImportedBooking struct {
+	Account             uuid.UUID
+	Transaction         uuid.UUID
+	ImportedTransaction uuid.UUID
+	Category            *uuid.UUID
+	BookingDate         time.Time
+	TransactionDate     time.Time
+	ValueDate           time.Time
+	Amount              sharedkernel.Decimal
+	Currency            string
+	Description         string
+	Payee               string
+}
+
+// RecordImported books an Accepted Imported transaction in the caller's
+// transaction: a Transaction between the Account and the Category, carrying
+// the row's amount, dates, description and payee and linked to it, and the
+// Account's balance and Uncategorised count for the Booking month. No
+// Category, or Uncategorised, books the other side to Uncategorised; any
+// other Internal Category is ErrInternalCategory, and a Category not in the
+// Household ErrCategoryNotFound. Ingestion calls it when a User Accepts
+// (consistency map: Accept imported transaction).
+func (t *Transactions) RecordImported(ctx context.Context, tx *eventstore.Tx, b ImportedBooking) error {
+	uncategorised, err := t.internal.InternalCategory(ctx, tx, domain.RoleUncategorised)
+	if err != nil {
+		return fmt.Errorf("find the uncategorised category: %w", err)
+	}
+
+	category := uncategorised
+
+	if b.Category != nil && *b.Category != uncategorised {
+		fold, found, err := t.categories.Folds.Load(ctx, tx, *b.Category)
+		if err != nil {
+			return fmt.Errorf("load category %s: %w", *b.Category, err)
+		}
+
+		switch {
+		case !found:
+			return ErrCategoryNotFound
+		case fold.State.Kind == domain.KindInternal:
+			return fmt.Errorf("%w: only Uncategorised can be chosen when accepting", ErrInternalCategory)
+		}
+
+		category = *b.Category
+	}
+
+	fold, found, err := t.accounts.Folds.Load(ctx, tx, b.Account)
+	if err != nil {
+		return fmt.Errorf("load account %s: %w", b.Account, err)
+	}
+
+	switch {
+	case !found:
+		return ErrAccountNotFound
+	case fold.State.Currency != b.Currency:
+		return fmt.Errorf("%w: %s, not %s", ErrCurrencyMismatch, b.Currency, fold.State.Currency)
+	}
+
+	if _, err := t.accounts.Execute(ctx, tx, b.Account, domain.BookTransaction{
+		TransactionID: b.Transaction, BookingDate: b.BookingDate, Amount: b.Amount,
+		Uncategorised: category == uncategorised,
+	}); err != nil {
+		return fmt.Errorf("book transaction on account %s: %w", b.Account, err)
+	}
+
+	if _, err := t.transactions.Execute(ctx, tx, b.Transaction, domain.RecordTransaction{
+		ImportedTransactionID: b.ImportedTransaction,
+		BookingDate:           b.BookingDate,
+		TransactionDate:       b.TransactionDate,
+		ValueDate:             b.ValueDate,
+		Description:           b.Description,
+		Payee:                 b.Payee,
+		Postings: []domain.Posting{
+			{AccountID: b.Account, Amount: b.Amount, Currency: b.Currency},
+			{CategoryID: category, Amount: b.Amount.Neg(), Currency: b.Currency},
+		},
+	}); err != nil {
+		return fmt.Errorf("record transaction: %w", err)
+	}
+
+	return nil
 }
 
 // RecordOpeningBalance records the Account's Opening balance worked out by

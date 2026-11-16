@@ -19,8 +19,9 @@ const (
 	StatementImportStreamType   = "ingestion.statementimport"
 	StatementImportRecordedType = "io.walletaccountant.ingestion.statementimport.recorded.v1"
 
-	ImportedTransactionStreamType = "ingestion.importedtransaction"
-	TransactionImportedType       = "io.walletaccountant.ingestion.importedtransaction.imported.v1"
+	ImportedTransactionStreamType   = "ingestion.importedtransaction"
+	TransactionImportedType         = "io.walletaccountant.ingestion.importedtransaction.imported.v1"
+	ImportedTransactionAcceptedType = "io.walletaccountant.ingestion.importedtransaction.accepted.v1"
 )
 
 var (
@@ -71,6 +72,21 @@ type Ledger interface {
 	// Transaction on its start date, or returns
 	// ErrOpeningBalanceAlreadyRecorded.
 	RecordOpeningBalance(ctx context.Context, tx *eventstore.Tx, account, transaction uuid.UUID, amount sharedkernel.Decimal) error
+	// BookAccepted records the Ledger Transaction of an Accepted Imported
+	// transaction and moves its Account's balance, or returns
+	// ErrCategoryNotFound or ErrInternalCategory for a Category it can't be
+	// booked to (consistency map: Accept imported transaction).
+	BookAccepted(ctx context.Context, tx *eventstore.Tx, booking Booking) error
+}
+
+// Booking is an Accepted Imported transaction as the Ledger books it:
+// Transaction is the new Ledger Transaction's ID and Category the other
+// side, nil for Uncategorised.
+type Booking struct {
+	Transaction         uuid.UUID
+	ImportedTransaction uuid.UUID
+	Category            *uuid.UUID
+	Row                 domain.ImportedTransactionState
 }
 
 // StatementImportAggregate is the Statement import Decider wired to the
@@ -101,13 +117,16 @@ func NewStatementImportAggregate(folds eventstore.FoldStore[domain.StatementImpo
 func NewImportedTransactionAggregate(folds eventstore.FoldStore[domain.ImportedTransactionState]) ImportedTransactionAggregate {
 	codec := eventstore.NewCodec[domain.ImportedTransactionEvent](Source)
 	eventstore.Register[domain.ImportedTransactionEvent, domain.TransactionImported](codec, TransactionImportedType)
+	eventstore.Register[domain.ImportedTransactionEvent, domain.ImportedTransactionAccepted](codec,
+		ImportedTransactionAcceptedType)
 
 	return ImportedTransactionAggregate{
-		StreamType:        ImportedTransactionStreamType,
-		Decider:           domain.ImportedTransaction,
-		Codec:             codec,
-		Folds:             folds,
-		FoldSchemaVersion: 1,
+		StreamType: ImportedTransactionStreamType,
+		Decider:    domain.ImportedTransaction,
+		Codec:      codec,
+		Folds:      folds,
+		// 2: the Ledger Transaction that booked it.
+		FoldSchemaVersion: 2,
 	}
 }
 

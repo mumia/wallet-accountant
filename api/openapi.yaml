@@ -505,7 +505,8 @@ paths:
         then in the order they were imported (a file's rows in line order),
         paged with a cursor.
         `state` keeps only those in one state (`PENDING`: waiting for
-        review) and `booking_month` only one Booking month.
+        review; `ACCEPTED`: booked in the Ledger) and `booking_month` only
+        one Booking month.
       tags:
         - Imported transactions
       parameters:
@@ -519,6 +520,7 @@ paths:
             type: string
             x-extensible-enum:
               - PENDING
+              - ACCEPTED
             example: PENDING
         - $ref: '#/components/parameters/BookingMonth'
         - $ref: '#/components/parameters/Cursor'
@@ -536,6 +538,52 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/imported-transactions/{imported_transaction_id}/accept:
+    post:
+      operationId: acceptImportedTransaction
+      summary: Accept a pending Imported transaction
+      description: |
+        Accepts a pending Imported transaction: a balanced Ledger Transaction
+        is recorded in the same transaction, with exactly the row's amount,
+        dates, description and payee, between the Account and `category_id`.
+        Without `category_id`, or with the Uncategorised Category, the other
+        side waits in Uncategorised. The Account's balance and its
+        Transaction list reflect it immediately. An Imported transaction
+        already Accepted gets 409
+        `/problems/imported-transaction-already-accepted`; any other Internal
+        Category gets 422 `/problems/internal-category`, and a Category that
+        isn't one of the Household's gets 422 `/problems/invalid-category`.
+        Retrying with the same Idempotency-Key and body returns the original
+        result and never books twice.
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ImportedTransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportedTransactionAcceptance'
+      responses:
+        '200':
+          description: The Accepted Imported transaction, with the Transaction that booked it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         default:
           $ref: '#/components/responses/Problem'
   /households/{household_id}/connections/{connection_id}/statement-imports/previews:
@@ -711,6 +759,14 @@ components:
       in: path
       required: true
       description: The Connection's ID
+      schema:
+        type: string
+        format: uuid
+    ImportedTransactionID:
+      name: imported_transaction_id
+      in: path
+      required: true
+      description: The Imported transaction's ID
       schema:
         type: string
         format: uuid
@@ -1511,6 +1567,7 @@ components:
           description: Where it is in its review
           x-extensible-enum:
             - PENDING
+            - ACCEPTED
           example: PENDING
         line:
           type: integer
@@ -1543,6 +1600,20 @@ components:
         bank_transaction_id:
           type: string
           description: The bank's own transaction ID, when the file has one
+        transaction_id:
+          type: string
+          format: uuid
+          description: The Ledger Transaction that booked it, while it is Accepted
+    ImportedTransactionAcceptance:
+      type: object
+      description: How to Accept an Imported transaction
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: |
+            The Category on the other side of the Transaction; absent, or the
+            Uncategorised Category, leaves it in Uncategorised
     ImportedTransactionPage:
       type: object
       description: A page of an Account's Imported transactions

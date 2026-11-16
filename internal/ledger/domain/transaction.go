@@ -48,6 +48,9 @@ type TransactionState struct {
 	Description string
 	Payee       string
 	Postings    []Posting
+	// ImportedTransactionID is the Imported transaction whose Accept
+	// recorded it; the zero ID otherwise.
+	ImportedTransactionID sharedkernel.ID
 }
 
 // AccountLine is a Transaction as one line of an Account's single-entry
@@ -103,14 +106,16 @@ type (
 
 	// RecordTransaction records a balanced Transaction. TransactionDate
 	// defaults to the Booking date; ValueDate may be zero.
+	// ImportedTransactionID links it to the Imported transaction it books.
 	RecordTransaction struct {
-		OpeningBalance  bool
-		BookingDate     time.Time
-		TransactionDate time.Time
-		ValueDate       time.Time
-		Description     string
-		Payee           string
-		Postings        []Posting
+		ImportedTransactionID sharedkernel.ID
+		OpeningBalance        bool
+		BookingDate           time.Time
+		TransactionDate       time.Time
+		ValueDate             time.Time
+		Description           string
+		Payee                 string
+		Postings              []Posting
 	}
 )
 
@@ -123,13 +128,14 @@ type (
 	// TransactionRecorded is recorded when a Transaction is recorded. Dates
 	// are written with DateLayout; ValueDate is empty when unknown.
 	TransactionRecorded struct {
-		OpeningBalance  bool      `json:"openingbalance,omitempty"`
-		BookingDate     string    `json:"bookingdate"`
-		TransactionDate string    `json:"transactiondate"`
-		ValueDate       string    `json:"valuedate,omitempty"`
-		Description     string    `json:"description"`
-		Payee           string    `json:"payee,omitempty"`
-		Postings        []Posting `json:"postings"`
+		ImportedTransactionID sharedkernel.ID `json:"importedtransactionid,omitzero"`
+		OpeningBalance        bool            `json:"openingbalance,omitempty"`
+		BookingDate           string          `json:"bookingdate"`
+		TransactionDate       string          `json:"transactiondate"`
+		ValueDate             string          `json:"valuedate,omitempty"`
+		Description           string          `json:"description"`
+		Payee                 string          `json:"payee,omitempty"`
+		Postings              []Posting       `json:"postings"`
 	}
 )
 
@@ -186,12 +192,13 @@ func recordTransaction(s TransactionState, c RecordTransaction) ([]TransactionEv
 	}
 
 	recorded := TransactionRecorded{
-		OpeningBalance:  c.OpeningBalance,
-		BookingDate:     c.BookingDate.Format(DateLayout),
-		TransactionDate: transactionDate.Format(DateLayout),
-		Description:     c.Description,
-		Payee:           c.Payee,
-		Postings:        c.Postings,
+		ImportedTransactionID: c.ImportedTransactionID,
+		OpeningBalance:        c.OpeningBalance,
+		BookingDate:           c.BookingDate.Format(DateLayout),
+		TransactionDate:       transactionDate.Format(DateLayout),
+		Description:           c.Description,
+		Payee:                 c.Payee,
+		Postings:              c.Postings,
 	}
 
 	if !c.ValueDate.IsZero() {
@@ -232,6 +239,7 @@ func evolveTransaction(s TransactionState, e decider.Envelope[TransactionEvent])
 		}
 
 		s.Description, s.Payee, s.Postings = ev.Description, ev.Payee, ev.Postings
+		s.ImportedTransactionID = ev.ImportedTransactionID
 	}
 
 	return s

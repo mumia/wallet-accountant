@@ -59,3 +59,33 @@ func (l ingestionLedger) RecordOpeningBalance(ctx context.Context, tx *eventstor
 		return err //nolint:wrapcheck // already wrapped by the Ledger
 	}
 }
+
+// BookAccepted implements ingestionapp.Ledger.
+func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b ingestionapp.Booking) error {
+	r := b.Row
+
+	err := l.transactions.RecordImported(ctx, tx, ledgerapp.ImportedBooking{
+		Account:             r.AccountID,
+		Transaction:         b.Transaction,
+		ImportedTransaction: b.ImportedTransaction,
+		Category:            b.Category,
+		BookingDate:         r.BookingDate,
+		TransactionDate:     r.TransactionDate,
+		ValueDate:           r.ValueDate,
+		Amount:              r.Amount,
+		Currency:            r.Currency,
+		Description:         r.Description,
+		Payee:               r.Payee,
+	})
+
+	switch {
+	case errors.Is(err, ledgerapp.ErrCategoryNotFound):
+		return ingestionapp.ErrCategoryNotFound
+	case errors.Is(err, ledgerapp.ErrInternalCategory):
+		return fmt.Errorf("%w: %w", ingestionapp.ErrInternalCategory, err)
+	case errors.Is(err, ledgerapp.ErrAccountNotFound):
+		return ingestionapp.ErrAccountNotFound
+	default:
+		return err //nolint:wrapcheck // already wrapped by the Ledger
+	}
+}

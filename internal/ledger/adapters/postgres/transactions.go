@@ -29,13 +29,14 @@ func (TransactionFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 		f         eventstore.Fold[domain.TransactionState]
 		valueDate *time.Time
 		postings  []byte
+		imported  *uuid.UUID
 	)
 
 	err := tx.QueryRow(ctx, `SELECT opening_balance, booking_date, transaction_date, value_date, description, payee,
-		postings, version, schema_version
+		postings, imported_transaction_id, version, schema_version
 		FROM ledger_transactions WHERE household_id = $1 AND id = $2`, tx.HouseholdID(), id).
 		Scan(&f.State.OpeningBalance, &f.State.BookingDate, &f.State.TransactionDate, &valueDate,
-			&f.State.Description, &f.State.Payee, &postings, &f.Version, &f.SchemaVersion)
+			&f.State.Description, &f.State.Payee, &postings, &imported, &f.Version, &f.SchemaVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return eventstore.Fold[domain.TransactionState]{}, false, nil
 	}
@@ -45,6 +46,10 @@ func (TransactionFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 	}
 
 	f.State.Recorded = true
+
+	if imported != nil {
+		f.State.ImportedTransactionID = *imported
+	}
 
 	if valueDate != nil {
 		f.State.ValueDate = *valueDate
@@ -71,19 +76,25 @@ func (TransactionFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 		valueDate = &s.ValueDate
 	}
 
+	var imported *uuid.UUID
+	if s.ImportedTransactionID != uuid.Nil {
+		imported = &s.ImportedTransactionID
+	}
+
 	args := []any{
 		tx.HouseholdID(), id, s.OpeningBalance, s.BookingDate, s.TransactionDate, valueDate, s.Description, s.Payee,
-		postings, f.Version, f.SchemaVersion,
+		postings, f.Version, f.SchemaVersion, imported,
 	}
 	q := `INSERT INTO ledger_transactions (household_id, id, opening_balance, booking_date, transaction_date, value_date,
-	          description, payee, postings, version, schema_version)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`
+	          description, payee, postings, version, schema_version, imported_transaction_id)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
 		args = append(args, expected)
 		q = `UPDATE ledger_transactions SET opening_balance = $3, booking_date = $4, transaction_date = $5,
-		         value_date = $6, description = $7, payee = $8, postings = $9, version = $10, schema_version = $11
-		     WHERE household_id = $1 AND id = $2 AND version = $12`
+		         value_date = $6, description = $7, payee = $8, postings = $9, version = $10, schema_version = $11,
+		         imported_transaction_id = $12
+		     WHERE household_id = $1 AND id = $2 AND version = $13`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
