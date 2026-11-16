@@ -7,12 +7,19 @@ Decisions that every bounded context follows but that are not surprising enough 
 ```
 cmd/wallet-accountant/          main and run modes (ADR-0009)
 api/openapi.yaml                the contract (ADR-0008)
+api/zalando-ruleset.yaml        the JavaScript-free Zalando ruleset vacuum lints the contract with (ADR-0012)
 internal/<context>/
     domain/                     Deciders, events, value objects; imports only the standard library and sharedkernel
     app/                        command and query handlers, port interfaces
     adapters/{http,postgres,…}/ ogen handlers, sqlc repositories, Watermill handlers
 internal/sharedkernel/          Money, currencies, IDs, Match
 internal/platform/              event store, Decider runtime, codec, Watermill wiring, config
+    httpapi/                    problem+json errors, bearer authentication, request telemetry
+    httpapi/oas/                the ogen server generated from api/openapi.yaml (`make generate`)
+    authn/                      the Authenticator port; oidc/ verifies JWTs, authntest/ is for tests
+    telemetry/                  slog, traces and metrics (ADR-0016)
+internal/wiring/                composition root: builds every context and runs a run mode
+internal/apitest/               HTTP test harness: the real app in-process against testcontainers PostgreSQL
 ```
 
 depguard rules in golangci-lint enforce the dependencies. `domain` imports nothing from `app`, `adapters` or `platform`. A context uses another context only through that context's `app` ports.
@@ -36,7 +43,7 @@ All aggregate and event IDs are UUIDv7. The application generates them, never th
 
 ## Configuration and observability
 
-- Configuration comes only from environment variables.
+- Configuration comes only from environment variables: `WA_DATABASE_URL`, `WA_OIDC_ISSUER` and `WA_OIDC_AUDIENCE` (required), `WA_HTTP_ADDR` (default `:8080`), `WA_SHUTDOWN_TIMEOUT` (default `10s`), and the standard `OTEL_*` variables. The run mode is the binary's only argument (default `all`).
 - Logs use `log/slog` with JSON output.
 - Logs, traces and metrics are exported over OTLP by default. Logs also go to stdout as JSON; slog reaches OTLP through the OpenTelemetry slog bridge.
 - Telemetry goes to an OpenTelemetry Collector, which forwards it to the Grafana stack: Tempo for traces, Prometheus for metrics, Loki for logs, Grafana to view them (ADR-0016). Development uses the all-in-one `otel-lgtm` image from `compose.dev.yaml`; self-hosting runs the collector and enables the backends with the `observability` profile (`make up-observability`).

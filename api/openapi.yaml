@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: Wallet Accountant API
+  version: 0.1.0
+  description: |
+    Wallet Accountant tracks where a Household's money goes and how that
+    compares to what it planned. This document is the contract between the
+    backend and the frontend (ADR-0008). Every error is returned as
+    `application/problem+json` (RFC 9457).
+  contact:
+    name: Wallet Accountant maintainers
+    url: https://github.com/mumia/wallet-accountant
+    email: wallet-accountant@users.noreply.github.com
+  x-api-id: 0b9c5a2e-6f0e-4d8a-9a51-3f3c2d7e8b41
+  x-audience: external-partner
+servers:
+  - url: http://localhost:8080
+    description: Local development (`make run`)
+security:
+  - bearer_auth: []
+tags:
+  - name: Users
+    description: The signed-in identity and its registration
+paths:
+  /me:
+    get:
+      operationId: getMe
+      summary: The signed-in User
+      description: |
+        Returns the User the bearer token belongs to, and whether they are
+        Instance administrator. An identity that has signed in but not
+        redeemed an Invitation is not a User yet and gets 403 with the
+        problem type `/problems/registration-required` (ADR-0017).
+      tags:
+        - Users
+      responses:
+        '200':
+          description: The signed-in User
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearer_auth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An OpenID Connect access token issued by the instance's provider (ADR-0010)
+  responses:
+    Unauthorized:
+      description: The bearer token is missing or invalid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The caller may not do this, for example because it is not registered yet
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Problem:
+      description: An error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Me:
+      type: object
+      description: The signed-in User
+      required:
+        - user_id
+        - is_instance_administrator
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: The User's ID (UUIDv7)
+        is_instance_administrator:
+          type: boolean
+          description: Whether the User controls who is admitted to the instance
+    Problem:
+      type: object
+      description: Problem details (RFC 9457)
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type; `about:blank` when the status says it all
+          example: /problems/registration-required
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Registration required
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 403
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        instance:
+          type: string
+          format: uri-reference
+          description: Identifies this occurrence of the problem

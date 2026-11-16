@@ -1,0 +1,157 @@
+version: "2"
+
+run:
+  build-tags:
+    - integration
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - depguard
+    - errchkjson
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - noctx
+    - nolintlint
+    - wrapcheck
+  settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    wrapcheck:
+      ignore-sig-regexps:
+        - \.Errorf\(
+        - errors\.New\(
+        - errors\.Join\(
+    # The layout from docs/architecture/conventions.md (ADR-0009).
+    # depguard matches import paths by prefix.
+    depguard:
+      rules:
+        domain:
+          list-mode: strict
+          files:
+            - "**/internal/*/domain/**"
+          allow:
+            - $gostd
+            - github.com/mumia/wallet-accountant/internal/sharedkernel
+        sharedkernel:
+          list-mode: strict
+          files:
+            - "**/internal/sharedkernel/**"
+          allow:
+            - $gostd
+            - github.com/google/uuid
+            - github.com/shopspring/decimal
+        platform-knows-no-context:
+          files:
+            - "**/internal/platform/**"
+          deny:
+            - pkg: github.com/mumia/wallet-accountant/internal/households
+              desc: the platform serves every bounded context and must not depend on one
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger
+              desc: the platform serves every bounded context and must not depend on one
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion
+              desc: the platform serves every bounded context and must not depend on one
+            - pkg: github.com/mumia/wallet-accountant/internal/planning
+              desc: the platform serves every bounded context and must not depend on one
+            - pkg: github.com/mumia/wallet-accountant/internal/wiring
+              desc: only cmd and tests use the composition root
+        app-knows-no-adapters:
+          files:
+            - "**/internal/*/app/**"
+          deny:
+            - pkg: github.com/mumia/wallet-accountant/internal/households/adapters
+              desc: application services depend on ports, not adapters
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger/adapters
+              desc: application services depend on ports, not adapters
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion/adapters
+              desc: application services depend on ports, not adapters
+            - pkg: github.com/mumia/wallet-accountant/internal/planning/adapters
+              desc: application services depend on ports, not adapters
+        households-uses-other-contexts-through-app:
+          files:
+            - "**/internal/households/**"
+          deny:
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/planning/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/planning/adapters
+              desc: use another context only through its app ports
+        ledger-uses-other-contexts-through-app:
+          files:
+            - "**/internal/ledger/**"
+          deny:
+            - pkg: github.com/mumia/wallet-accountant/internal/households/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/households/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/planning/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/planning/adapters
+              desc: use another context only through its app ports
+        ingestion-uses-other-contexts-through-app:
+          files:
+            - "**/internal/ingestion/**"
+          deny:
+            - pkg: github.com/mumia/wallet-accountant/internal/households/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/households/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/planning/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/planning/adapters
+              desc: use another context only through its app ports
+        planning-uses-other-contexts-through-app:
+          files:
+            - "**/internal/planning/**"
+          deny:
+            - pkg: github.com/mumia/wallet-accountant/internal/households/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/households/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ledger/adapters
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion/domain
+              desc: use another context only through its app ports
+            - pkg: github.com/mumia/wallet-accountant/internal/ingestion/adapters
+              desc: use another context only through its app ports
+  exclusions:
+    generated: strict
+    presets:
+      - std-error-handling
+    rules:
+      # Tests return errors from helpers as they are.
+      - path: _test\.go$
+        linters:
+          - wrapcheck
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/mumia/wallet-accountant
+  exclusions:
+    generated: strict

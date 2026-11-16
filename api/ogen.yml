@@ -1,0 +1,9 @@
+# ogen configuration (ADR-0012). Only the server is generated. It validates its
+# own responses against the contract, so every HTTP test also checks the contract.
+generator:
+  features:
+    disable_all: true
+    enable:
+      - paths/server
+      - server/response/validation
+      - ogen/otel
