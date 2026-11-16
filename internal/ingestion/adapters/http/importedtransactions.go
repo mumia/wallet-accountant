@@ -21,20 +21,28 @@ const (
 	ImportedTransactionDiscardedType       = "/problems/imported-transaction-discarded"
 	// ImportedTransactionAlreadyDiscardedType is for discarding twice.
 	ImportedTransactionAlreadyDiscardedType = "/problems/imported-transaction-already-discarded"
-	InternalCategoryType                    = "/problems/internal-category"
-	InvalidCategoryType                     = "/problems/invalid-category"
+	// ImportedTransactionNotSuspectedDuplicateType is for keeping a row that
+	// isn't a Suspected duplicate.
+	ImportedTransactionNotSuspectedDuplicateType = "/problems/imported-transaction-not-suspected-duplicate"
+	// ImportedTransactionSuspectedDuplicateType is for accepting a Suspected
+	// duplicate before it is kept.
+	ImportedTransactionSuspectedDuplicateType = "/problems/imported-transaction-suspected-duplicate"
+	InternalCategoryType                      = "/problems/internal-category"
+	InvalidCategoryType                       = "/problems/invalid-category"
 )
 
 var importedStatesOut = map[domain.ImportedState]string{
-	domain.ImportedPending:   "PENDING",
-	domain.ImportedAccepted:  "ACCEPTED",
-	domain.ImportedDiscarded: "DISCARDED",
+	domain.ImportedPending:            "PENDING",
+	domain.ImportedSuspectedDuplicate: "SUSPECTED_DUPLICATE",
+	domain.ImportedAccepted:           "ACCEPTED",
+	domain.ImportedDiscarded:          "DISCARDED",
 }
 
 var importedStatesIn = map[string]domain.ImportedState{
-	"PENDING":   domain.ImportedPending,
-	"ACCEPTED":  domain.ImportedAccepted,
-	"DISCARDED": domain.ImportedDiscarded,
+	"PENDING":             domain.ImportedPending,
+	"SUSPECTED_DUPLICATE": domain.ImportedSuspectedDuplicate,
+	"ACCEPTED":            domain.ImportedAccepted,
+	"DISCARDED":           domain.ImportedDiscarded,
 }
 
 // AcceptImportedTransaction implements acceptImportedTransaction.
@@ -60,6 +68,10 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 		return new(oas.AcceptImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
 			ImportedTransactionDiscardedType, "Imported transaction Discarded",
 			"The Imported transaction is Discarded, which is final."))), nil
+	case errors.Is(err, app.ErrImportedTransactionSuspectedDuplicate):
+		return new(oas.AcceptImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+			ImportedTransactionSuspectedDuplicateType, "Imported transaction is a Suspected duplicate",
+			"Keep the Suspected duplicate before accepting it, or Discard it."))), nil
 	case errors.Is(err, app.ErrInternalCategory):
 		return new(oas.AcceptImportedTransactionUnprocessableEntity(httpapi.Problem(http.StatusUnprocessableEntity,
 			InternalCategoryType, "Internal Category",
@@ -108,6 +120,31 @@ func (h *StatementImportHandler) DiscardImportedTransaction(ctx context.Context,
 	return &out, nil
 }
 
+// KeepImportedTransaction implements keepImportedTransaction.
+func (h *StatementImportHandler) KeepImportedTransaction(ctx context.Context,
+	params oas.KeepImportedTransactionParams,
+) (oas.KeepImportedTransactionRes, error) {
+	kept, err := h.imported.Keep(ctx, params.HouseholdID, params.ImportedTransactionID)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound):
+		return new(oas.KeepImportedTransactionNotFound(httpapi.NotFoundProblem())), nil
+	case errors.Is(err, app.ErrImportedTransactionNotSuspectedDuplicate):
+		return new(oas.KeepImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+			ImportedTransactionNotSuspectedDuplicateType, "Not a Suspected duplicate",
+			"Only a Suspected duplicate can be kept."))), nil
+	case err != nil:
+		return nil, fmt.Errorf("keep imported transaction: %w", err)
+	}
+
+	out, err := importedTransactionOut(kept)
+	if err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
 // importedTransactionOut is an Imported transaction as the API writes it.
 func importedTransactionOut(i app.ImportedTransaction) (oas.ImportedTransaction, error) {
 	s := i.State
@@ -144,5 +181,40 @@ func importedTransactionOut(i app.ImportedTransaction) (oas.ImportedTransaction,
 		item.TransactionID = oas.NewOptUUID(s.TransactionID)
 	}
 
+	if r := i.Resembles; r != nil {
+		resembled, err := resembledOut(*r)
+		if err != nil {
+			return oas.ImportedTransaction{}, err
+		}
+
+		item.Resembles = oas.NewOptResembledImportedTransaction(resembled)
+	}
+
 	return item, nil
+}
+
+// resembledOut is the earlier Imported transaction a Suspected duplicate
+// resembles, as the API writes it.
+func resembledOut(i app.ImportedTransaction) (oas.ResembledImportedTransaction, error) {
+	s := i.State
+
+	a, err := money(s.Amount, s.Currency)
+	if err != nil {
+		return oas.ResembledImportedTransaction{}, err
+	}
+
+	out := oas.ResembledImportedTransaction{
+		ImportedTransactionID: i.ID,
+		StatementImportID:     s.StatementImportID,
+		State:                 importedStatesOut[s.State],
+		BookingDate:           s.BookingDate,
+		Amount:                a,
+		Description:           s.Description,
+	}
+
+	if s.BankTransactionID != "" {
+		out.BankTransactionID = oas.NewOptString(s.BankTransactionID)
+	}
+
+	return out, nil
 }

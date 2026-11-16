@@ -47,6 +47,7 @@ var operationRolesBearerAuth = map[string][]string{
 	GetAccountOperation:                 []string{},
 	GetHouseholdOperation:               []string{},
 	GetMeOperation:                      []string{},
+	KeepImportedTransactionOperation:    []string{},
 	ListAccountTransactionsOperation:    []string{},
 	ListAccountsOperation:               []string{},
 	ListCategoriesOperation:             []string{},

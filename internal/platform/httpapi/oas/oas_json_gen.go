@@ -4244,9 +4244,15 @@ func (s *ImportedTransaction) encodeFields(e *jx.Encoder) {
 			s.TransactionID.Encode(e)
 		}
 	}
+	{
+		if s.Resembles.Set {
+			e.FieldStart("resembles")
+			s.Resembles.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfImportedTransaction = [12]string{
+var jsonFieldsNameOfImportedTransaction = [13]string{
 	0:  "imported_transaction_id",
 	1:  "statement_import_id",
 	2:  "state",
@@ -4259,6 +4265,7 @@ var jsonFieldsNameOfImportedTransaction = [12]string{
 	9:  "payee",
 	10: "bank_transaction_id",
 	11: "transaction_id",
+	12: "resembles",
 }
 
 // Decode decodes ImportedTransaction from json.
@@ -4403,6 +4410,16 @@ func (s *ImportedTransaction) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"transaction_id\"")
+			}
+		case "resembles":
+			if err := func() error {
+				s.Resembles.Reset()
+				if err := s.Resembles.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"resembles\"")
 			}
 		default:
 			return d.Skip()
@@ -4643,6 +4660,120 @@ func (s *ImportedTransactionPage) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *ImportedTransactionPage) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes KeepImportedTransactionConflict as json.
+func (s *KeepImportedTransactionConflict) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes KeepImportedTransactionConflict from json.
+func (s *KeepImportedTransactionConflict) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode KeepImportedTransactionConflict to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = KeepImportedTransactionConflict(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *KeepImportedTransactionConflict) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *KeepImportedTransactionConflict) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes KeepImportedTransactionNotFound as json.
+func (s *KeepImportedTransactionNotFound) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes KeepImportedTransactionNotFound from json.
+func (s *KeepImportedTransactionNotFound) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode KeepImportedTransactionNotFound to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = KeepImportedTransactionNotFound(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *KeepImportedTransactionNotFound) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *KeepImportedTransactionNotFound) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes KeepImportedTransactionUnauthorized as json.
+func (s *KeepImportedTransactionUnauthorized) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes KeepImportedTransactionUnauthorized from json.
+func (s *KeepImportedTransactionUnauthorized) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode KeepImportedTransactionUnauthorized to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = KeepImportedTransactionUnauthorized(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *KeepImportedTransactionUnauthorized) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *KeepImportedTransactionUnauthorized) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -5800,6 +5931,39 @@ func (s *OptNilUUID) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes ResembledImportedTransaction as json.
+func (o OptResembledImportedTransaction) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes ResembledImportedTransaction from json.
+func (o *OptResembledImportedTransaction) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptResembledImportedTransaction to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptResembledImportedTransaction) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptResembledImportedTransaction) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes string as json.
 func (o OptString) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -6202,6 +6366,202 @@ func (s *Registration) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *Registration) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *ResembledImportedTransaction) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *ResembledImportedTransaction) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("imported_transaction_id")
+		json.EncodeUUID(e, s.ImportedTransactionID)
+	}
+	{
+		e.FieldStart("statement_import_id")
+		json.EncodeUUID(e, s.StatementImportID)
+	}
+	{
+		e.FieldStart("state")
+		e.Str(s.State)
+	}
+	{
+		e.FieldStart("booking_date")
+		json.EncodeDate(e, s.BookingDate)
+	}
+	{
+		e.FieldStart("amount")
+		s.Amount.Encode(e)
+	}
+	{
+		e.FieldStart("description")
+		e.Str(s.Description)
+	}
+	{
+		if s.BankTransactionID.Set {
+			e.FieldStart("bank_transaction_id")
+			s.BankTransactionID.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfResembledImportedTransaction = [7]string{
+	0: "imported_transaction_id",
+	1: "statement_import_id",
+	2: "state",
+	3: "booking_date",
+	4: "amount",
+	5: "description",
+	6: "bank_transaction_id",
+}
+
+// Decode decodes ResembledImportedTransaction from json.
+func (s *ResembledImportedTransaction) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ResembledImportedTransaction to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "imported_transaction_id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.ImportedTransactionID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"imported_transaction_id\"")
+			}
+		case "statement_import_id":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.StatementImportID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"statement_import_id\"")
+			}
+		case "state":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Str()
+				s.State = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"state\"")
+			}
+		case "booking_date":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := json.DecodeDate(d)
+				s.BookingDate = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"booking_date\"")
+			}
+		case "amount":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				if err := s.Amount.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"amount\"")
+			}
+		case "description":
+			requiredBitSet[0] |= 1 << 5
+			if err := func() error {
+				v, err := d.Str()
+				s.Description = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"description\"")
+			}
+		case "bank_transaction_id":
+			if err := func() error {
+				s.BankTransactionID.Reset()
+				if err := s.BankTransactionID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"bank_transaction_id\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode ResembledImportedTransaction")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00111111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfResembledImportedTransaction) {
+					name = jsonFieldsNameOfResembledImportedTransaction[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ResembledImportedTransaction) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ResembledImportedTransaction) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -6845,6 +7205,10 @@ func (s *StatementImport) encodeFields(e *jx.Encoder) {
 		e.Int32(s.RowsSkippedAsCertainRepeats)
 	}
 	{
+		e.FieldStart("suspected_duplicates")
+		e.Int32(s.SuspectedDuplicates)
+	}
+	{
 		e.FieldStart("rows_ignored_before_start_date")
 		e.Int32(s.RowsIgnoredBeforeStartDate)
 	}
@@ -6868,18 +7232,19 @@ func (s *StatementImport) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfStatementImport = [11]string{
+var jsonFieldsNameOfStatementImport = [12]string{
 	0:  "statement_import_id",
 	1:  "connection_id",
 	2:  "account_id",
 	3:  "export_balance",
 	4:  "rows_imported",
 	5:  "rows_skipped_as_certain_repeats",
-	6:  "rows_ignored_before_start_date",
-	7:  "rows_total",
-	8:  "opening_balance",
-	9:  "balance_check",
-	10: "imported_at",
+	6:  "suspected_duplicates",
+	7:  "rows_ignored_before_start_date",
+	8:  "rows_total",
+	9:  "opening_balance",
+	10: "balance_check",
+	11: "imported_at",
 }
 
 // Decode decodes StatementImport from json.
@@ -6961,8 +7326,20 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"rows_skipped_as_certain_repeats\"")
 			}
-		case "rows_ignored_before_start_date":
+		case "suspected_duplicates":
 			requiredBitSet[0] |= 1 << 6
+			if err := func() error {
+				v, err := d.Int32()
+				s.SuspectedDuplicates = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"suspected_duplicates\"")
+			}
+		case "rows_ignored_before_start_date":
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				v, err := d.Int32()
 				s.RowsIgnoredBeforeStartDate = int32(v)
@@ -6974,7 +7351,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"rows_ignored_before_start_date\"")
 			}
 		case "rows_total":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				if err := s.RowsTotal.Decode(d); err != nil {
 					return err
@@ -6994,7 +7371,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"opening_balance\"")
 			}
 		case "balance_check":
-			requiredBitSet[1] |= 1 << 1
+			requiredBitSet[1] |= 1 << 2
 			if err := func() error {
 				v, err := d.Str()
 				s.BalanceCheck = string(v)
@@ -7006,7 +7383,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"balance_check\"")
 			}
 		case "imported_at":
-			requiredBitSet[1] |= 1 << 2
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.ImportedAt = v
@@ -7028,7 +7405,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11111111,
-		0b00000110,
+		0b00001101,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

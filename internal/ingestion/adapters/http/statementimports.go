@@ -177,7 +177,7 @@ func (h *StatementImportHandler) ListImportedTransactions(ctx context.Context, p
 	if s, ok := params.State.Get(); ok {
 		state, known := importedStatesIn[s]
 		if !known {
-			return badRequest("", "", "The state must be PENDING or ACCEPTED.")
+			return badRequest("", "", "The state must be PENDING, SUSPECTED_DUPLICATE, ACCEPTED or DISCARDED.")
 		}
 
 		filter.State = state
@@ -350,16 +350,23 @@ func fileProblem(typ, title, detail string) *oas.StatementFileProblem {
 	}
 }
 
+var balanceChecksOut = map[domain.BalanceCheck]string{
+	domain.BalanceCheckPassed:  "PASSED",
+	domain.BalanceCheckWaiting: "WAITING",
+	domain.BalanceCheckFailed:  "FAILED",
+}
+
 func statementImportResponse(i app.StatementImport) (*oas.StatementImport, error) {
 	s := i.State
 	out := &oas.StatementImport{
 		StatementImportID:           i.ID,
 		ConnectionID:                s.ConnectionID,
 		AccountID:                   s.AccountID,
-		RowsImported:                int32(s.RowsImported), //nolint:gosec // a statement file is far smaller
-		RowsSkippedAsCertainRepeats: int32(s.RowsSkipped),  //nolint:gosec // a statement file is far smaller
-		RowsIgnoredBeforeStartDate:  int32(s.RowsIgnored),  //nolint:gosec // a statement file is far smaller
-		BalanceCheck:                "PASSED",
+		RowsImported:                int32(s.RowsImported),        //nolint:gosec // a statement file is far smaller
+		RowsSkippedAsCertainRepeats: int32(s.RowsSkipped),         //nolint:gosec // a statement file is far smaller
+		SuspectedDuplicates:         int32(s.SuspectedDuplicates), //nolint:gosec // a statement file is far smaller
+		RowsIgnoredBeforeStartDate:  int32(s.RowsIgnored),         //nolint:gosec // a statement file is far smaller
+		BalanceCheck:                balanceChecksOut[s.BalanceCheck],
 		ImportedAt:                  s.RecordedAt,
 	}
 

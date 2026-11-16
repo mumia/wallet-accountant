@@ -33,6 +33,9 @@ type StatementRow struct {
 	BankTransactionID string
 	// Amount is signed: positive is money in, negative money out.
 	Amount sharedkernel.Decimal
+	// Resembles is the earlier Imported transaction this row only looks
+	// like, which makes it a Suspected duplicate; the zero ID otherwise.
+	Resembles sharedkernel.ID
 }
 
 // RowError is why one line of a statement file can't be read.

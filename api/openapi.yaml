@@ -505,8 +505,10 @@ paths:
         then in the order they were imported (a file's rows in line order),
         paged with a cursor.
         `state` keeps only those in one state (`PENDING`: waiting for
-        review; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to reach
-        the Ledger) and `booking_month` only one Booking month.
+        review; `SUSPECTED_DUPLICATE`: only looks like an earlier Imported
+        transaction, shown in `resembles`, and waits to be kept or
+        Discarded; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to
+        reach the Ledger) and `booking_month` only one Booking month.
       tags:
         - Imported transactions
       parameters:
@@ -520,6 +522,7 @@ paths:
             type: string
             x-extensible-enum:
               - PENDING
+              - SUSPECTED_DUPLICATE
               - ACCEPTED
               - DISCARDED
             example: PENDING
@@ -554,7 +557,9 @@ paths:
         Transaction list reflect it immediately. An Imported transaction
         already Accepted gets 409
         `/problems/imported-transaction-already-accepted`, and a Discarded
-        one 409 `/problems/imported-transaction-discarded`; any other Internal
+        one 409 `/problems/imported-transaction-discarded`; a Suspected
+        duplicate, not yet kept, gets 409
+        `/problems/imported-transaction-suspected-duplicate`; any other Internal
         Category gets 422 `/problems/internal-category`, and a Category that
         isn't one of the Household's gets 422 `/problems/invalid-category`.
         Retrying with the same Idempotency-Key and body returns the original
@@ -671,14 +676,48 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/imported-transactions/{imported_transaction_id}/keep:
+    post:
+      operationId: keepImportedTransaction
+      summary: Keep a Suspected duplicate
+      description: |
+        Keeps a Suspected duplicate as a real transaction: it becomes
+        pending, to be Accepted or Discarded like any other row, and still
+        shows what it resembled. Deciding the last Suspected duplicate of a
+        Statement import runs its waiting Balance check, recorded as passed
+        or failed. An Imported transaction that isn't a Suspected duplicate
+        gets 409 `/problems/imported-transaction-not-suspected-duplicate`.
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ImportedTransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The kept Imported transaction, now pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
   /households/{household_id}/imported-transactions/{imported_transaction_id}/discard:
     post:
       operationId: discardImportedTransaction
-      summary: Discard a pending Imported transaction
+      summary: Discard a pending Imported transaction or a Suspected duplicate
       description: |
         Discards a pending Imported transaction, for example one whose
-        Transaction was reversed, so it never reaches the Ledger. Discarded
-        is final: it doesn't count in later Balance checks. One already
+        Transaction was reversed, or a Suspected duplicate confirmed as a
+        repeat, so it never reaches the Ledger. Discarded is final: it
+        doesn't count in later Balance checks. Deciding the last Suspected
+        duplicate of a Statement import runs its waiting Balance check. One already
         Discarded gets 409 `/problems/imported-transaction-already-discarded`,
         and an Accepted one 409 `/problems/imported-transaction-already-accepted`
         (reverse its Transaction first).
@@ -1489,6 +1528,7 @@ components:
         - export_balance
         - rows_imported
         - rows_skipped_as_certain_repeats
+        - suspected_duplicates
         - rows_ignored_before_start_date
         - rows_total
         - balance_check
@@ -1520,6 +1560,14 @@ components:
             The rows skipped because an earlier Imported transaction of the
             Account has the same bank transaction ID, Booking date and amount
           example: 12
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: |
+            The imported rows (counted in `rows_imported`) that only look like
+            an earlier Imported transaction of the Account and wait to be kept
+            or Discarded
+          example: 2
         rows_ignored_before_start_date:
           type: integer
           format: int32
@@ -1533,9 +1581,14 @@ components:
           type: string
           description: |
             The Balance check; the first import passes it by construction,
-            and a later import that fails it is refused
+            and a later import without Suspected duplicates that fails it is
+            refused. A later import with Suspected duplicates is `WAITING`
+            until the last one is kept or Discarded, and then `PASSED` or
+            `FAILED`
           x-extensible-enum:
             - PASSED
+            - WAITING
+            - FAILED
           example: PASSED
         imported_at:
           type: string
@@ -1808,6 +1861,7 @@ components:
           description: Where it is in its review
           x-extensible-enum:
             - PENDING
+            - SUSPECTED_DUPLICATE
             - ACCEPTED
             - DISCARDED
           example: PENDING
@@ -1846,6 +1900,52 @@ components:
           type: string
           format: uuid
           description: The Ledger Transaction that booked it, while it is Accepted
+        resembles:
+          $ref: '#/components/schemas/ResembledImportedTransaction'
+    ResembledImportedTransaction:
+      type: object
+      description: |
+        The earlier Imported transaction a Suspected duplicate looks like,
+        shown next to it so a Household member can decide; kept after the
+        Suspected duplicate is decided
+      required:
+        - imported_transaction_id
+        - statement_import_id
+        - state
+        - booking_date
+        - amount
+        - description
+      properties:
+        imported_transaction_id:
+          type: string
+          format: uuid
+          description: The earlier Imported transaction's ID
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import that brought it in
+        state:
+          type: string
+          description: Where it is in its review
+          x-extensible-enum:
+            - PENDING
+            - SUSPECTED_DUPLICATE
+            - ACCEPTED
+            - DISCARDED
+          example: ACCEPTED
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: The bank's description
+        bank_transaction_id:
+          type: string
+          description: The bank's own transaction ID, when the file has one
     ImportedTransactionAcceptance:
       type: object
       description: How to Accept an Imported transaction

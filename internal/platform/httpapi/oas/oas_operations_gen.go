@@ -18,6 +18,7 @@ const (
 	GetAccountOperation                 OperationName = "GetAccount"
 	GetHouseholdOperation               OperationName = "GetHousehold"
 	GetMeOperation                      OperationName = "GetMe"
+	KeepImportedTransactionOperation    OperationName = "KeepImportedTransaction"
 	ListAccountTransactionsOperation    OperationName = "ListAccountTransactions"
 	ListAccountsOperation               OperationName = "ListAccounts"
 	ListCategoriesOperation             OperationName = "ListCategories"

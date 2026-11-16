@@ -49,6 +49,10 @@ type GetMeRes interface {
 	getMeRes()
 }
 
+type KeepImportedTransactionRes interface {
+	keepImportedTransactionRes()
+}
+
 type ListAccountTransactionsRes interface {
 	listAccountTransactionsRes()
 }

@@ -40,7 +40,8 @@ func (c *codeRecorder) Unwrap() http.ResponseWriter {
 // `category_id`. Without `category_id`, or with the Uncategorised Category, the other side waits in
 // Uncategorised. The Account's balance and its Transaction list reflect it immediately. An Imported
 // transaction already Accepted gets 409 `/problems/imported-transaction-already-accepted`, and a
-// Discarded one 409 `/problems/imported-transaction-discarded`; any other Internal Category gets 422
+// Discarded one 409 `/problems/imported-transaction-discarded`; a Suspected duplicate, not yet kept,
+// gets 409 `/problems/imported-transaction-suspected-duplicate`; any other Internal Category gets 422
 // `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
 // `/problems/invalid-category`. Retrying with the same Idempotency-Key and body returns the original
 // result and never books twice.
@@ -1822,9 +1823,11 @@ func (s *Server) handleCreateRegistrationRequest(args [0]string, argsEscaped boo
 
 // handleDiscardImportedTransactionRequest handles discardImportedTransaction operation.
 //
-// Discards a pending Imported transaction, for example one whose Transaction was reversed, so it never
-// reaches the Ledger. Discarded is final: it doesn't count in later Balance checks. One already
-// Discarded gets 409 `/problems/imported-transaction-already-discarded`, and an Accepted one 409
+// Discards a pending Imported transaction, for example one whose Transaction was reversed, or a
+// Suspected duplicate confirmed as a repeat, so it never reaches the Ledger. Discarded is final: it
+// doesn't count in later Balance checks. Deciding the last Suspected duplicate of a Statement import
+// runs its waiting Balance check. One already Discarded gets 409
+// `/problems/imported-transaction-already-discarded`, and an Accepted one 409
 // `/problems/imported-transaction-already-accepted` (reverse its Transaction first).
 //
 // POST /households/{household_id}/imported-transactions/{imported_transaction_id}/discard
@@ -1963,7 +1966,7 @@ func (s *Server) handleDiscardImportedTransactionRequest(args [2]string, argsEsc
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    DiscardImportedTransactionOperation,
-			OperationSummary: "Discard a pending Imported transaction",
+			OperationSummary: "Discard a pending Imported transaction or a Suspected duplicate",
 			OperationID:      "discardImportedTransaction",
 			Body:             nil,
 			RawBody:          rawBody,
@@ -2616,6 +2619,218 @@ func (s *Server) handleGetMeRequest(args [0]string, argsEscaped bool, w http.Res
 	}
 
 	if err := encodeGetMeResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
+// handleKeepImportedTransactionRequest handles keepImportedTransaction operation.
+//
+// Keeps a Suspected duplicate as a real transaction: it becomes pending, to be Accepted or Discarded
+// like any other row, and still shows what it resembled. Deciding the last Suspected duplicate of a
+// Statement import runs its waiting Balance check, recorded as passed or failed. An Imported
+// transaction that isn't a Suspected duplicate gets 409
+// `/problems/imported-transaction-not-suspected-duplicate`.
+//
+// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/keep
+func (s *Server) handleKeepImportedTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("keepImportedTransaction"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.HTTPRouteKey.String("/households/{household_id}/imported-transactions/{imported_transaction_id}/keep"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), KeepImportedTransactionOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(attrs...)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: KeepImportedTransactionOperation,
+			ID:   "keepImportedTransaction",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, KeepImportedTransactionOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+					defer recordError("Security:BearerAuth", err)
+				}
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+				defer recordError("Security", err)
+			}
+			return
+		}
+	}
+	params, err := decodeKeepImportedTransactionParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+
+	var response KeepImportedTransactionRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    KeepImportedTransactionOperation,
+			OperationSummary: "Keep a Suspected duplicate",
+			OperationID:      "keepImportedTransaction",
+			Body:             nil,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "household_id",
+					In:   "path",
+				}: params.HouseholdID,
+				{
+					Name: "imported_transaction_id",
+					In:   "path",
+				}: params.ImportedTransactionID,
+				{
+					Name: "Idempotency-Key",
+					In:   "header",
+				}: params.IdempotencyKey,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = struct{}
+			Params   = KeepImportedTransactionParams
+			Response = KeepImportedTransactionRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackKeepImportedTransactionParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.KeepImportedTransaction(ctx, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.KeepImportedTransaction(ctx, params)
+	}
+	if err != nil {
+		if errRes, ok := errors.Into[*ProblemStatusCode](err); ok {
+			if err := encodeErrorResponse(errRes, w, span); err != nil {
+				defer recordError("Internal", err)
+			}
+			return
+		}
+		if errors.Is(err, ht.ErrNotImplemented) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+		if err := encodeErrorResponse(s.h.NewError(ctx, err), w, span); err != nil {
+			defer recordError("Internal", err)
+		}
+		return
+	}
+
+	if err := encodeKeepImportedTransactionResponse(response, w, span); err != nil {
 		defer recordError("EncodeResponse", err)
 		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
 			s.cfg.ErrorHandler(ctx, w, r, err)
@@ -3639,8 +3854,9 @@ func (s *Server) handleListHouseholdsRequest(args [0]string, argsEscaped bool, w
 //
 // Lists the Account's Imported transactions, sorted by Booking date and then in the order they were
 // imported (a file's rows in line order), paged with a cursor. `state` keeps only those in one state
-// (`PENDING`: waiting for review; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to reach the
-// Ledger) and `booking_month` only one Booking month.
+// (`PENDING`: waiting for review; `SUSPECTED_DUPLICATE`: only looks like an earlier Imported
+// transaction, shown in `resembles`, and waits to be kept or Discarded; `ACCEPTED`: booked in the
+// Ledger; `DISCARDED`: never to reach the Ledger) and `booking_month` only one Booking month.
 //
 // GET /households/{household_id}/accounts/{account_id}/imported-transactions
 func (s *Server) handleListImportedTransactionsRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {

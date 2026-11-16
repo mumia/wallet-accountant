@@ -31,6 +31,12 @@ var (
 	// ErrImportedTransactionAlreadyDiscarded is returned for discarding an
 	// Imported transaction twice.
 	ErrImportedTransactionAlreadyDiscarded = domain.ErrImportedTransactionAlreadyDiscarded
+	// ErrImportedTransactionNotSuspectedDuplicate is returned for keeping an
+	// Imported transaction that isn't a Suspected duplicate.
+	ErrImportedTransactionNotSuspectedDuplicate = domain.ErrImportedTransactionNotSuspectedDuplicate
+	// ErrImportedTransactionSuspectedDuplicate is returned for accepting a
+	// Suspected duplicate before it is kept.
+	ErrImportedTransactionSuspectedDuplicate = domain.ErrImportedTransactionSuspectedDuplicate
 	// ErrCategoryNotFound is returned for accepting with a Category that is
 	// not in the Household.
 	ErrCategoryNotFound = errors.New("category not found")
@@ -40,9 +46,12 @@ var (
 )
 
 // ImportedTransaction is an Imported transaction as the API sees it.
+// Resembles is the earlier Imported transaction a Suspected duplicate
+// looks like, nil for any other row.
 type ImportedTransaction struct {
-	ID    uuid.UUID
-	State domain.ImportedTransactionState
+	ID        uuid.UUID
+	State     domain.ImportedTransactionState
+	Resembles *ImportedTransaction
 }
 
 // ImportedFilter picks a page of an Account's Imported transactions. State
@@ -78,21 +87,26 @@ type ImportedTransactionReader interface {
 	ImportedTransactions(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, filter ImportedFilter) ([]ImportedTransaction, error)
 }
 
-// ImportedTransactions lists Accounts' Imported transactions and Accepts
-// them into the Ledger.
+// ImportedTransactions lists Accounts' Imported transactions, Accepts them
+// into the Ledger, and keeps or Discards them, running a Statement import's
+// waiting Balance check once its last Suspected duplicate is decided.
 type ImportedTransactions struct {
 	scope    HouseholdScope
 	accounts Accounts
 	ledger   Ledger
 	rows     ImportedTransactionAggregate
 	reader   ImportedTransactionReader
+	imports  StatementImportAggregate
+	checks   StatementImportReader
 }
 
 // NewImportedTransactions returns the ImportedTransactions service.
 func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Ledger, rows ImportedTransactionAggregate,
-	reader ImportedTransactionReader,
+	reader ImportedTransactionReader, imports StatementImportAggregate, checks StatementImportReader,
 ) *ImportedTransactions {
-	return &ImportedTransactions{scope: scope, accounts: accounts, ledger: ledger, rows: rows, reader: reader}
+	return &ImportedTransactions{
+		scope: scope, accounts: accounts, ledger: ledger, rows: rows, reader: reader, imports: imports, checks: checks,
+	}
 }
 
 // Accept Accepts a pending Imported transaction and, through the Ledger in
@@ -127,9 +141,9 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 			return err //nolint:wrapcheck // the port's error
 		}
 
-		accepted = ImportedTransaction{ID: id, State: res.State}
+		accepted, err = s.withResembled(ctx, tx, ImportedTransaction{ID: id, State: res.State})
 
-		return nil
+		return err
 	})
 	if err != nil {
 		return ImportedTransaction{}, fmt.Errorf("accept imported transaction %s: %w", id, err)
@@ -151,31 +165,110 @@ func (s *ImportedTransactions) ReturnToPending(ctx context.Context, tx *eventsto
 	return nil
 }
 
-// Discard Discards a pending Imported transaction so it never reaches the
-// Ledger. Discarded is final (consistency map: Keep or Discard Imported
-// transaction).
+// Discard Discards a pending Imported transaction or a Suspected
+// duplicate so it never reaches the Ledger. Discarded is final
+// (consistency map: Keep or Discard Imported transaction).
 func (s *ImportedTransactions) Discard(ctx context.Context, household, id uuid.UUID) (ImportedTransaction, error) {
-	var discarded ImportedTransaction
+	return s.decide(ctx, household, id, "discard", domain.DiscardImportedTransaction{})
+}
+
+// Keep keeps a Suspected duplicate as a real transaction: it becomes
+// pending (consistency map: Keep or Discard Imported transaction).
+func (s *ImportedTransactions) Keep(ctx context.Context, household, id uuid.UUID) (ImportedTransaction, error) {
+	return s.decide(ctx, household, id, "keep", domain.KeepImportedTransaction{})
+}
+
+// decide keeps or Discards an Imported transaction. Deciding a Suspected
+// duplicate locks its Account's Statement imports first, so of two
+// decisions on one import's last Suspected duplicates exactly one sees none
+// left and runs the import's waiting Balance check, in the same
+// transaction (ADR-0018).
+func (s *ImportedTransactions) decide(ctx context.Context, household, id uuid.UUID, action string,
+	cmd domain.ImportedTransactionCommand,
+) (ImportedTransaction, error) {
+	var decided ImportedTransaction
 
 	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		res, err := s.rows.Execute(ctx, tx, id, domain.DiscardImportedTransaction{})
-		if errors.Is(err, domain.ErrImportedTransactionNotImported) {
+		fold, found, err := s.rows.Folds.Load(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !found {
 			return ErrImportedTransactionNotFound
 		}
 
+		// A row is a Suspected duplicate only from its import on, so a row
+		// that isn't one now never becomes one.
+		suspected := fold.State.State == domain.ImportedSuspectedDuplicate
+		if suspected {
+			if err := s.checks.LockAccount(ctx, tx, fold.State.AccountID); err != nil {
+				return err //nolint:wrapcheck // the adapter's error
+			}
+		}
+
+		res, err := s.rows.Execute(ctx, tx, id, cmd)
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}
 
-		discarded = ImportedTransaction{ID: id, State: res.State}
+		if suspected {
+			if err := s.runWaitingCheck(ctx, tx, res.State); err != nil {
+				return err
+			}
+		}
 
-		return nil
+		decided, err = s.withResembled(ctx, tx, ImportedTransaction{ID: id, State: res.State})
+
+		return err
 	})
 	if err != nil {
-		return ImportedTransaction{}, fmt.Errorf("discard imported transaction %s: %w", id, err)
+		return ImportedTransaction{}, fmt.Errorf("%s imported transaction %s: %w", action, id, err)
 	}
 
-	return discarded, nil
+	return decided, nil
+}
+
+// runWaitingCheck runs the Balance check of the row's Statement import once
+// none of its Suspected duplicates is left undecided.
+func (s *ImportedTransactions) runWaitingCheck(ctx context.Context, tx *eventstore.Tx, row domain.ImportedTransactionState) error {
+	undecided, err := s.checks.UndecidedSuspectedDuplicates(ctx, tx, row.StatementImportID)
+	if err != nil || undecided > 0 {
+		return err //nolint:wrapcheck // the adapter's error
+	}
+
+	upTo, err := s.checks.ImportedUpTo(ctx, tx, row.AccountID, row.StatementImportID)
+	if err != nil {
+		return err //nolint:wrapcheck // the adapter's error
+	}
+
+	if _, err := s.imports.Execute(ctx, tx, row.StatementImportID, domain.RunBalanceCheck{
+		OpeningBalance: upTo.OpeningBalance, Total: upTo.Total,
+	}); err != nil {
+		return fmt.Errorf("run balance check of statement import %s: %w", row.StatementImportID, err)
+	}
+
+	return nil
+}
+
+// withResembled adds the earlier Imported transaction the row resembles,
+// if it is or was a Suspected duplicate.
+func (s *ImportedTransactions) withResembled(ctx context.Context, tx *eventstore.Tx, i ImportedTransaction,
+) (ImportedTransaction, error) {
+	if i.State.Resembles == uuid.Nil {
+		return i, nil
+	}
+
+	fold, found, err := s.rows.Folds.Load(ctx, tx, i.State.Resembles)
+	if err != nil {
+		return ImportedTransaction{}, err //nolint:wrapcheck // the adapter's error
+	}
+
+	if found {
+		i.Resembles = &ImportedTransaction{ID: i.State.Resembles, State: fold.State}
+	}
+
+	return i, nil
 }
 
 // List returns a page of the Account's Imported transactions.
@@ -204,6 +297,12 @@ func (s *ImportedTransactions) List(ctx context.Context, household, account uuid
 			items = items[:filter.Limit]
 			last := items[len(items)-1]
 			page.Next = &ImportedCursor{BookingDate: last.State.BookingDate, ID: last.ID}
+		}
+
+		for n, i := range items {
+			if items[n], err = s.withResembled(ctx, tx, i); err != nil {
+				return err
+			}
 		}
 
 		page.Items = items

@@ -29,13 +29,13 @@ var (
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
-	rn33AllowedHeaders = map[string]string{
+	rn34AllowedHeaders = map[string]string{
 		"PUT": "Authorization,Content-Type",
 	}
-	rn24AllowedHeaders = map[string]string{
+	rn25AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
-	rn23AllowedHeaders = map[string]string{
+	rn24AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
 	rn12AllowedHeaders = map[string]string{
@@ -45,11 +45,11 @@ var (
 	rn9AllowedHeaders = map[string]string{
 		"PATCH": "Authorization,Content-Type",
 	}
-	rn28AllowedHeaders = map[string]string{
+	rn29AllowedHeaders = map[string]string{
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
-	rn29AllowedHeaders = map[string]string{
+	rn30AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
 	rn5AllowedHeaders = map[string]string{
@@ -58,10 +58,13 @@ var (
 	rn20AllowedHeaders = map[string]string{
 		"POST": "Authorization,Idempotency-Key",
 	}
+	rn22AllowedHeaders = map[string]string{
+		"POST": "Authorization,Idempotency-Key",
+	}
 	rn11AllowedHeaders = map[string]string{
 		"PATCH": "Authorization,Content-Type",
 	}
-	rn30AllowedHeaders = map[string]string{
+	rn31AllowedHeaders = map[string]string{
 		"POST": "Authorization,Idempotency-Key",
 	}
 	rn21AllowedHeaders = map[string]string{
@@ -347,7 +350,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 													default:
 														s.notAllowed(w, r, notAllowedParams{
 															allowedMethods: "PUT",
-															allowedHeaders: rn33AllowedHeaders,
+															allowedHeaders: rn34AllowedHeaders,
 															acceptPost:     "",
 															acceptPatch:    "",
 														})
@@ -379,7 +382,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 											default:
 												s.notAllowed(w, r, notAllowedParams{
 													allowedMethods: "GET",
-													allowedHeaders: rn24AllowedHeaders,
+													allowedHeaders: rn25AllowedHeaders,
 													acceptPost:     "",
 													acceptPatch:    "",
 												})
@@ -407,7 +410,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 											default:
 												s.notAllowed(w, r, notAllowedParams{
 													allowedMethods: "GET",
-													allowedHeaders: rn23AllowedHeaders,
+													allowedHeaders: rn24AllowedHeaders,
 													acceptPost:     "",
 													acceptPatch:    "",
 												})
@@ -547,7 +550,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "GET,POST",
-												allowedHeaders: rn28AllowedHeaders,
+												allowedHeaders: rn29AllowedHeaders,
 												acceptPost:     "multipart/form-data",
 												acceptPatch:    "",
 											})
@@ -575,7 +578,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 											default:
 												s.notAllowed(w, r, notAllowedParams{
 													allowedMethods: "POST",
-													allowedHeaders: rn29AllowedHeaders,
+													allowedHeaders: rn30AllowedHeaders,
 													acceptPost:     "multipart/form-data",
 													acceptPatch:    "",
 												})
@@ -679,6 +682,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										return
 									}
 
+								case 'k': // Prefix: "keep"
+
+									if l := len("keep"); len(elem) >= l && elem[0:l] == "keep" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch r.Method {
+										case "POST":
+											s.handleKeepImportedTransactionRequest([2]string{
+												args[0],
+												args[1],
+											}, elemIsEscaped, w, r)
+										default:
+											s.notAllowed(w, r, notAllowedParams{
+												allowedMethods: "POST",
+												allowedHeaders: rn22AllowedHeaders,
+												acceptPost:     "",
+												acceptPatch:    "",
+											})
+										}
+
+										return
+									}
+
 								}
 
 							}
@@ -738,7 +769,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 									default:
 										s.notAllowed(w, r, notAllowedParams{
 											allowedMethods: "POST",
-											allowedHeaders: rn30AllowedHeaders,
+											allowedHeaders: rn31AllowedHeaders,
 											acceptPost:     "",
 											acceptPatch:    "",
 										})
@@ -1437,10 +1468,35 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 										switch method {
 										case "POST":
 											r.name = DiscardImportedTransactionOperation
-											r.summary = "Discard a pending Imported transaction"
+											r.summary = "Discard a pending Imported transaction or a Suspected duplicate"
 											r.operationID = "discardImportedTransaction"
 											r.operationGroup = ""
 											r.pathPattern = "/households/{household_id}/imported-transactions/{imported_transaction_id}/discard"
+											r.args = args
+											r.count = 2
+											return r, true
+										default:
+											return
+										}
+									}
+
+								case 'k': // Prefix: "keep"
+
+									if l := len("keep"); len(elem) >= l && elem[0:l] == "keep" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch method {
+										case "POST":
+											r.name = KeepImportedTransactionOperation
+											r.summary = "Keep a Suspected duplicate"
+											r.operationID = "keepImportedTransaction"
+											r.operationGroup = ""
+											r.pathPattern = "/households/{household_id}/imported-transactions/{imported_transaction_id}/keep"
 											r.args = args
 											r.count = 2
 											return r, true

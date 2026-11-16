@@ -1186,7 +1186,8 @@ type ImportedTransaction struct {
 	// The bank's own transaction ID, when the file has one.
 	BankTransactionID OptString `json:"bank_transaction_id"`
 	// The Ledger Transaction that booked it, while it is Accepted.
-	TransactionID OptUUID `json:"transaction_id"`
+	TransactionID OptUUID                         `json:"transaction_id"`
+	Resembles     OptResembledImportedTransaction `json:"resembles"`
 }
 
 // GetImportedTransactionID returns the value of ImportedTransactionID.
@@ -1249,6 +1250,11 @@ func (s *ImportedTransaction) GetTransactionID() OptUUID {
 	return s.TransactionID
 }
 
+// GetResembles returns the value of Resembles.
+func (s *ImportedTransaction) GetResembles() OptResembledImportedTransaction {
+	return s.Resembles
+}
+
 // SetImportedTransactionID sets the value of ImportedTransactionID.
 func (s *ImportedTransaction) SetImportedTransactionID(val uuid.UUID) {
 	s.ImportedTransactionID = val
@@ -1309,8 +1315,14 @@ func (s *ImportedTransaction) SetTransactionID(val OptUUID) {
 	s.TransactionID = val
 }
 
+// SetResembles sets the value of Resembles.
+func (s *ImportedTransaction) SetResembles(val OptResembledImportedTransaction) {
+	s.Resembles = val
+}
+
 func (*ImportedTransaction) acceptImportedTransactionRes()  {}
 func (*ImportedTransaction) discardImportedTransactionRes() {}
+func (*ImportedTransaction) keepImportedTransactionRes()    {}
 
 // How to Accept an Imported transaction.
 // Ref: #/components/schemas/ImportedTransactionAcceptance
@@ -1360,6 +1372,18 @@ func (s *ImportedTransactionPage) SetNextCursor(val OptString) {
 }
 
 func (*ImportedTransactionPage) listImportedTransactionsRes() {}
+
+type KeepImportedTransactionConflict Problem
+
+func (*KeepImportedTransactionConflict) keepImportedTransactionRes() {}
+
+type KeepImportedTransactionNotFound Problem
+
+func (*KeepImportedTransactionNotFound) keepImportedTransactionRes() {}
+
+type KeepImportedTransactionUnauthorized Problem
+
+func (*KeepImportedTransactionUnauthorized) keepImportedTransactionRes() {}
 
 type ListAccountTransactionsBadRequest Problem
 
@@ -1923,6 +1947,52 @@ func (o OptNilUUID) Or(d uuid.UUID) uuid.UUID {
 	return d
 }
 
+// NewOptResembledImportedTransaction returns new OptResembledImportedTransaction with value set to v.
+func NewOptResembledImportedTransaction(v ResembledImportedTransaction) OptResembledImportedTransaction {
+	return OptResembledImportedTransaction{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptResembledImportedTransaction is optional ResembledImportedTransaction.
+type OptResembledImportedTransaction struct {
+	Value ResembledImportedTransaction
+	Set   bool
+}
+
+// IsSet returns true if OptResembledImportedTransaction was set.
+func (o OptResembledImportedTransaction) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptResembledImportedTransaction) Reset() {
+	var v ResembledImportedTransaction
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptResembledImportedTransaction) SetTo(v ResembledImportedTransaction) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptResembledImportedTransaction) Get() (v ResembledImportedTransaction, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptResembledImportedTransaction) Or(d ResembledImportedTransaction) ResembledImportedTransaction {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
 	return OptString{
@@ -2131,6 +2201,95 @@ func (s *Registration) SetInvitationCode(val string) {
 	s.InvitationCode = val
 }
 
+// The earlier Imported transaction a Suspected duplicate looks like, shown next to it so a Household
+// member can decide; kept after the Suspected duplicate is decided.
+// Ref: #/components/schemas/ResembledImportedTransaction
+type ResembledImportedTransaction struct {
+	// The earlier Imported transaction's ID.
+	ImportedTransactionID uuid.UUID `json:"imported_transaction_id"`
+	// The Statement import that brought it in.
+	StatementImportID uuid.UUID `json:"statement_import_id"`
+	// Where it is in its review.
+	State string `json:"state"`
+	// The date the bank recorded it on the Account.
+	BookingDate time.Time `json:"booking_date"`
+	Amount      Money     `json:"amount"`
+	// The bank's description.
+	Description string `json:"description"`
+	// The bank's own transaction ID, when the file has one.
+	BankTransactionID OptString `json:"bank_transaction_id"`
+}
+
+// GetImportedTransactionID returns the value of ImportedTransactionID.
+func (s *ResembledImportedTransaction) GetImportedTransactionID() uuid.UUID {
+	return s.ImportedTransactionID
+}
+
+// GetStatementImportID returns the value of StatementImportID.
+func (s *ResembledImportedTransaction) GetStatementImportID() uuid.UUID {
+	return s.StatementImportID
+}
+
+// GetState returns the value of State.
+func (s *ResembledImportedTransaction) GetState() string {
+	return s.State
+}
+
+// GetBookingDate returns the value of BookingDate.
+func (s *ResembledImportedTransaction) GetBookingDate() time.Time {
+	return s.BookingDate
+}
+
+// GetAmount returns the value of Amount.
+func (s *ResembledImportedTransaction) GetAmount() Money {
+	return s.Amount
+}
+
+// GetDescription returns the value of Description.
+func (s *ResembledImportedTransaction) GetDescription() string {
+	return s.Description
+}
+
+// GetBankTransactionID returns the value of BankTransactionID.
+func (s *ResembledImportedTransaction) GetBankTransactionID() OptString {
+	return s.BankTransactionID
+}
+
+// SetImportedTransactionID sets the value of ImportedTransactionID.
+func (s *ResembledImportedTransaction) SetImportedTransactionID(val uuid.UUID) {
+	s.ImportedTransactionID = val
+}
+
+// SetStatementImportID sets the value of StatementImportID.
+func (s *ResembledImportedTransaction) SetStatementImportID(val uuid.UUID) {
+	s.StatementImportID = val
+}
+
+// SetState sets the value of State.
+func (s *ResembledImportedTransaction) SetState(val string) {
+	s.State = val
+}
+
+// SetBookingDate sets the value of BookingDate.
+func (s *ResembledImportedTransaction) SetBookingDate(val time.Time) {
+	s.BookingDate = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *ResembledImportedTransaction) SetAmount(val Money) {
+	s.Amount = val
+}
+
+// SetDescription sets the value of Description.
+func (s *ResembledImportedTransaction) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetBankTransactionID sets the value of BankTransactionID.
+func (s *ResembledImportedTransaction) SetBankTransactionID(val OptString) {
+	s.BankTransactionID = val
+}
+
 type ReverseTransactionConflict Problem
 
 func (*ReverseTransactionConflict) reverseTransactionRes() {}
@@ -2307,12 +2466,16 @@ type StatementImport struct {
 	// The rows skipped because an earlier Imported transaction of the Account has the same bank
 	// transaction ID, Booking date and amount.
 	RowsSkippedAsCertainRepeats int32 `json:"rows_skipped_as_certain_repeats"`
+	// The imported rows (counted in `rows_imported`) that only look like an earlier Imported transaction
+	// of the Account and wait to be kept or Discarded.
+	SuspectedDuplicates int32 `json:"suspected_duplicates"`
 	// The rows booked before the Account's start date, which were ignored.
 	RowsIgnoredBeforeStartDate int32    `json:"rows_ignored_before_start_date"`
 	RowsTotal                  Money    `json:"rows_total"`
 	OpeningBalance             OptMoney `json:"opening_balance"`
-	// The Balance check; the first import passes it by construction, and a later import that fails it is
-	// refused.
+	// The Balance check; the first import passes it by construction, and a later import without Suspected
+	// duplicates that fails it is refused. A later import with Suspected duplicates is `WAITING` until the
+	// last one is kept or Discarded, and then `PASSED` or `FAILED`.
 	BalanceCheck string `json:"balance_check"`
 	// When the import was recorded.
 	ImportedAt time.Time `json:"imported_at"`
@@ -2346,6 +2509,11 @@ func (s *StatementImport) GetRowsImported() int32 {
 // GetRowsSkippedAsCertainRepeats returns the value of RowsSkippedAsCertainRepeats.
 func (s *StatementImport) GetRowsSkippedAsCertainRepeats() int32 {
 	return s.RowsSkippedAsCertainRepeats
+}
+
+// GetSuspectedDuplicates returns the value of SuspectedDuplicates.
+func (s *StatementImport) GetSuspectedDuplicates() int32 {
+	return s.SuspectedDuplicates
 }
 
 // GetRowsIgnoredBeforeStartDate returns the value of RowsIgnoredBeforeStartDate.
@@ -2401,6 +2569,11 @@ func (s *StatementImport) SetRowsImported(val int32) {
 // SetRowsSkippedAsCertainRepeats sets the value of RowsSkippedAsCertainRepeats.
 func (s *StatementImport) SetRowsSkippedAsCertainRepeats(val int32) {
 	s.RowsSkippedAsCertainRepeats = val
+}
+
+// SetSuspectedDuplicates sets the value of SuspectedDuplicates.
+func (s *StatementImport) SetSuspectedDuplicates(val int32) {
+	s.SuspectedDuplicates = val
 }
 
 // SetRowsIgnoredBeforeStartDate sets the value of RowsIgnoredBeforeStartDate.
