@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (Event store, Decider runtime and event forwarding)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Invitation Decider (instance scope): `issued`, `reissued`, `redeemed`. Redeeming is refused for a wrong code, an expired code (judged by the command's timestamp) or one already redeemed. The fold keeps a lookup row from code hash to Invitation
 - [ ] User Decider (instance scope): `registered`, with OIDC issuer and subject, the redeemed Invitation and the granted role. The fold keeps the Instance administrator flag and a lookup row from issuer and subject to User, whose unique constraint stops one identity from registering twice

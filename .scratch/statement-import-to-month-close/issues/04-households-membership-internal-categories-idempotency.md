@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 (Bootstrap and registration)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Household Decider with membership in its fold; `POST/GET /households` and `GET /households/{household_id}`
 - [ ] Creating a Household seeds its three Internal Categories in the same database transaction (this ticket introduces the Ledger Category aggregate only as far as seeding needs)
