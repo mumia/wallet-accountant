@@ -46,6 +46,7 @@ type statementImport struct {
 	ExportBalance               money  `json:"export_balance"`
 	RowsImported                int    `json:"rows_imported"`
 	RowsSkippedAsCertainRepeats int    `json:"rows_skipped_as_certain_repeats"`
+	SuspectedDuplicates         int    `json:"suspected_duplicates"`
 	RowsIgnoredBeforeStartDate  int    `json:"rows_ignored_before_start_date"`
 	RowsTotal                   money  `json:"rows_total"`
 	OpeningBalance              *money `json:"opening_balance"`
@@ -69,14 +70,28 @@ type accountTransaction struct {
 }
 
 type importedTransaction struct {
+	ImportedTransactionID string     `json:"imported_transaction_id"`
+	StatementImportID     string     `json:"statement_import_id"`
+	State                 string     `json:"state"`
+	Line                  int        `json:"line"`
+	BookingDate           string     `json:"booking_date"`
+	TransactionDate       string     `json:"transaction_date"`
+	Amount                money      `json:"amount"`
+	Description           string     `json:"description"`
+	BankTransactionID     string     `json:"bank_transaction_id"`
+	Resembles             *resembled `json:"resembles"`
+}
+
+// resembled is the earlier Imported transaction a Suspected duplicate
+// looks like.
+type resembled struct {
 	ImportedTransactionID string `json:"imported_transaction_id"`
 	StatementImportID     string `json:"statement_import_id"`
 	State                 string `json:"state"`
-	Line                  int    `json:"line"`
 	BookingDate           string `json:"booking_date"`
-	TransactionDate       string `json:"transaction_date"`
 	Amount                money  `json:"amount"`
 	Description           string `json:"description"`
+	BankTransactionID     string `json:"bank_transaction_id"`
 }
 
 type page[T any] struct {

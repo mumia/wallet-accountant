@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
@@ -31,15 +32,61 @@ type Statement struct {
 	Ignored int
 	// Skipped counts the certain repeats WithoutCertainRepeats left out.
 	Skipped int
-	Total   sharedkernel.Decimal
+	// Suspected counts the rows WithSuspectedDuplicates marked.
+	Suspected int
+	Total     sharedkernel.Decimal
 }
 
-// ImportedKey is what tells a certain repeat: an earlier Imported
-// transaction's bank transaction ID, Booking date and amount.
+// ImportedKey is an earlier Imported transaction of the Account as
+// certain repeats and Suspected duplicates are told by: its ID, bank
+// transaction ID, Booking date, amount and description.
 type ImportedKey struct {
+	ID                sharedkernel.ID
 	BankTransactionID string
 	BookingDate       time.Time
 	Amount            sharedkernel.Decimal
+	Description       string
+}
+
+// WithSuspectedDuplicates marks, and counts, every row that only looks
+// like an earlier Imported transaction of the Account (spec story 39): one
+// with the same bank transaction ID but another Booking date or amount;
+// or, for a row without a bank transaction ID, one with the same Booking
+// date, amount and normalised description. Each row records the first
+// such earlier Imported transaction. Certain repeats must already be left
+// out (WithoutCertainRepeats), and rows are compared only with earlier
+// imports, never with each other (spec story 40e).
+func (s Statement) WithSuspectedDuplicates(earlier []ImportedKey) Statement {
+	out := s
+	out.Rows, out.Suspected = make([]StatementRow, 0, len(s.Rows)), s.Suspected
+
+	for _, r := range s.Rows {
+		i := slices.IndexFunc(earlier, func(k ImportedKey) bool { return resembles(r, k) })
+		if i >= 0 {
+			r.Resembles = earlier[i].ID
+			out.Suspected++
+		}
+
+		out.Rows = append(out.Rows, r)
+	}
+
+	return out
+}
+
+func resembles(r StatementRow, k ImportedKey) bool {
+	if r.BankTransactionID != "" {
+		return k.BankTransactionID == r.BankTransactionID
+	}
+
+	return k.BookingDate.Equal(r.BookingDate) && k.Amount.Equal(r.Amount) &&
+		NormaliseDescription(k.Description) == NormaliseDescription(r.Description)
+}
+
+// NormaliseDescription is a bank description as Suspected duplicates
+// compare it: lower case, with runs of white space made one space and none
+// at either end.
+func NormaliseDescription(d string) string {
+	return strings.Join(strings.Fields(strings.ToLower(d)), " ")
 }
 
 // WithoutCertainRepeats leaves out, and counts, every row whose bank

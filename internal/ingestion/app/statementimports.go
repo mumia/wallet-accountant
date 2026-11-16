@@ -19,12 +19,15 @@ const (
 	StatementImportStreamType   = "ingestion.statementimport"
 	StatementImportRecordedType = "io.walletaccountant.ingestion.statementimport.recorded.v1"
 	StatementImportVoidedType   = "io.walletaccountant.ingestion.statementimport.voided.v1"
+	BalanceCheckPassedType      = "io.walletaccountant.ingestion.statementimport.balancecheckpassed.v1"
+	BalanceCheckFailedType      = "io.walletaccountant.ingestion.statementimport.balancecheckfailed.v1"
 
 	ImportedTransactionStreamType            = "ingestion.importedtransaction"
 	TransactionImportedType                  = "io.walletaccountant.ingestion.importedtransaction.imported.v1"
 	ImportedTransactionAcceptedType          = "io.walletaccountant.ingestion.importedtransaction.accepted.v1"
 	ImportedTransactionReturnedToPendingType = "io.walletaccountant.ingestion.importedtransaction.returnedtopending.v1"
 	ImportedTransactionDiscardedType         = "io.walletaccountant.ingestion.importedtransaction.discarded.v1"
+	ImportedTransactionKeptType              = "io.walletaccountant.ingestion.importedtransaction.kept.v1"
 )
 
 var (
@@ -120,6 +123,8 @@ func NewStatementImportAggregate(folds eventstore.FoldStore[domain.StatementImpo
 	codec := eventstore.NewCodec[domain.StatementImportEvent](Source)
 	eventstore.Register[domain.StatementImportEvent, domain.StatementImportRecorded](codec, StatementImportRecordedType)
 	eventstore.Register[domain.StatementImportEvent, domain.StatementImportVoided](codec, StatementImportVoidedType)
+	eventstore.Register[domain.StatementImportEvent, domain.WaitingCheckPassed](codec, BalanceCheckPassedType)
+	eventstore.Register[domain.StatementImportEvent, domain.WaitingCheckFailed](codec, BalanceCheckFailedType)
 
 	return StatementImportAggregate{
 		StreamType: StatementImportStreamType,
@@ -127,7 +132,8 @@ func NewStatementImportAggregate(folds eventstore.FoldStore[domain.StatementImpo
 		Codec:      codec,
 		Folds:      folds,
 		// 2: when it was voided.
-		FoldSchemaVersion: 2,
+		// 3: its Suspected duplicates, and a waiting or failed check.
+		FoldSchemaVersion: 3,
 	}
 }
 
@@ -142,14 +148,17 @@ func NewImportedTransactionAggregate(folds eventstore.FoldStore[domain.ImportedT
 		ImportedTransactionReturnedToPendingType)
 	eventstore.Register[domain.ImportedTransactionEvent, domain.ImportedTransactionDiscarded](codec,
 		ImportedTransactionDiscardedType)
+	eventstore.Register[domain.ImportedTransactionEvent, domain.ImportedTransactionKept](codec,
+		ImportedTransactionKeptType)
 
 	return ImportedTransactionAggregate{
 		StreamType: ImportedTransactionStreamType,
 		Decider:    domain.ImportedTransaction,
 		Codec:      codec,
 		Folds:      folds,
-		// 2: the Ledger Transaction that booked it.
-		FoldSchemaVersion: 2,
+		// 2: the Ledger Transaction that booked it; 3: the earlier Imported
+		// transaction a Suspected duplicate resembles.
+		FoldSchemaVersion: 3,
 	}
 }
 
@@ -179,6 +188,14 @@ type StatementImportReader interface {
 	LatestImport(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (uuid.UUID, bool, error)
 	// RowsOf returns every Imported transaction of the Statement import.
 	RowsOf(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID) ([]ImportRowState, error)
+	// ImportedUpTo returns the Account's Opening balance and the total of
+	// its non-Discarded Imported transactions from the Statement import and
+	// those recorded before it, which its waiting Balance check runs on.
+	// Keys is left empty.
+	ImportedUpTo(ctx context.Context, tx *eventstore.Tx, account, statementImport uuid.UUID) (ImportedSoFar, error)
+	// UndecidedSuspectedDuplicates counts the Statement import's Imported
+	// transactions that are still Suspected duplicates.
+	UndecidedSuspectedDuplicates(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID) (int, error)
 }
 
 // ImportRowState is an Imported transaction of a Statement import and its
@@ -190,8 +207,8 @@ type ImportRowState struct {
 
 // ImportedSoFar is what an Account's Statement imports have brought in: the
 // Opening balance of its first import, the total of its non-Discarded
-// Imported transactions (pending, Accepted or kept), and the keys of those
-// with a bank transaction ID, which tell certain repeats.
+// Imported transactions (pending, Suspected duplicate, Accepted or kept),
+// and their keys, which tell certain repeats and Suspected duplicates.
 type ImportedSoFar struct {
 	OpeningBalance sharedkernel.Decimal
 	Total          sharedkernel.Decimal
@@ -293,8 +310,10 @@ func (s *StatementImports) Preview(ctx context.Context, household, connection uu
 // Statement import, a pending Imported transaction per row and, through the
 // Ledger, the Opening balance Transaction, all in one database transaction
 // (consistency map: Upload Statement import). A later import takes no
-// preview: with the Account's imports locked, it skips certain repeats and
-// is recorded only if its Balance check passes (ADR-0018).
+// preview: with the Account's imports locked, it skips certain repeats,
+// imports rows that only look like earlier ones as Suspected duplicates,
+// and is recorded only if its Balance check passes, or with the check
+// waiting when it has Suspected duplicates (ADR-0018).
 func (s *StatementImports) Upload(ctx context.Context, household, connection uuid.UUID, up Upload) (StatementImport, error) {
 	ids := newIDs()
 
@@ -347,11 +366,12 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 				return err //nolint:wrapcheck // the adapter's error
 			}
 
-			r.statement = r.statement.WithoutCertainRepeats(soFar.Keys)
+			r.statement = r.statement.WithoutCertainRepeats(soFar.Keys).WithSuspectedDuplicates(soFar.Keys)
 			cmd.OpeningBalance, cmd.EarlierTotal = soFar.OpeningBalance, soFar.Total
 		}
 
 		cmd.RowsImported, cmd.RowsSkipped = len(r.statement.Rows), r.statement.Skipped
+		cmd.SuspectedDuplicates = r.statement.Suspected
 		cmd.RowsIgnored, cmd.RowsTotal = r.statement.Ignored, r.statement.Total
 
 		res, err := s.imports.Execute(ctx, tx, importID, cmd)
@@ -377,6 +397,7 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 				Description:       row.Description,
 				Payee:             row.Payee,
 				BankTransactionID: row.BankTransactionID,
+				Resembles:         row.Resembles,
 			}); err != nil {
 				return fmt.Errorf("import line %d: %w", row.Line, err)
 			}

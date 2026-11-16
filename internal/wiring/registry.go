@@ -77,8 +77,9 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 	connections := ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{})
 	ledger := ingestionLedger{accounts: accounts, transactions: transactions}
 	rows := ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{})
+	statementImports := ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{})
 	*imported = *ingestionapp.NewImportedTransactions(households, accounts, ledger, rows,
-		ingestionpg.ImportedTransactionReader{})
+		ingestionpg.ImportedTransactionReader{}, statementImports, ingestionpg.StatementImportReader{})
 
 	return Contexts{
 		Users:        NewUsers(pool),
@@ -87,8 +88,7 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		Accounts:     accounts,
 		Transactions: transactions,
 		Connections:  ingestionapp.NewConnections(households, accounts, connections, ingestionpg.ConnectionReader{}),
-		StatementImports: ingestionapp.NewStatementImports(households, ledger, connections,
-			ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{}), rows,
+		StatementImports: ingestionapp.NewStatementImports(households, ledger, connections, statementImports, rows,
 			ingestionpg.StatementImportReader{}),
 		ImportedTransactions: imported,
 	}

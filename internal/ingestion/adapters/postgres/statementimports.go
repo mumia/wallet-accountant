@@ -25,7 +25,7 @@ var _ eventstore.FoldStore[domain.StatementImportState] = StatementImportFolds{}
 
 const statementImportColumns = `connection_id, account_id, file_hash, mapping_version, currency, export_balance::text,
 	rows_imported, rows_skipped, rows_ignored, rows_total::text, opening_balance::text, balance_check, recorded_at,
-	voided_at`
+	voided_at, suspected_duplicates`
 
 func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState, error) {
 	var (
@@ -39,6 +39,7 @@ func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState
 	dest := append([]any{
 		&s.ConnectionID, &s.AccountID, &s.FileHash, &s.MappingVersion, &s.Currency, &export,
 		&s.RowsImported, &s.RowsSkipped, &s.RowsIgnored, &total, &opening, &balanceCheck, &s.RecordedAt, &voidedAt,
+		&s.SuspectedDuplicates,
 	}, extra...)
 
 	if err := row.Scan(dest...); err != nil {
@@ -108,13 +109,13 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 	args := []any{
 		tx.HouseholdID(), id, s.ConnectionID, s.AccountID, s.FileHash, s.MappingVersion, s.Currency,
 		s.ExportBalance.String(), s.RowsImported, s.RowsIgnored, s.RowsTotal.String(), opening, string(s.BalanceCheck),
-		s.RecordedAt, f.Version, f.SchemaVersion, s.RowsSkipped, voidedAt,
+		s.RecordedAt, f.Version, f.SchemaVersion, s.RowsSkipped, voidedAt, s.SuspectedDuplicates,
 	}
 	q := `INSERT INTO statement_imports (household_id, id, connection_id, account_id, file_hash, mapping_version, currency,
 	          export_balance, rows_imported, rows_ignored, rows_total, opening_balance, balance_check, recorded_at,
-	          version, schema_version, rows_skipped, voided_at)
+	          version, schema_version, rows_skipped, voided_at, suspected_duplicates)
 	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17,
-	              $18)
+	              $18, $19)
 	      ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
@@ -122,8 +123,8 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 		q = `UPDATE statement_imports SET connection_id = $3, account_id = $4, file_hash = $5, mapping_version = $6,
 		         currency = $7, export_balance = $8::numeric, rows_imported = $9, rows_ignored = $10,
 		         rows_total = $11::numeric, opening_balance = $12::numeric, balance_check = $13, recorded_at = $14,
-		         version = $15, schema_version = $16, rows_skipped = $17, voided_at = $18
-		     WHERE household_id = $1 AND id = $2 AND version = $19`
+		         version = $15, schema_version = $16, rows_skipped = $17, voided_at = $18, suspected_duplicates = $19
+		     WHERE household_id = $1 AND id = $2 AND version = $20`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
@@ -251,8 +252,11 @@ func (StatementImportReader) RowsOf(ctx context.Context, tx *eventstore.Tx, stat
 }
 
 // ImportedSoFar implements app.StatementImportReader. Every state but
-// Discarded counts, so pending, Accepted and kept rows all do. A voided
-// first import's Opening balance doesn't count: it was reversed.
+// Discarded counts, so pending, Suspected duplicate, Accepted and kept rows
+// all do; their keys come in Booking date and import order, so a
+// Suspected duplicate names the first row it resembles. A voided import's
+// rows are all Discarded, and a voided first import's Opening balance
+// doesn't count: it was reversed.
 func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (app.ImportedSoFar, error) {
 	var (
 		soFar          app.ImportedSoFar
@@ -277,8 +281,10 @@ func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.T
 		return app.ImportedSoFar{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
 
-	rows, err := tx.Query(ctx, `SELECT bank_transaction_id, booking_date, amount::text FROM imported_transactions
-		WHERE household_id = $1 AND account_id = $2 AND state <> 'discarded' AND bank_transaction_id <> ''`,
+	rows, err := tx.Query(ctx, `SELECT id, bank_transaction_id, booking_date, amount::text, description
+		FROM imported_transactions
+		WHERE household_id = $1 AND account_id = $2 AND state <> 'discarded'
+		ORDER BY booking_date, id`,
 		tx.HouseholdID(), account)
 	if err != nil {
 		return app.ImportedSoFar{}, fmt.Errorf("read account imports: %w", err)
@@ -290,7 +296,7 @@ func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.T
 			amount string
 		)
 
-		if err := r.Scan(&k.BankTransactionID, &k.BookingDate, &amount); err != nil {
+		if err := r.Scan(&k.ID, &k.BankTransactionID, &k.BookingDate, &amount, &k.Description); err != nil {
 			return k, err //nolint:wrapcheck // wrapped below
 		}
 
@@ -306,13 +312,62 @@ func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.T
 	return soFar, nil
 }
 
+// ImportedUpTo implements app.StatementImportReader. The Statement imports
+// up to this one are those recorded no later than it: imports of one
+// Account are recorded one after the other under LockAccount. Like
+// ImportedSoFar, it leaves out voided imports' Opening balance and rows.
+func (StatementImportReader) ImportedUpTo(ctx context.Context, tx *eventstore.Tx, account, statementImport uuid.UUID,
+) (app.ImportedSoFar, error) {
+	var (
+		upTo           app.ImportedSoFar
+		opening, total string
+	)
+
+	err := tx.QueryRow(ctx, `SELECT
+		    (SELECT COALESCE(SUM(opening_balance), 0)::text FROM statement_imports
+		      WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL),
+		    (SELECT COALESCE(SUM(t.amount), 0)::text FROM imported_transactions t
+		       JOIN statement_imports i ON i.household_id = t.household_id AND i.id = t.statement_import_id
+		      WHERE t.household_id = $1 AND t.account_id = $2 AND t.state <> 'discarded' AND i.voided_at IS NULL
+		        AND (i.recorded_at, i.id) <= (SELECT recorded_at, id FROM statement_imports
+		                                       WHERE household_id = $1 AND id = $3))`,
+		tx.HouseholdID(), account, statementImport).Scan(&opening, &total)
+	if err != nil {
+		return app.ImportedSoFar{}, fmt.Errorf("read account imports up to %s: %w", statementImport, err)
+	}
+
+	if upTo.OpeningBalance, err = sharedkernel.ParseDecimal(opening); err != nil {
+		return app.ImportedSoFar{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	if upTo.Total, err = sharedkernel.ParseDecimal(total); err != nil {
+		return app.ImportedSoFar{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	return upTo, nil
+}
+
+// UndecidedSuspectedDuplicates implements app.StatementImportReader.
+func (StatementImportReader) UndecidedSuspectedDuplicates(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID,
+) (int, error) {
+	var n int
+
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM imported_transactions
+		WHERE household_id = $1 AND statement_import_id = $2 AND state = 'suspected_duplicate'`,
+		tx.HouseholdID(), statementImport).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count undecided suspected duplicates: %w", err)
+	}
+
+	return n, nil
+}
+
 // ImportedTransactionFolds stores Imported transaction folds.
 type ImportedTransactionFolds struct{}
 
 var _ eventstore.FoldStore[domain.ImportedTransactionState] = ImportedTransactionFolds{}
 
 const importedColumns = `statement_import_id, account_id, state, line, booking_date, transaction_date, value_date,
-	amount::text, currency, description, payee, bank_transaction_id, transaction_id`
+	amount::text, currency, description, payee, bank_transaction_id, transaction_id, resembles_imported_transaction_id`
 
 func scanImported(row pgx.Row, extra ...any) (domain.ImportedTransactionState, error) {
 	var (
@@ -321,11 +376,12 @@ func scanImported(row pgx.Row, extra ...any) (domain.ImportedTransactionState, e
 		valueDate *time.Time
 		amount    string
 		booked    *uuid.UUID
+		resembles *uuid.UUID
 	)
 
 	dest := append([]any{
 		&s.StatementImportID, &s.AccountID, &state, &s.Line, &s.BookingDate, &s.TransactionDate, &valueDate,
-		&amount, &s.Currency, &s.Description, &s.Payee, &s.BankTransactionID, &booked,
+		&amount, &s.Currency, &s.Description, &s.Payee, &s.BankTransactionID, &booked, &resembles,
 	}, extra...)
 
 	if err := row.Scan(dest...); err != nil {
@@ -336,6 +392,10 @@ func scanImported(row pgx.Row, extra ...any) (domain.ImportedTransactionState, e
 
 	if booked != nil {
 		s.TransactionID = *booked
+	}
+
+	if resembles != nil {
+		s.Resembles = *resembles
 	}
 
 	if valueDate != nil {
@@ -381,15 +441,20 @@ func (ImportedTransactionFolds) Save(ctx context.Context, tx *eventstore.Tx, id 
 		booked = &s.TransactionID
 	}
 
+	var resembles *uuid.UUID
+	if s.Resembles != uuid.Nil {
+		resembles = &s.Resembles
+	}
+
 	args := []any{
 		tx.HouseholdID(), id, s.StatementImportID, s.AccountID, string(s.State), s.Line, s.BookingDate, s.TransactionDate,
 		valueDate, s.Amount.String(), s.Currency, s.Description, s.Payee, s.BankTransactionID, f.Version, f.SchemaVersion,
-		booked,
+		booked, resembles,
 	}
 	q := `INSERT INTO imported_transactions (household_id, id, statement_import_id, account_id, state, line, booking_date,
 	          transaction_date, value_date, amount, currency, description, payee, bank_transaction_id, version,
-	          schema_version, transaction_id)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, $13, $14, $15, $16, $17)
+	          schema_version, transaction_id, resembles_imported_transaction_id)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, $13, $14, $15, $16, $17, $18)
 	      ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
@@ -397,8 +462,8 @@ func (ImportedTransactionFolds) Save(ctx context.Context, tx *eventstore.Tx, id 
 		q = `UPDATE imported_transactions SET statement_import_id = $3, account_id = $4, state = $5, line = $6,
 		         booking_date = $7, transaction_date = $8, value_date = $9, amount = $10::numeric, currency = $11,
 		         description = $12, payee = $13, bank_transaction_id = $14, version = $15, schema_version = $16,
-		         transaction_id = $17
-		     WHERE household_id = $1 AND id = $2 AND version = $18`
+		         transaction_id = $17, resembles_imported_transaction_id = $18
+		     WHERE household_id = $1 AND id = $2 AND version = $19`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)

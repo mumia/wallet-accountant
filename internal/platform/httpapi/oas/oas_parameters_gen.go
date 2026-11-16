@@ -1517,6 +1517,206 @@ func decodeGetHouseholdParams(args [1]string, argsEscaped bool, r *http.Request)
 	return params, nil
 }
 
+// KeepImportedTransactionParams is parameters of keepImportedTransaction operation.
+type KeepImportedTransactionParams struct {
+	// The Household's ID.
+	HouseholdID uuid.UUID
+	// The Imported transaction's ID.
+	ImportedTransactionID uuid.UUID
+	// A key the client chooses for one request, such as a UUID. Sending the request again with the same
+	// key and body returns the stored response without repeating it; the same key with a different body
+	// gets 422. Keys are scoped to the caller.
+	IdempotencyKey OptString `json:",omitempty,omitzero"`
+}
+
+func unpackKeepImportedTransactionParams(packed middleware.Parameters) (params KeepImportedTransactionParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "household_id",
+			In:   "path",
+		}
+		params.HouseholdID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "imported_transaction_id",
+			In:   "path",
+		}
+		params.ImportedTransactionID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "Idempotency-Key",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.IdempotencyKey = v.(OptString)
+		}
+	}
+	return params
+}
+
+func decodeKeepImportedTransactionParams(args [2]string, argsEscaped bool, r *http.Request) (params KeepImportedTransactionParams, _ error) {
+	h := uri.NewHeaderDecoder(r.Header)
+	// Decode path: household_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "household_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.HouseholdID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "household_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: imported_transaction_id.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "imported_transaction_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ImportedTransactionID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "imported_transaction_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode header: Idempotency-Key.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Idempotency-Key",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotIdempotencyKeyVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotIdempotencyKeyVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.IdempotencyKey.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Idempotency-Key",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // ListAccountTransactionsParams is parameters of listAccountTransactions operation.
 type ListAccountTransactionsParams struct {
 	// The Household's ID.

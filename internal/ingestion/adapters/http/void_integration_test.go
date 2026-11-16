@@ -321,3 +321,53 @@ func TestVoidSurvivesARebuild(t *testing.T) {
 	// The file is still released after the rebuild.
 	f.confirm(t, statement, "2500.00")
 }
+
+// Voiding a later import whose Balance check still waits on undecided
+// Suspected duplicates Discards every row, kept or still suspected, and its
+// check never runs: deciding a row afterwards is refused. Its file is
+// released, so uploading it again brings the Suspected duplicates back
+// (spec stories 40, 43c, 43d).
+func TestVoidingAnImportWithUndecidedSuspectedDuplicates(t *testing.T) {
+	t.Parallel()
+	f := newSuspectedFixture(t, apitest.Start(t), "alice")
+
+	var si statementImport
+	f.upload(t, "", overlapWithoutIDs, "2444.40", "").AssertJSON(t, http.StatusCreated, &si)
+
+	suspected := f.suspected(t)
+	f.decide(t, suspected["coffee"].ImportedTransactionID, "keep", "PENDING")
+
+	v := f.voided(t, si.StatementImportID)
+	if v.BalanceCheck != "WAITING" || v.SuspectedDuplicates != 2 {
+		t.Errorf("voided import = %+v, want it as it was, its check waiting", v)
+	}
+
+	got := f.statesOf(t, si.StatementImportID)
+	if len(got) != 3 {
+		t.Fatalf("rows of the voided import = %v, want its three rows", got)
+	}
+
+	for description, state := range got {
+		if state != "DISCARDED" {
+			t.Errorf("%s = %s, want Discarded", description, state)
+		}
+	}
+
+	f.app.Do(t, http.MethodPost, f.importedPath(suspected["SALARY"].ImportedTransactionID, "discard"), f.token, nil).
+		AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-already-discarded")
+
+	if got := f.importNamed(t, si.StatementImportID); got.BalanceCheck != "WAITING" {
+		t.Errorf("voided import's check = %q, want it never run", got.BalanceCheck)
+	}
+
+	var again statementImport
+	f.upload(t, "", overlapWithoutIDs, "2444.40", "").AssertJSON(t, http.StatusCreated, &again)
+
+	if again.RowsImported != 3 || again.SuspectedDuplicates != 2 || again.BalanceCheck != "WAITING" {
+		t.Errorf("re-upload = %+v, want 3 imported, 2 Suspected duplicates, the check waiting", again)
+	}
+
+	if got := f.suspected(t); len(got) != 2 || got["SALARY"].StatementImportID != again.StatementImportID {
+		t.Errorf("suspected duplicates = %+v, want the re-upload's salary and coffee", got)
+	}
+}

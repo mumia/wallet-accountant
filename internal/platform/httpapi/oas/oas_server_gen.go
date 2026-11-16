@@ -15,7 +15,8 @@ type Handler interface {
 	// `category_id`. Without `category_id`, or with the Uncategorised Category, the other side waits in
 	// Uncategorised. The Account's balance and its Transaction list reflect it immediately. An Imported
 	// transaction already Accepted gets 409 `/problems/imported-transaction-already-accepted`, and a
-	// Discarded one 409 `/problems/imported-transaction-discarded`; any other Internal Category gets 422
+	// Discarded one 409 `/problems/imported-transaction-discarded`; a Suspected duplicate, not yet kept,
+	// gets 409 `/problems/imported-transaction-suspected-duplicate`; any other Internal Category gets 422
 	// `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
 	// `/problems/invalid-category`. Retrying with the same Idempotency-Key and body returns the original
 	// result and never books twice.
@@ -93,9 +94,11 @@ type Handler interface {
 	CreateRegistration(ctx context.Context, req *Registration, params CreateRegistrationParams) (CreateRegistrationRes, error)
 	// DiscardImportedTransaction implements discardImportedTransaction operation.
 	//
-	// Discards a pending Imported transaction, for example one whose Transaction was reversed, so it never
-	// reaches the Ledger. Discarded is final: it doesn't count in later Balance checks. One already
-	// Discarded gets 409 `/problems/imported-transaction-already-discarded`, and an Accepted one 409
+	// Discards a pending Imported transaction, for example one whose Transaction was reversed, or a
+	// Suspected duplicate confirmed as a repeat, so it never reaches the Ledger. Discarded is final: it
+	// doesn't count in later Balance checks. Deciding the last Suspected duplicate of a Statement import
+	// runs its waiting Balance check. One already Discarded gets 409
+	// `/problems/imported-transaction-already-discarded`, and an Accepted one 409
 	// `/problems/imported-transaction-already-accepted` (reverse its Transaction first).
 	//
 	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/discard
@@ -122,6 +125,16 @@ type Handler interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// KeepImportedTransaction implements keepImportedTransaction operation.
+	//
+	// Keeps a Suspected duplicate as a real transaction: it becomes pending, to be Accepted or Discarded
+	// like any other row, and still shows what it resembled. Deciding the last Suspected duplicate of a
+	// Statement import runs its waiting Balance check, recorded as passed or failed. An Imported
+	// transaction that isn't a Suspected duplicate gets 409
+	// `/problems/imported-transaction-not-suspected-duplicate`.
+	//
+	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/keep
+	KeepImportedTransaction(ctx context.Context, params KeepImportedTransactionParams) (KeepImportedTransactionRes, error)
 	// ListAccountTransactions implements listAccountTransactions operation.
 	//
 	// Lists the Account's Transactions as a single-entry list (ADR-0001): each with its signed amount on
@@ -162,8 +175,9 @@ type Handler interface {
 	//
 	// Lists the Account's Imported transactions, sorted by Booking date and then in the order they were
 	// imported (a file's rows in line order), paged with a cursor. `state` keeps only those in one state
-	// (`PENDING`: waiting for review; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to reach the
-	// Ledger) and `booking_month` only one Booking month.
+	// (`PENDING`: waiting for review; `SUSPECTED_DUPLICATE`: only looks like an earlier Imported
+	// transaction, shown in `resembles`, and waits to be kept or Discarded; `ACCEPTED`: booked in the
+	// Ledger; `DISCARDED`: never to reach the Ledger) and `booking_month` only one Booking month.
 	//
 	// GET /households/{household_id}/accounts/{account_id}/imported-transactions
 	ListImportedTransactions(ctx context.Context, params ListImportedTransactionsParams) (ListImportedTransactionsRes, error)

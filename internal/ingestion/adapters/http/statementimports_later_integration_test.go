@@ -131,8 +131,10 @@ func TestALaterImportFailingItsBalanceCheckIsRefused(t *testing.T) {
 }
 
 // A wrong mapping is caught by the next import's check, because the
-// mapping is reused (ADR-0018): with the sign inverted, no row is a
-// certain repeat and the rows add up to the wrong balance.
+// mapping is reused (ADR-0018): with the sign inverted, the new rows add up
+// to the wrong balance. When the file overlaps, the inverted rows only look
+// like the earlier ones (same bank ID, another amount): they are Suspected
+// duplicates, and the check, once they are Discarded as repeats, fails.
 func TestAWrongMappingIsCaughtByTheBalanceCheck(t *testing.T) {
 	t.Parallel()
 	f := newLaterImportFixture(t, apitest.Start(t), "alice")
@@ -141,7 +143,7 @@ func TestAWrongMappingIsCaughtByTheBalanceCheck(t *testing.T) {
 	inverted["positive_amount_means"] = "MONEY_OUT"
 	f.app.Put(t, f.connections()+"/"+f.connection+"/csv-mapping", f.token, inverted).AssertJSON(t, http.StatusOK, &connection{})
 
-	res := f.upload(t, "", overlapping, "2454.90", "")
+	res := f.upload(t, "", "Date;ID;Description;Amount\n10/02/2026;A4;Groceries;-45,10\n", "2454.90", "")
 	res.AssertProblem(t, http.StatusUnprocessableEntity, "/problems/balance-check-failed")
 
 	var p balanceCheckProblem
@@ -149,11 +151,26 @@ func TestAWrongMappingIsCaughtByTheBalanceCheck(t *testing.T) {
 		t.Fatalf("problem = %s (%v)", res.Body, err)
 	}
 
-	// 510.50 + 1989.50 - 3000.00 + 10.50 + 45.10 = -444.40.
-	assertMoney(t, "expected balance", *p.ExpectedBalance, "-444.40")
-	assertMoney(t, "difference", *p.Difference, "2899.30")
+	// 510.50 + 1989.50 + 45.10 = 2545.10.
+	assertMoney(t, "expected balance", *p.ExpectedBalance, "2545.10")
+	assertMoney(t, "difference", *p.Difference, "-90.20")
 
 	f.assertOnlyTheFirstImport(t)
+
+	var si statementImport
+	f.upload(t, "", overlapping, "2454.90", "").AssertJSON(t, http.StatusCreated, &si)
+
+	if si.SuspectedDuplicates != 2 || si.BalanceCheck != "WAITING" {
+		t.Fatalf("overlapping import = %+v, want the inverted salary and coffee as Suspected duplicates", si)
+	}
+
+	for _, i := range f.suspected(t) {
+		f.decide(t, i.ImportedTransactionID, "discard", "DISCARDED")
+	}
+
+	if got := f.importNamed(t, si.StatementImportID); got.BalanceCheck != "FAILED" {
+		t.Errorf("check = %q, want failed: the groceries came in with the wrong sign", got.BalanceCheck)
+	}
 }
 
 // Later imports ask for the Export balance once and take no preview: a
@@ -168,26 +185,6 @@ func TestALaterImportRefusesAPreviewID(t *testing.T) {
 		AssertProblem(t, http.StatusConflict, "/problems/opening-balance-already-recorded")
 
 	f.assertOnlyTheFirstImport(t)
-}
-
-// Without bank transaction IDs nothing is a certain repeat: an overlapping
-// file brings its rows in again, and the check refuses it.
-func TestRowsWithoutBankIDsAreNeverCertainRepeats(t *testing.T) {
-	t.Parallel()
-	f := newImportFixture(t, apitest.Start(t), "alice")
-	f.confirm(t, statement, "2500.00")
-
-	// 510.50 + 1989.50 + 3000.00 - 10.50 = 5489.50 if both rows came in
-	// again; the bank says 2500.00.
-	res := f.upload(t, "", "Date;Description;Amount\n15/01/2026;Salary;3.000,00\n02/02/2026;Coffee;-10,50\n", "2500.00", "")
-	res.AssertProblem(t, http.StatusUnprocessableEntity, "/problems/balance-check-failed")
-
-	var p balanceCheckProblem
-	if err := json.Unmarshal(res.Body, &p); err != nil || p.ExpectedBalance == nil {
-		t.Fatalf("problem = %s (%v)", res.Body, err)
-	}
-
-	assertMoney(t, "expected balance", *p.ExpectedBalance, "5489.50")
 }
 
 func (f importFixture) assertOnlyTheFirstImport(t *testing.T) {
