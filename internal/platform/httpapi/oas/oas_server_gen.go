@@ -8,6 +8,19 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// AcceptImportedTransaction implements acceptImportedTransaction operation.
+	//
+	// Accepts a pending Imported transaction: a balanced Ledger Transaction is recorded in the same
+	// transaction, with exactly the row's amount, dates, description and payee, between the Account and
+	// `category_id`. Without `category_id`, or with the Uncategorised Category, the other side waits in
+	// Uncategorised. The Account's balance and its Transaction list reflect it immediately. An Imported
+	// transaction already Accepted gets 409 `/problems/imported-transaction-already-accepted`; any other
+	// Internal Category gets 422 `/problems/internal-category`, and a Category that isn't one of the
+	// Household's gets 422 `/problems/invalid-category`. Retrying with the same Idempotency-Key and body
+	// returns the original result and never books twice.
+	//
+	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/accept
+	AcceptImportedTransaction(ctx context.Context, req OptImportedTransactionAcceptance, params AcceptImportedTransactionParams) (AcceptImportedTransactionRes, error)
 	// AddAccount implements addAccount operation.
 	//
 	// Adds an Account with a name, a kind, an Account currency and a start date. The new Account awaits
@@ -126,7 +139,8 @@ type Handler interface {
 	//
 	// Lists the Account's Imported transactions, sorted by Booking date and then in the order they were
 	// imported (a file's rows in line order), paged with a cursor. `state` keeps only those in one state
-	// (`PENDING`: waiting for review) and `booking_month` only one Booking month.
+	// (`PENDING`: waiting for review; `ACCEPTED`: booked in the Ledger) and `booking_month` only one
+	// Booking month.
 	//
 	// GET /households/{household_id}/accounts/{account_id}/imported-transactions
 	ListImportedTransactions(ctx context.Context, params ListImportedTransactionsParams) (ListImportedTransactionsRes, error)

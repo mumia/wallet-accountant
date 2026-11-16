@@ -252,7 +252,7 @@ type ImportedTransactionFolds struct{}
 var _ eventstore.FoldStore[domain.ImportedTransactionState] = ImportedTransactionFolds{}
 
 const importedColumns = `statement_import_id, account_id, state, line, booking_date, transaction_date, value_date,
-	amount::text, currency, description, payee, bank_transaction_id`
+	amount::text, currency, description, payee, bank_transaction_id, transaction_id`
 
 func scanImported(row pgx.Row, extra ...any) (domain.ImportedTransactionState, error) {
 	var (
@@ -260,11 +260,12 @@ func scanImported(row pgx.Row, extra ...any) (domain.ImportedTransactionState, e
 		state     string
 		valueDate *time.Time
 		amount    string
+		booked    *uuid.UUID
 	)
 
 	dest := append([]any{
 		&s.StatementImportID, &s.AccountID, &state, &s.Line, &s.BookingDate, &s.TransactionDate, &valueDate,
-		&amount, &s.Currency, &s.Description, &s.Payee, &s.BankTransactionID,
+		&amount, &s.Currency, &s.Description, &s.Payee, &s.BankTransactionID, &booked,
 	}, extra...)
 
 	if err := row.Scan(dest...); err != nil {
@@ -272,6 +273,10 @@ func scanImported(row pgx.Row, extra ...any) (domain.ImportedTransactionState, e
 	}
 
 	s.Imported, s.State = true, domain.ImportedState(state)
+
+	if booked != nil {
+		s.TransactionID = *booked
+	}
 
 	if valueDate != nil {
 		s.ValueDate = *valueDate
@@ -311,22 +316,29 @@ func (ImportedTransactionFolds) Save(ctx context.Context, tx *eventstore.Tx, id 
 		valueDate = &s.ValueDate
 	}
 
+	var booked *uuid.UUID
+	if s.TransactionID != uuid.Nil {
+		booked = &s.TransactionID
+	}
+
 	args := []any{
 		tx.HouseholdID(), id, s.StatementImportID, s.AccountID, string(s.State), s.Line, s.BookingDate, s.TransactionDate,
 		valueDate, s.Amount.String(), s.Currency, s.Description, s.Payee, s.BankTransactionID, f.Version, f.SchemaVersion,
+		booked,
 	}
 	q := `INSERT INTO imported_transactions (household_id, id, statement_import_id, account_id, state, line, booking_date,
 	          transaction_date, value_date, amount, currency, description, payee, bank_transaction_id, version,
-	          schema_version)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, $13, $14, $15, $16)
+	          schema_version, transaction_id)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, $13, $14, $15, $16, $17)
 	      ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
 		args = append(args, expected)
 		q = `UPDATE imported_transactions SET statement_import_id = $3, account_id = $4, state = $5, line = $6,
 		         booking_date = $7, transaction_date = $8, value_date = $9, amount = $10::numeric, currency = $11,
-		         description = $12, payee = $13, bank_transaction_id = $14, version = $15, schema_version = $16
-		     WHERE household_id = $1 AND id = $2 AND version = $17`
+		         description = $12, payee = $13, bank_transaction_id = $14, version = $15, schema_version = $16,
+		         transaction_id = $17
+		     WHERE household_id = $1 AND id = $2 AND version = $18`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)

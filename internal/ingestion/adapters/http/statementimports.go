@@ -42,8 +42,6 @@ const MaxStatementFile = 16 << 20
 // say.
 const DefaultPageSize = 50
 
-var importedStatesOut = map[domain.ImportedState]string{domain.ImportedPending: "PENDING"}
-
 // StatementImportHandler implements the Statement import and Imported
 // transaction operations of oas.Handler.
 type StatementImportHandler struct {
@@ -177,12 +175,12 @@ func (h *StatementImportHandler) ListImportedTransactions(ctx context.Context, p
 	filter := app.ImportedFilter{Limit: int(params.Limit.Or(DefaultPageSize))}
 
 	if s, ok := params.State.Get(); ok {
-		switch s {
-		case "PENDING":
-			filter.State = domain.ImportedPending
-		default:
-			return badRequest("", "", "The state must be PENDING.")
+		state, known := importedStatesIn[s]
+		if !known {
+			return badRequest("", "", "The state must be PENDING or ACCEPTED.")
 		}
+
+		filter.State = state
 	}
 
 	if m, ok := params.BookingMonth.Get(); ok {
@@ -215,34 +213,9 @@ func (h *StatementImportHandler) ListImportedTransactions(ctx context.Context, p
 	out := &oas.ImportedTransactionPage{Items: make([]oas.ImportedTransaction, 0, len(page.Items))}
 
 	for _, i := range page.Items {
-		s := i.State
-
-		a, err := money(s.Amount, s.Currency)
+		item, err := importedTransactionOut(i)
 		if err != nil {
 			return nil, err
-		}
-
-		item := oas.ImportedTransaction{
-			ImportedTransactionID: i.ID,
-			StatementImportID:     s.StatementImportID,
-			State:                 importedStatesOut[s.State],
-			Line:                  int32(s.Line), //nolint:gosec // a statement file is far smaller
-			BookingDate:           s.BookingDate,
-			TransactionDate:       s.TransactionDate,
-			Amount:                a,
-			Description:           s.Description,
-		}
-
-		if !s.ValueDate.IsZero() {
-			item.ValueDate = oas.NewOptDate(s.ValueDate)
-		}
-
-		if s.Payee != "" {
-			item.Payee = oas.NewOptString(s.Payee)
-		}
-
-		if s.BankTransactionID != "" {
-			item.BankTransactionID = oas.NewOptString(s.BankTransactionID)
 		}
 
 		out.Items = append(out.Items, item)

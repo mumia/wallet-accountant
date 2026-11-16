@@ -14,8 +14,9 @@ import (
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 )
 
-// AccountFolds stores Account folds. The running balance per Booking month
-// is kept as lookup rows in account_months, saved with the fold.
+// AccountFolds stores Account folds. The running balance and Uncategorised
+// count per Booking month are kept as lookup rows in account_months, saved
+// with the fold.
 type AccountFolds struct{}
 
 var _ eventstore.FoldStore[domain.AccountState] = AccountFolds{}
@@ -46,32 +47,41 @@ func (AccountFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (
 		f.State.OpeningBalanceTransactionID = *opening
 	}
 
-	if f.State.Months, err = loadMonths(ctx, tx, id); err != nil {
+	if f.State.Months, f.State.Uncategorised, err = loadMonths(ctx, tx, id); err != nil {
 		return eventstore.Fold[domain.AccountState]{}, false, err
 	}
 
 	return f, true, nil
 }
 
-func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (map[string]sharedkernel.Decimal, error) {
-	rows, err := tx.Query(ctx, `SELECT booking_month, net_change::text FROM account_months
+// loadMonths returns the Account's net change and Uncategorised count per
+// Booking month; each map is nil when it has no month.
+func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (map[string]sharedkernel.Decimal, map[string]int, error) {
+	rows, err := tx.Query(ctx, `SELECT booking_month, net_change::text, uncategorised FROM account_months
 		WHERE household_id = $1 AND account_id = $2`, tx.HouseholdID(), account)
 	if err != nil {
-		return nil, fmt.Errorf("load account months: %w", err)
+		return nil, nil, fmt.Errorf("load account months: %w", err)
 	}
 	defer rows.Close()
 
-	var months map[string]sharedkernel.Decimal
+	var (
+		months        map[string]sharedkernel.Decimal
+		uncategorised map[string]int
+	)
 
 	for rows.Next() {
-		var month, change string
-		if err := rows.Scan(&month, &change); err != nil {
-			return nil, fmt.Errorf("load account months: %w", err)
+		var (
+			month, change string
+			count         int
+		)
+
+		if err := rows.Scan(&month, &change, &count); err != nil {
+			return nil, nil, fmt.Errorf("load account months: %w", err)
 		}
 
 		d, err := sharedkernel.ParseDecimal(change)
 		if err != nil {
-			return nil, err //nolint:wrapcheck // already wrapped by the shared kernel
+			return nil, nil, err //nolint:wrapcheck // already wrapped by the shared kernel
 		}
 
 		if months == nil {
@@ -79,13 +89,21 @@ func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (map[
 		}
 
 		months[month] = d
+
+		if count != 0 {
+			if uncategorised == nil {
+				uncategorised = map[string]int{}
+			}
+
+			uncategorised[month] = count
+		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("load account months: %w", err)
+		return nil, nil, fmt.Errorf("load account months: %w", err)
 	}
 
-	return months, nil
+	return months, uncategorised, nil
 }
 
 // Save implements eventstore.FoldStore.
@@ -127,9 +145,22 @@ func (AccountFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f
 		return fmt.Errorf("save account months: %w", err)
 	}
 
-	for month, change := range s.Months {
-		if _, err := tx.Exec(ctx, `INSERT INTO account_months (household_id, account_id, booking_month, net_change)
-			VALUES ($1, $2, $3, $4::numeric)`, tx.HouseholdID(), id, month, change.String()); err != nil {
+	// A month with an Uncategorised count normally moved the balance too,
+	// but a Transaction of zero doesn't: save every month either map has.
+	months := map[string]struct{}{}
+	for m := range s.Months {
+		months[m] = struct{}{}
+	}
+
+	for m := range s.Uncategorised {
+		months[m] = struct{}{}
+	}
+
+	for month := range months {
+		if _, err := tx.Exec(ctx, `INSERT INTO account_months (household_id, account_id, booking_month, net_change,
+				uncategorised)
+			VALUES ($1, $2, $3, $4::numeric, $5)`, tx.HouseholdID(), id, month, s.Months[month].String(),
+			s.Uncategorised[month]); err != nil {
 			return fmt.Errorf("save account months: %w", err)
 		}
 	}

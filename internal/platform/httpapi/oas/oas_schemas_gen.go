@@ -15,6 +15,22 @@ func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
 
+type AcceptImportedTransactionConflict Problem
+
+func (*AcceptImportedTransactionConflict) acceptImportedTransactionRes() {}
+
+type AcceptImportedTransactionNotFound Problem
+
+func (*AcceptImportedTransactionNotFound) acceptImportedTransactionRes() {}
+
+type AcceptImportedTransactionUnauthorized Problem
+
+func (*AcceptImportedTransactionUnauthorized) acceptImportedTransactionRes() {}
+
+type AcceptImportedTransactionUnprocessableEntity Problem
+
+func (*AcceptImportedTransactionUnprocessableEntity) acceptImportedTransactionRes() {}
+
 // An Account.
 // Ref: #/components/schemas/Account
 type Account struct {
@@ -1117,6 +1133,8 @@ type ImportedTransaction struct {
 	Payee OptString `json:"payee"`
 	// The bank's own transaction ID, when the file has one.
 	BankTransactionID OptString `json:"bank_transaction_id"`
+	// The Ledger Transaction that booked it, while it is Accepted.
+	TransactionID OptUUID `json:"transaction_id"`
 }
 
 // GetImportedTransactionID returns the value of ImportedTransactionID.
@@ -1174,6 +1192,11 @@ func (s *ImportedTransaction) GetBankTransactionID() OptString {
 	return s.BankTransactionID
 }
 
+// GetTransactionID returns the value of TransactionID.
+func (s *ImportedTransaction) GetTransactionID() OptUUID {
+	return s.TransactionID
+}
+
 // SetImportedTransactionID sets the value of ImportedTransactionID.
 func (s *ImportedTransaction) SetImportedTransactionID(val uuid.UUID) {
 	s.ImportedTransactionID = val
@@ -1227,6 +1250,31 @@ func (s *ImportedTransaction) SetPayee(val OptString) {
 // SetBankTransactionID sets the value of BankTransactionID.
 func (s *ImportedTransaction) SetBankTransactionID(val OptString) {
 	s.BankTransactionID = val
+}
+
+// SetTransactionID sets the value of TransactionID.
+func (s *ImportedTransaction) SetTransactionID(val OptUUID) {
+	s.TransactionID = val
+}
+
+func (*ImportedTransaction) acceptImportedTransactionRes() {}
+
+// How to Accept an Imported transaction.
+// Ref: #/components/schemas/ImportedTransactionAcceptance
+type ImportedTransactionAcceptance struct {
+	// The Category on the other side of the Transaction; absent, or the Uncategorised Category, leaves it
+	// in Uncategorised.
+	CategoryID OptUUID `json:"category_id"`
+}
+
+// GetCategoryID returns the value of CategoryID.
+func (s *ImportedTransactionAcceptance) GetCategoryID() OptUUID {
+	return s.CategoryID
+}
+
+// SetCategoryID sets the value of CategoryID.
+func (s *ImportedTransactionAcceptance) SetCategoryID(val OptUUID) {
+	s.CategoryID = val
 }
 
 // A page of an Account's Imported transactions.
@@ -1610,6 +1658,52 @@ func (o OptDate) Get() (v time.Time, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptDate) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptImportedTransactionAcceptance returns new OptImportedTransactionAcceptance with value set to v.
+func NewOptImportedTransactionAcceptance(v ImportedTransactionAcceptance) OptImportedTransactionAcceptance {
+	return OptImportedTransactionAcceptance{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptImportedTransactionAcceptance is optional ImportedTransactionAcceptance.
+type OptImportedTransactionAcceptance struct {
+	Value ImportedTransactionAcceptance
+	Set   bool
+}
+
+// IsSet returns true if OptImportedTransactionAcceptance was set.
+func (o OptImportedTransactionAcceptance) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptImportedTransactionAcceptance) Reset() {
+	var v ImportedTransactionAcceptance
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptImportedTransactionAcceptance) SetTo(v ImportedTransactionAcceptance) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptImportedTransactionAcceptance) Get() (v ImportedTransactionAcceptance, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptImportedTransactionAcceptance) Or(d ImportedTransactionAcceptance) ImportedTransactionAcceptance {
 	if v, ok := o.Get(); ok {
 		return v
 	}

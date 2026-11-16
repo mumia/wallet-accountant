@@ -53,6 +53,12 @@ var (
 	// ErrTooManyDecimalPlaces is returned for an amount with more decimal
 	// places than the Account currency has (ADR-0007).
 	ErrTooManyDecimalPlaces = errors.New("too many decimal places for the account currency")
+	// ErrAwaitingFirstStatementImport is returned for booking a Transaction
+	// on an Account that has no Opening balance yet.
+	ErrAwaitingFirstStatementImport = errors.New("account awaits its first statement import")
+	// ErrBookedBeforeStartDate is returned for booking a Transaction before
+	// the Account's start date, where its history doesn't reach.
+	ErrBookedBeforeStartDate = errors.New("booked before the account's start date")
 )
 
 // MonthLayout is how a Booking month is written.
@@ -74,6 +80,9 @@ type AccountState struct {
 	// Months is the running balance per Booking month (MonthLayout): how
 	// much the month's Transactions moved the balance.
 	Months map[string]sharedkernel.Decimal
+	// Uncategorised counts, per Booking month, the Transactions whose other
+	// side is in Uncategorised. A month with none is absent.
+	Uncategorised map[string]int
 }
 
 // HasBalance reports whether the Account has a balance: only once its
@@ -111,10 +120,21 @@ type (
 		TransactionID sharedkernel.ID
 		Amount        sharedkernel.Decimal
 	}
+
+	// BookTransaction moves the Account's balance by a Transaction's
+	// Posting on it, in the Transaction's Booking month. Uncategorised says
+	// its other side is in Uncategorised.
+	BookTransaction struct {
+		TransactionID sharedkernel.ID
+		BookingDate   time.Time
+		Amount        sharedkernel.Decimal
+		Uncategorised bool
+	}
 )
 
 func (AddAccount) isAccountCommand()           {}
 func (RecordOpeningBalance) isAccountCommand() {}
+func (BookTransaction) isAccountCommand()      {}
 
 type (
 	// AccountEvent is an Account's event.
@@ -135,10 +155,20 @@ type (
 		TransactionID sharedkernel.ID      `json:"transactionid"`
 		Amount        sharedkernel.Decimal `json:"amount"`
 	}
+
+	// TransactionBooked is recorded when a Transaction moves the Account's
+	// balance. BookingDate is written with DateLayout.
+	TransactionBooked struct {
+		TransactionID sharedkernel.ID      `json:"transactionid"`
+		BookingDate   string               `json:"bookingdate"`
+		Amount        sharedkernel.Decimal `json:"amount"`
+		Uncategorised bool                 `json:"uncategorised,omitempty"`
+	}
 )
 
 func (AccountAdded) isAccountEvent()           {}
 func (OpeningBalanceRecorded) isAccountEvent() {}
+func (TransactionBooked) isAccountEvent()      {}
 
 // Account is the Account Decider (ADR-0004, ADR-0011).
 var Account = decider.Decider[AccountState, AccountCommand, AccountEvent]{
@@ -152,6 +182,8 @@ func decideAccount(s AccountState, c AccountCommand) ([]AccountEvent, error) {
 		return addAccount(s, c)
 	case RecordOpeningBalance:
 		return recordOpeningBalance(s, c)
+	case BookTransaction:
+		return bookTransaction(s, c)
 	default:
 		return nil, nil
 	}
@@ -214,6 +246,38 @@ func recordOpeningBalance(s AccountState, c RecordOpeningBalance) ([]AccountEven
 	return []AccountEvent{OpeningBalanceRecorded(c)}, nil
 }
 
+// bookTransaction moves the balance of an Account that has its Opening
+// balance, on or after its start date.
+func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) {
+	switch {
+	case !s.Added:
+		return nil, ErrAccountNotAdded
+	case s.AwaitingFirstStatementImport:
+		return nil, ErrAwaitingFirstStatementImport
+	case c.BookingDate.IsZero():
+		return nil, ErrBookingDateRequired
+	case c.BookingDate.Before(s.StartDate):
+		return nil, fmt.Errorf("%w: %s is before %s", ErrBookedBeforeStartDate,
+			c.BookingDate.Format(DateLayout), s.StartDate.Format(DateLayout))
+	}
+
+	currency, err := sharedkernel.ParseCurrency(s.Currency)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // the shared kernel's own refusal
+	}
+
+	if !c.Amount.Equal(c.Amount.Round(int32(currency.Decimals()))) { //nolint:gosec // at most 18 places
+		return nil, fmt.Errorf("%w: %s %s", ErrTooManyDecimalPlaces, c.Amount, currency.Code())
+	}
+
+	return []AccountEvent{TransactionBooked{
+		TransactionID: c.TransactionID,
+		BookingDate:   c.BookingDate.Format(DateLayout),
+		Amount:        c.Amount,
+		Uncategorised: c.Uncategorised,
+	}}, nil
+}
+
 func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountState {
 	switch ev := e.Event.(type) {
 	case AccountAdded:
@@ -226,6 +290,15 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 		s.AwaitingFirstStatementImport = false
 		s.OpeningBalanceTransactionID = ev.TransactionID
 		s.Months = moved(s.Months, s.StartDate.Format(MonthLayout), ev.Amount)
+	case TransactionBooked:
+		// The event was written with DateLayout, so it always parses.
+		date, _ := time.Parse(DateLayout, ev.BookingDate)
+		month := date.Format(MonthLayout)
+		s.Months = moved(s.Months, month, ev.Amount)
+
+		if ev.Uncategorised {
+			s.Uncategorised = counted(s.Uncategorised, month, 1)
+		}
 	}
 
 	return s
@@ -240,6 +313,23 @@ func moved(months map[string]sharedkernel.Decimal, month string, amount sharedke
 	}
 
 	out[month] = out[month].Add(amount)
+
+	return out
+}
+
+// counted returns a copy of counts with month's count moved by n, dropping a
+// month that reaches zero, so a fold never shares its map with an earlier
+// state.
+func counted(counts map[string]int, month string, n int) map[string]int {
+	out := make(map[string]int, len(counts)+1)
+	for m, v := range counts {
+		out[m] = v
+	}
+
+	out[month] += n
+	if out[month] == 0 {
+		delete(out, month)
+	}
 
 	return out
 }
