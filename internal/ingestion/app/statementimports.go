@@ -97,6 +97,11 @@ type Ledger interface {
 	// first Statement import again (consistency map: Void Statement
 	// import).
 	ReverseOpeningBalance(ctx context.Context, tx *eventstore.Tx, account, reversal uuid.UUID) error
+	// FlagClosedMonths flags each closed Booking month of the Account that
+	// one of the Booking dates falls in, for Imported transactions changed
+	// there without booking anything (consistency map: Void Statement
+	// import).
+	FlagClosedMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, bookingDates []time.Time) error
 }
 
 // Booking is an Accepted Imported transaction as the Ledger books it:
@@ -495,10 +500,22 @@ func (s *StatementImports) Void(ctx context.Context, household, connection, id u
 
 		// Each row checks its own state again, so an Accept that raced the
 		// void refuses one or the other.
+		var discarded []time.Time
+
 		for _, r := range rows {
-			if _, err := s.rows.Execute(ctx, tx, r.ID, domain.DiscardForVoid{}); err != nil {
+			row, err := s.rows.Execute(ctx, tx, r.ID, domain.DiscardForVoid{})
+			if err != nil {
 				return fmt.Errorf("discard imported transaction %s: %w", r.ID, err)
 			}
+
+			if len(row.Events) > 0 {
+				discarded = append(discarded, row.State.BookingDate)
+			}
+		}
+
+		// A row Discarded in a closed month changed it (spec story 62).
+		if err := s.ledger.FlagClosedMonths(ctx, tx, account, discarded); err != nil {
+			return err //nolint:wrapcheck // the port's error
 		}
 
 		if res.State.OpeningBalance != nil {

@@ -198,3 +198,50 @@ func closed(closes map[string]MonthClose, month string, c MonthClose) map[string
 
 	return out
 }
+
+// flagged returns closes with month flagged when it is closed: a change
+// after close is allowed but flagged (spec story 62). An open month is left
+// out, and closes is returned as is, so a fold never shares a changed map
+// with an earlier state.
+func flagged(closes map[string]MonthClose, month string) map[string]MonthClose {
+	c, ok := closes[month]
+	if !ok || c.Flagged {
+		return closes
+	}
+
+	c.Flagged = true
+
+	return closed(closes, month, c)
+}
+
+// FlagMonth flags the closed Booking month of Month (any day in it) for a
+// change that touched it without booking anything on the Account: voiding
+// a Statement import whose rows were in it (spec story 62).
+type FlagMonth struct {
+	Month time.Time
+}
+
+func (FlagMonth) isAccountCommand() {}
+
+// MonthFlagged is recorded when a closed Booking month (MonthLayout) is
+// flagged by a change that didn't book anything on the Account.
+type MonthFlagged struct {
+	Month string `json:"month"`
+}
+
+func (MonthFlagged) isAccountEvent() {}
+
+// flagMonth flags a closed month once; an open or already flagged month
+// records nothing.
+func flagMonth(s AccountState, c FlagMonth) ([]AccountEvent, error) {
+	if !s.Added {
+		return nil, ErrAccountNotAdded
+	}
+
+	month := c.Month.Format(MonthLayout)
+	if m, ok := s.Closed[month]; !ok || m.Flagged {
+		return nil, nil
+	}
+
+	return []AccountEvent{MonthFlagged{Month: month}}, nil
+}

@@ -143,6 +143,34 @@ func (m *Months) Close(ctx context.Context, household, account uuid.UUID, month 
 	return out, nil
 }
 
+// FlagClosedMonths flags, in the caller's transaction, each closed Booking
+// month of the Account that one of the dates falls in: Ingestion changed
+// Imported transactions there without booking anything, by voiding a
+// Statement import (spec story 62; consistency map: Void Statement
+// import). Open and already flagged months record nothing.
+func (m *Months) FlagClosedMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, dates []time.Time) error {
+	seen := map[string]bool{}
+
+	for _, d := range dates {
+		month := d.Format(domain.MonthLayout)
+		if seen[month] {
+			continue
+		}
+
+		seen[month] = true
+
+		if _, err := m.accounts.Execute(ctx, tx, account, domain.FlagMonth{Month: d}); err != nil {
+			if errors.Is(err, domain.ErrAccountNotAdded) {
+				return ErrAccountNotFound
+			}
+
+			return fmt.Errorf("flag month %s of account %s: %w", month, account, err)
+		}
+	}
+
+	return nil
+}
+
 func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, imports domain.MonthImports) AccountMonth {
 	key := month.Format(domain.MonthLayout)
 

@@ -22,6 +22,7 @@ import (
 type ingestionLedger struct {
 	accounts     *ledgerapp.Accounts
 	transactions *ledgerapp.Transactions
+	months       *ledgerapp.Months
 }
 
 var _ ingestionapp.Ledger = ingestionLedger{}
@@ -96,6 +97,18 @@ func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b 
 // ReverseOpeningBalance implements ingestionapp.Ledger.
 func (l ingestionLedger) ReverseOpeningBalance(ctx context.Context, tx *eventstore.Tx, account, reversal uuid.UUID) error {
 	err := l.transactions.ReverseOpeningBalance(ctx, tx, account, reversal)
+	if errors.Is(err, ledgerapp.ErrAccountNotFound) {
+		return ingestionapp.ErrAccountNotFound
+	}
+
+	return err //nolint:wrapcheck // already wrapped by the Ledger
+}
+
+// FlagClosedMonths implements ingestionapp.Ledger.
+func (l ingestionLedger) FlagClosedMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+	bookingDates []time.Time,
+) error {
+	err := l.months.FlagClosedMonths(ctx, tx, account, bookingDates)
 	if errors.Is(err, ledgerapp.ErrAccountNotFound) {
 		return ingestionapp.ErrAccountNotFound
 	}
