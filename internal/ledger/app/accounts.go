@@ -148,6 +148,17 @@ func (a *Accounts) Get(ctx context.Context, household, account uuid.UUID) (Accou
 	return got, nil
 }
 
+// AccountExists reports whether the Account belongs to the Household the
+// transaction is set to. Ingestion calls it inside its request transaction.
+func (a *Accounts) AccountExists(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (bool, error) {
+	_, found, err := a.accounts.Folds.Load(ctx, tx, account)
+	if err != nil {
+		return false, fmt.Errorf("find account %s: %w", account, err)
+	}
+
+	return found, nil
+}
+
 func accountOf(id uuid.UUID, s domain.AccountState) Account {
 	return Account{
 		ID: id, Name: s.Name, Kind: s.Kind, Currency: s.Currency, StartDate: s.StartDate,

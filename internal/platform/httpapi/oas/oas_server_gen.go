@@ -39,6 +39,15 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/categories
 	CreateCategory(ctx context.Context, req *CategoryCreation, params CreateCategoryParams) (CreateCategoryRes, error)
+	// CreateConnection implements createConnection operation.
+	//
+	// Creates a statement file import Connection for the Account, optionally with the CSV mapping of the
+	// bank's statement files. Live bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
+	// 422 with the problem type `/problems/invalid-connection`. An invalid mapping gets 422 with
+	// `/problems/invalid-csv-mapping`, and nothing is created.
+	//
+	// POST /households/{household_id}/accounts/{account_id}/connections
+	CreateConnection(ctx context.Context, req *ConnectionCreation, params CreateConnectionParams) (CreateConnectionRes, error)
 	// CreateHousehold implements createHousehold operation.
 	//
 	// Creates a Household with a name and a Base currency. The caller becomes its first member, and its
@@ -90,6 +99,12 @@ type Handler interface {
 	//
 	// GET /households/{household_id}/categories
 	ListCategories(ctx context.Context, params ListCategoriesParams) (ListCategoriesRes, error)
+	// ListConnections implements listConnections operation.
+	//
+	// Lists every Connection of the Account, in the order they were created.
+	//
+	// GET /households/{household_id}/accounts/{account_id}/connections
+	ListConnections(ctx context.Context, params ListConnectionsParams) (ListConnectionsRes, error)
 	// ListHouseholds implements listHouseholds operation.
 	//
 	// Lists the Households the caller is a member of. An unregistered caller gets 403 with the problem
@@ -97,6 +112,15 @@ type Handler interface {
 	//
 	// GET /households
 	ListHouseholds(ctx context.Context) (ListHouseholdsRes, error)
+	// SaveCsvMapping implements saveCsvMapping operation.
+	//
+	// Replaces the Connection's CSV mapping. The mapping is validated as a whole: a missing required
+	// field, an unknown date format, the same column used twice or any other problem gets 422 with the
+	// problem type `/problems/invalid-csv-mapping`, whose detail lists every problem. Every save gives the
+	// mapping a new `csv_mapping_version`.
+	//
+	// PUT /households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping
+	SaveCsvMapping(ctx context.Context, req *CsvMapping, params SaveCsvMappingParams) (SaveCsvMappingRes, error)
 	// NewError creates *ProblemStatusCode from error returned by handler.
 	//
 	// Used for common default response.

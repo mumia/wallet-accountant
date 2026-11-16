@@ -13,6 +13,10 @@ type CreateCategoryRes interface {
 	createCategoryRes()
 }
 
+type CreateConnectionRes interface {
+	createConnectionRes()
+}
+
 type CreateHouseholdRes interface {
 	createHouseholdRes()
 }
@@ -41,6 +45,14 @@ type ListCategoriesRes interface {
 	listCategoriesRes()
 }
 
+type ListConnectionsRes interface {
+	listConnectionsRes()
+}
+
 type ListHouseholdsRes interface {
 	listHouseholdsRes()
+}
+
+type SaveCsvMappingRes interface {
+	saveCsvMappingRes()
 }

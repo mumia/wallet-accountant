@@ -9,6 +9,7 @@ const (
 	AddAccountOperation         OperationName = "AddAccount"
 	ChangeCategoryOperation     OperationName = "ChangeCategory"
 	CreateCategoryOperation     OperationName = "CreateCategory"
+	CreateConnectionOperation   OperationName = "CreateConnection"
 	CreateHouseholdOperation    OperationName = "CreateHousehold"
 	CreateRegistrationOperation OperationName = "CreateRegistration"
 	GetAccountOperation         OperationName = "GetAccount"
@@ -16,5 +17,7 @@ const (
 	GetMeOperation              OperationName = "GetMe"
 	ListAccountsOperation       OperationName = "ListAccounts"
 	ListCategoriesOperation     OperationName = "ListCategories"
+	ListConnectionsOperation    OperationName = "ListConnections"
 	ListHouseholdsOperation     OperationName = "ListHouseholds"
+	SaveCsvMappingOperation     OperationName = "SaveCsvMapping"
 )

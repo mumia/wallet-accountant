@@ -38,6 +38,7 @@ var operationRolesBearerAuth = map[string][]string{
 	AddAccountOperation:         []string{},
 	ChangeCategoryOperation:     []string{},
 	CreateCategoryOperation:     []string{},
+	CreateConnectionOperation:   []string{},
 	CreateHouseholdOperation:    []string{},
 	CreateRegistrationOperation: []string{},
 	GetAccountOperation:         []string{},
@@ -45,7 +46,9 @@ var operationRolesBearerAuth = map[string][]string{
 	GetMeOperation:              []string{},
 	ListAccountsOperation:       []string{},
 	ListCategoriesOperation:     []string{},
+	ListConnectionsOperation:    []string{},
 	ListHouseholdsOperation:     []string{},
+	SaveCsvMappingOperation:     []string{},
 }
 
 // GetRolesForBearerAuth returns the required roles for the given operation.

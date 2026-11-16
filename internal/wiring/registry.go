@@ -7,6 +7,8 @@ import (
 
 	householdspg "github.com/mumia/wallet-accountant/internal/households/adapters/postgres"
 	householdsapp "github.com/mumia/wallet-accountant/internal/households/app"
+	ingestionpg "github.com/mumia/wallet-accountant/internal/ingestion/adapters/postgres"
+	ingestionapp "github.com/mumia/wallet-accountant/internal/ingestion/app"
 	ledgerpg "github.com/mumia/wallet-accountant/internal/ledger/adapters/postgres"
 	ledgerapp "github.com/mumia/wallet-accountant/internal/ledger/app"
 	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
@@ -31,6 +33,8 @@ type Contexts struct {
 	Households *householdsapp.Households
 	Categories *ledgerapp.Categories
 	Accounts   *ledgerapp.Accounts
+	// Connections checks Accounts through the Ledger.
+	Connections *ingestionapp.Connections
 }
 
 // NewContexts builds every bounded context's application services on pool,
@@ -52,12 +56,16 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		ledgerpg.CategoryReader{},
 	)
 
+	accounts := ledgerapp.NewAccounts(households,
+		ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}), ledgerpg.AccountReader{})
+
 	return Contexts{
 		Users:      NewUsers(pool),
 		Households: households,
 		Categories: categories,
-		Accounts: ledgerapp.NewAccounts(households,
-			ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}), ledgerpg.AccountReader{}),
+		Accounts:   accounts,
+		Connections: ingestionapp.NewConnections(households, accounts,
+			ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{}), ingestionpg.ConnectionReader{}),
 	}
 }
 
@@ -76,6 +84,7 @@ func rebuildTargets() []eventstore.RebuildTarget {
 		householdsapp.NewHouseholdAggregate(householdspg.HouseholdFolds{}).RebuildTarget(),
 		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}).RebuildTarget(),
 		ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}).RebuildTarget(),
+		ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{}).RebuildTarget(),
 	}
 }
 
