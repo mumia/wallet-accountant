@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 (Households, membership, Internal Categories and Idempotency-Key)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `POST/GET /households/{household_id}/categories` and `PATCH …/categories/{category_id}` (rename or move)
 - [ ] Kind is Income, Expense or Internal; a child inherits its parent's kind, so an Expense tree never contains an Income Category

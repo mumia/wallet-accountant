@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 (Households, membership, Internal Categories and Idempotency-Key)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `POST/GET /households/{household_id}/accounts` and `GET …/accounts/{account_id}`
 - [ ] Account kinds are bank account, credit card, loan and crypto wallet. Cash Accounts are out of scope for this slice and are refused
