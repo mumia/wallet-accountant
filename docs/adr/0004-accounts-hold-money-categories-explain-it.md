@@ -8,5 +8,5 @@ Standard double-entry treats every bookable thing as an "account": bank accounts
 
 ## Consequences
 
-- Bookings that are neither income nor spending (Opening balances, Balance adjustments, Household transfers, Uncategorised) live in system-created **Internal Categories**, which play the role of Equity. They cannot be budgeted or deleted.
+- Bookings that are neither income nor spending (Opening balances, Household transfers, Uncategorised) live in system-created **Internal Categories**, which play the role of Equity. They cannot be budgeted or deleted.
 - The ledger engine must treat Accounts and Categories the same way when balancing and summing Postings, so the code needs one shared interface for "something a Posting can point at".

@@ -7,6 +7,7 @@ The backend is a single Go binary containing several bounded contexts (Household
 - `all` runs `api` and `worker` in one process.
 - `migrate` applies the embedded schema migrations, then exits.
 - `rebuild` replays event streams to regenerate stored folds and projections (ADR-0011), then exits.
+- `bootstrap` issues the first Instance administrator Invitation and prints its code (ADR-0017), then exits.
 
 No mode other than `migrate` changes the schema. Migrations are forward-only, with no down migrations, and are written as expand/contract steps so the previous release keeps working against the new schema. Docker Compose runs `migrate` as a one-shot service before `all` starts, so self-hosters don't run anything by hand.
 

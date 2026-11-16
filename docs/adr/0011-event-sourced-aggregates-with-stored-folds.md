@@ -26,7 +26,11 @@ Each stored fold records the **fold schema version** it was built with. When `Lo
 
 ## Reads
 
-The API reads a single aggregate's stored fold directly, for example an Account's balance or Month close status, which is always current. Views that span aggregates are projections built asynchronously by Watermill handlers, and are listed as deferred in `docs/architecture/consistency.md`.
+The API reads a single aggregate's stored fold directly, for example an Account's balance or Month close status, which is always current.
+
+A fold may also store **lookup rows**: rows that index the aggregate by a key other than its own ID, such as one row per Posting of a Transaction holding its Account and Booking date. They are written in the same database transaction as the fold, belong to its fold schema version, and are rebuilt with it. A list filtered by such a key, for example an Account's transactions for a month, reads them directly and is always current. We allowed this, rather than making every view that spans aggregates a projection, because such lists are what a User looks at straight after acting (ADR-0013), and they should keep working while the worker is down.
+
+Every other view that spans aggregates, such as totals, search and reports, is a projection built asynchronously by Watermill handlers, and is listed as deferred in `docs/architecture/consistency.md`.
 
 ## Event handlers
 

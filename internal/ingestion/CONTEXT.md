@@ -12,9 +12,25 @@ _Avoid_: Integration, sync, link, feed
 One upload of a bank statement file through a Connection, which produces Imported transactions.
 _Avoid_: Upload, file sync
 
+**Export balance**:
+The bank's booked balance, excluding card authorisations not yet booked, when a statement file was exported. Every Statement import carries one. The first import works out the Account's Opening balance from it, and every later import is checked against it (ADR-0018).
+_Avoid_: Current balance, available balance, closing balance
+
+**Balance check**:
+The test that an Account's Opening balance plus all its non-Discarded Imported transactions equals a Statement import's Export balance. A failed check refuses the import. When the import produced Suspected duplicates, the check waits until they are decided.
+_Avoid_: Reconciliation, validation
+
+**Void**:
+Withdrawing the latest Statement import of an Account, while none of its rows are Accepted, so a corrected file can be uploaded. Its Imported transactions become Discarded.
+_Avoid_: Delete, undo, rollback
+
 **Imported transaction**:
 A transaction brought in through a Connection, as opposed to one a User entered by hand.
 _Avoid_: Bank transaction, synced transaction
+
+**Pending**:
+The state of an Imported transaction waiting for a User to Accept or Discard it. A Suspected duplicate becomes pending when it is kept, and an Accepted one returns to pending when its Transaction is reversed.
+_Avoid_: Unreviewed, new, open, unconfirmed
 
 **Accepted**:
 The state of an Imported transaction that a User has confirmed as new because no manual entry corresponds to it, and whose Category the User has confirmed. The system suggests a Category; if it has none, the transaction goes to Uncategorised.
@@ -23,3 +39,11 @@ _Avoid_: Approved, cleared
 **Rule**:
 A Household's instruction for categorising Imported transactions automatically, such as "payee contains MERCADONA → Groceries". When a Rule applies, it takes priority over suggestions learned from past transactions.
 _Avoid_: Filter, automation, mapping
+
+**Suspected duplicate**:
+An Imported transaction that looks like one already imported for the same Account, but not certainly. It waits until a Household member decides whether to keep it as a real transaction or Discard it. When the bank's own transaction ID proves a repeat, it is skipped at import and never becomes a Suspected duplicate. A Match links two records of one money movement from different sources; a Suspected duplicate is the same source repeating itself.
+_Avoid_: Duplicate, conflict, possible match
+
+**Discarded**:
+The state of an Imported transaction that must never reach the Ledger: a Suspected duplicate confirmed as a repeat, a pending row a Household member rejected, or a row of a voided Statement import. It does not block a Month close and does not count in a Balance check.
+_Avoid_: Deleted, ignored, rejected
