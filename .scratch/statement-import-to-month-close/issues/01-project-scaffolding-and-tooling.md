@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Go module with the layout from the conventions doc (`cmd`, `api`, `internal/<context>/{domain,app,adapters}`, `sharedkernel`, `platform`); Go tools pinned in `go.mod` and run with `go tool`
 - [ ] One binary whose run mode is chosen at start-up (ADR-0009); `api` serves HTTP. Configuration comes only from environment variables
