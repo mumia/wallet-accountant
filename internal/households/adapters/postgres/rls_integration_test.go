@@ -58,3 +58,40 @@ func TestTheMembershipIndexIsOnlyInInstanceScope(t *testing.T) {
 		return err
 	})
 }
+
+// insertNotification inserts the Household's Notification, whose ID is the
+// Household's, so its read rows can refer to it.
+func insertNotification(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
+	_, err := tx.Exec(ctx, `INSERT INTO notifications (household_id, notification_id, kind, statement_import_id,
+		connection_id, account_id, suspected_duplicates, raised_at, version, schema_version)
+		VALUES ($1, $1, 'suspected_duplicates_found', $2, $3, $4, 2, now(), 1, 1)`,
+		household, uuid.New(), uuid.New(), uuid.New())
+
+	return err
+}
+
+func TestNotificationsAreIsolatedByRowLevelSecurity(t *testing.T) {
+	t.Parallel()
+	urls := databasetest.New(t)
+
+	databasetest.AssertHouseholdIsolation(t, urls, databasetest.HouseholdTable{
+		Name:   "notifications",
+		Insert: insertNotification,
+	})
+}
+
+func TestNotificationReadsAreIsolatedByRowLevelSecurity(t *testing.T) {
+	t.Parallel()
+	urls := databasetest.New(t)
+
+	databasetest.AssertHouseholdIsolation(t, urls, databasetest.HouseholdTable{
+		Name:  "notification_reads",
+		Setup: insertNotification,
+		Insert: func(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
+			_, err := tx.Exec(ctx, `INSERT INTO notification_reads (household_id, notification_id, user_id)
+				VALUES ($1, $1, $2)`, household, uuid.New())
+
+			return err
+		},
+	})
+}

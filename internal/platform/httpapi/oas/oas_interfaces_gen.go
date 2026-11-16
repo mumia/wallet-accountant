@@ -85,8 +85,16 @@ type ListImportedTransactionsRes interface {
 	listImportedTransactionsRes()
 }
 
+type ListNotificationsRes interface {
+	listNotificationsRes()
+}
+
 type ListStatementImportsRes interface {
 	listStatementImportsRes()
+}
+
+type MarkNotificationReadRes interface {
+	markNotificationReadRes()
 }
 
 type PreviewStatementImportRes interface {

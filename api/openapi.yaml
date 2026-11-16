@@ -37,6 +37,8 @@ tags:
     description: Rows brought in by Statement imports, waiting for review
   - name: Months
     description: An Account's Booking months, their status and Month close (ADR-0018)
+  - name: Notifications
+    description: Household-level messages every member sees
 paths:
   /me:
     get:
@@ -1010,6 +1012,60 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/notifications:
+    get:
+      operationId: listNotifications
+      summary: The Household's Notifications
+      description: |
+        Lists every Notification of the Household, newest first, with
+        whether the caller has marked it read. Notifications are raised a
+        little after what caused them, by a deferred handler (ADR-0013): a
+        Statement import with Suspected duplicates raises a
+        `SUSPECTED_DUPLICATES_FOUND` one linking to the import.
+      tags:
+        - Notifications
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household's Notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/notifications/{notification_id}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Mark a Notification read
+      description: |
+        Marks the Notification read for the caller only; every other member
+        still sees it unread until they mark it read too. Marking it read
+        again changes nothing.
+      tags:
+        - Notifications
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/NotificationID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The Notification, read by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     IdempotencyKey:
@@ -1062,6 +1118,14 @@ components:
       in: path
       required: true
       description: The Statement import's ID
+      schema:
+        type: string
+        format: uuid
+    NotificationID:
+      name: notification_id
+      in: path
+      required: true
+      description: The Notification's ID
       schema:
         type: string
         format: uuid
@@ -1766,6 +1830,69 @@ components:
           description: The Statement imports, in the order they were recorded
           items:
             $ref: '#/components/schemas/StatementImport'
+    Notification:
+      type: object
+      description: |
+        A Household-level message every member sees, with read state per
+        User. A `SUSPECTED_DUPLICATES_FOUND` one links to the Statement
+        import whose Suspected duplicates wait to be kept or Discarded.
+      required:
+        - notification_id
+        - kind
+        - statement_import_id
+        - connection_id
+        - account_id
+        - suspected_duplicates
+        - created_at
+        - read
+      properties:
+        notification_id:
+          type: string
+          format: uuid
+          description: The Notification's ID (UUIDv7)
+        kind:
+          type: string
+          description: What the Notification is about
+          x-extensible-enum:
+            - SUSPECTED_DUPLICATES_FOUND
+          example: SUSPECTED_DUPLICATES_FOUND
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import the Notification links to
+        connection_id:
+          type: string
+          format: uuid
+          description: The Connection the Statement import came through
+        account_id:
+          type: string
+          format: uuid
+          description: The Account of the Statement import
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: The Suspected duplicates the Statement import brought
+          example: 2
+        created_at:
+          type: string
+          format: date-time
+          description: When the Notification was raised
+          example: '2026-02-01T09:30:01Z'
+        read:
+          type: boolean
+          description: Whether the caller has marked it read
+          example: false
+    NotificationList:
+      type: object
+      description: A Household's Notifications
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Notifications, newest first
+          items:
+            $ref: '#/components/schemas/Notification'
     StatementImportConflictProblem:
       type: object
       description: Problem details (RFC 9457) of a refused Statement import

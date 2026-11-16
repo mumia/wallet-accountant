@@ -84,6 +84,24 @@ func (t *Tx) SetHousehold(ctx context.Context, household uuid.UUID) error {
 // request does once it has resolved its User.
 func (t *Tx) SetActor(user uuid.UUID) { t.scope.ActorID = user }
 
+// HandlerTx lets a deferred handler run commands in the transaction it was
+// given for cause, which forwarding has already set to cause's Household.
+// The events it records belong to that Household, are caused by cause, keep
+// its correlation, and carry the trace of ctx. They have no actor: no User
+// asked for them.
+func HandlerTx(tx pgx.Tx, cause CloudEvent) *Tx {
+	correlation := cause.CorrelationID
+	if correlation == uuid.Nil {
+		correlation = cause.ID
+	}
+
+	return &Tx{Tx: tx, now: time.Now, scope: Scope{
+		HouseholdID:   cause.HouseholdID,
+		CorrelationID: correlation,
+		CausationID:   cause.ID,
+	}}
+}
+
 func setHousehold(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
 	setting := ""
 	if household != uuid.Nil {

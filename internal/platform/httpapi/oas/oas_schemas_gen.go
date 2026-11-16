@@ -1595,6 +1595,14 @@ type ListImportedTransactionsUnauthorized Problem
 
 func (*ListImportedTransactionsUnauthorized) listImportedTransactionsRes() {}
 
+type ListNotificationsNotFound Problem
+
+func (*ListNotificationsNotFound) listNotificationsRes() {}
+
+type ListNotificationsUnauthorized Problem
+
+func (*ListNotificationsUnauthorized) listNotificationsRes() {}
+
 type ListStatementImportsNotFound Problem
 
 func (*ListStatementImportsNotFound) listStatementImportsRes() {}
@@ -1602,6 +1610,14 @@ func (*ListStatementImportsNotFound) listStatementImportsRes() {}
 type ListStatementImportsUnauthorized Problem
 
 func (*ListStatementImportsUnauthorized) listStatementImportsRes() {}
+
+type MarkNotificationReadNotFound Problem
+
+func (*MarkNotificationReadNotFound) markNotificationReadRes() {}
+
+type MarkNotificationReadUnauthorized Problem
+
+func (*MarkNotificationReadUnauthorized) markNotificationReadRes() {}
 
 // The signed-in User.
 // Ref: #/components/schemas/Me
@@ -1831,6 +1847,130 @@ func (s *MonthClosing) GetStatementBalance() Money {
 func (s *MonthClosing) SetStatementBalance(val Money) {
 	s.StatementBalance = val
 }
+
+// A Household-level message every member sees, with read state per User. A
+// `SUSPECTED_DUPLICATES_FOUND` one links to the Statement import whose Suspected duplicates wait to be
+// kept or Discarded.
+// Ref: #/components/schemas/Notification
+type Notification struct {
+	// The Notification's ID (UUIDv7).
+	NotificationID uuid.UUID `json:"notification_id"`
+	// What the Notification is about.
+	Kind string `json:"kind"`
+	// The Statement import the Notification links to.
+	StatementImportID uuid.UUID `json:"statement_import_id"`
+	// The Connection the Statement import came through.
+	ConnectionID uuid.UUID `json:"connection_id"`
+	// The Account of the Statement import.
+	AccountID uuid.UUID `json:"account_id"`
+	// The Suspected duplicates the Statement import brought.
+	SuspectedDuplicates int32 `json:"suspected_duplicates"`
+	// When the Notification was raised.
+	CreatedAt time.Time `json:"created_at"`
+	// Whether the caller has marked it read.
+	Read bool `json:"read"`
+}
+
+// GetNotificationID returns the value of NotificationID.
+func (s *Notification) GetNotificationID() uuid.UUID {
+	return s.NotificationID
+}
+
+// GetKind returns the value of Kind.
+func (s *Notification) GetKind() string {
+	return s.Kind
+}
+
+// GetStatementImportID returns the value of StatementImportID.
+func (s *Notification) GetStatementImportID() uuid.UUID {
+	return s.StatementImportID
+}
+
+// GetConnectionID returns the value of ConnectionID.
+func (s *Notification) GetConnectionID() uuid.UUID {
+	return s.ConnectionID
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *Notification) GetAccountID() uuid.UUID {
+	return s.AccountID
+}
+
+// GetSuspectedDuplicates returns the value of SuspectedDuplicates.
+func (s *Notification) GetSuspectedDuplicates() int32 {
+	return s.SuspectedDuplicates
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *Notification) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetRead returns the value of Read.
+func (s *Notification) GetRead() bool {
+	return s.Read
+}
+
+// SetNotificationID sets the value of NotificationID.
+func (s *Notification) SetNotificationID(val uuid.UUID) {
+	s.NotificationID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *Notification) SetKind(val string) {
+	s.Kind = val
+}
+
+// SetStatementImportID sets the value of StatementImportID.
+func (s *Notification) SetStatementImportID(val uuid.UUID) {
+	s.StatementImportID = val
+}
+
+// SetConnectionID sets the value of ConnectionID.
+func (s *Notification) SetConnectionID(val uuid.UUID) {
+	s.ConnectionID = val
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *Notification) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
+
+// SetSuspectedDuplicates sets the value of SuspectedDuplicates.
+func (s *Notification) SetSuspectedDuplicates(val int32) {
+	s.SuspectedDuplicates = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *Notification) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetRead sets the value of Read.
+func (s *Notification) SetRead(val bool) {
+	s.Read = val
+}
+
+func (*Notification) markNotificationReadRes() {}
+
+// A Household's Notifications.
+// Ref: #/components/schemas/NotificationList
+type NotificationList struct {
+	// The Notifications, newest first.
+	Items []Notification `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *NotificationList) GetItems() []Notification {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *NotificationList) SetItems(val []Notification) {
+	s.Items = val
+}
+
+func (*NotificationList) listNotificationsRes() {}
 
 // NewOptBool returns new OptBool with value set to v.
 func NewOptBool(v bool) OptBool {

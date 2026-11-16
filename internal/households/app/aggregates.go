@@ -21,7 +21,29 @@ const (
 	HouseholdStreamType      = "households.household"
 	HouseholdCreatedType     = "io.walletaccountant.households.household.created.v1"
 	HouseholdMemberAddedType = "io.walletaccountant.households.household.memberadded.v1"
+
+	NotificationStreamType = "households.notification"
+	NotificationRaisedType = "io.walletaccountant.households.notification.raised.v1"
+	NotificationReadType   = "io.walletaccountant.households.notification.read.v1"
 )
+
+// NotificationAggregate is the Notification Decider wired to the runtime.
+type NotificationAggregate = eventstore.Aggregate[domain.NotificationState, domain.NotificationCommand, domain.NotificationEvent]
+
+// NewNotificationAggregate wires the Notification Decider to its fold store.
+func NewNotificationAggregate(folds eventstore.FoldStore[domain.NotificationState]) NotificationAggregate {
+	codec := eventstore.NewCodec[domain.NotificationEvent](Source)
+	eventstore.Register[domain.NotificationEvent, domain.NotificationRaised](codec, NotificationRaisedType)
+	eventstore.Register[domain.NotificationEvent, domain.NotificationRead](codec, NotificationReadType)
+
+	return NotificationAggregate{
+		StreamType:        NotificationStreamType,
+		Decider:           domain.Notification,
+		Codec:             codec,
+		Folds:             folds,
+		FoldSchemaVersion: 1,
+	}
+}
 
 type (
 	// InvitationAggregate is the Invitation Decider wired to the runtime.

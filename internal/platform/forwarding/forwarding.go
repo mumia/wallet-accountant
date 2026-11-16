@@ -102,12 +102,22 @@ func Run(ctx context.Context, cfg Config) error {
 
 	select {
 	case err := <-runErr:
-		if err != nil {
+		// Subscribing fails when the forwarder is stopped while starting.
+		if err != nil && ctx.Err() == nil {
 			return fmt.Errorf("forwarding: %w", err)
 		}
 
 		return nil
 	case <-ctx.Done():
+	}
+
+	// Stopped while subscribing, the router never runs: subscribing fails on
+	// the cancelled context, and closing it would wait for a handler that
+	// never started.
+	select {
+	case <-router.Running():
+	case <-runErr: //nolint:errcheck // the subscription failed because ctx was cancelled
+		return nil
 	}
 
 	closeErr := router.Close()
