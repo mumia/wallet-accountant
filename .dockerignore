@@ -1,0 +1,8 @@
+.git
+.claude
+.scratch
+.env
+bin
+deploy
+docs
+*.md

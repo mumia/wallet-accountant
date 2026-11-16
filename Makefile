@@ -3,6 +3,14 @@
 
 BINARY        := bin/wallet-accountant
 COMPOSE_DEV   := docker compose -f compose.dev.yaml
+IMAGE         ?= wallet-accountant:local
+
+# Self-hosting (compose.yaml). ENV_FILE holds the secrets; `make up` writes it
+# on first use. Set COMPOSE_PROJECT_NAME or COMPOSE_FILE to run another
+# installation side by side (deploy/selfhosted/smoke.sh does).
+ENV_FILE      ?= .env
+COMPOSE       := docker compose --env-file $(ENV_FILE)
+OBSERVABILITY := COLLECTOR_CONFIG=observability $(COMPOSE) --profile observability
 VACUUM        := go tool vacuum lint --ruleset api/zalando-ruleset.yaml --no-banner --no-style
 
 # Development configuration (compose.dev.yaml). Override any of them on the
@@ -16,10 +24,38 @@ export WA_OIDC_AUDIENCE             ?= wallet-accountant
 export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
-.PHONY: help dev-up dev-down run run-api run-worker migrate rebuild dev-bootstrap grafana generate lint lint-go lint-api build test test-integration
+.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down run run-api run-worker migrate rebuild dev-bootstrap grafana generate lint lint-go lint-api build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
+
+## Self-hosted
+
+$(ENV_FILE):
+	deploy/selfhosted/init-env.sh $(ENV_FILE)
+
+up: $(ENV_FILE) ## Start the app, migrations, PostgreSQL, Zitadel and the collector
+	$(COMPOSE) up -d --build --wait
+
+up-observability: $(ENV_FILE) ## Same as up, plus Tempo, Prometheus, Loki and Grafana
+	$(OBSERVABILITY) up -d --build --wait
+
+down: ## Stop the self-hosted stack (the volumes are kept)
+	$(COMPOSE) --profile observability down
+
+logs: ## Follow the app's logs
+	$(COMPOSE) logs -f app
+
+bootstrap: ## Print the bootstrap Invitation code for the first Instance administrator (ADR-0017)
+	@# The code goes only to this terminal: the container is removed, and the
+	@# app logs no more than that an Invitation was issued.
+	@$(COMPOSE) run --rm --no-deps app bootstrap
+
+compose-rebuild: ## Rebuild every fold from the event store in the self-hosted database
+	$(COMPOSE) run --rm --no-deps app rebuild
+
+smoke: ## From scratch, run up and bootstrap in a separate Compose project and redeem the code
+	deploy/selfhosted/smoke.sh
 
 ## Development
 
@@ -69,6 +105,9 @@ lint-api:
 
 build: ## Build the binary
 	CGO_ENABLED=0 go build -trimpath -o $(BINARY) ./cmd/wallet-accountant
+
+docker-build: ## Build the container image
+	docker build -t $(IMAGE) .
 
 test: ## Run the unit tests
 	go test ./...

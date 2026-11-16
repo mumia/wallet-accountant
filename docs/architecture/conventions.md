@@ -25,6 +25,9 @@ internal/platform/              event store, Decider runtime, codec, Watermill w
     telemetry/                  slog, traces and metrics (ADR-0016)
 internal/wiring/                composition root: builds every context and runs a run mode
 internal/apitest/               HTTP test harness: the real app in-process against testcontainers PostgreSQL
+compose.dev.yaml                development dependencies; deploy/dev/ holds their files
+compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secrets generator, PostgreSQL init,
+                                collector, Tempo and Grafana configuration, and the smoke check
 ```
 
 depguard rules in golangci-lint enforce the dependencies. `domain` imports nothing from `app`, `adapters` or `platform`. A context uses another context only through that context's `app` ports.
@@ -69,10 +72,12 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make dev-bootstrap` | Run the `bootstrap` run mode against the dev database |
 | `make grafana` | Open the local Grafana UI |
 | **Self-hosted** (`compose.yaml`; everything in Docker) | |
-| `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector |
+| `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`) |
 | `make up-observability` | Same as `make up`, plus Tempo, Prometheus, Loki and Grafana |
 | `make logs` | Follow the app's logs |
 | `make bootstrap` | Run the `bootstrap` run mode once and print the first Instance administrator Invitation code (ADR-0017) |
+| `make compose-rebuild` | Run the `rebuild` run mode against the self-hosted database |
+| `make smoke` | From nothing, `make up` and `make bootstrap` in a separate Compose project on other ports, redeem the code as a real Zitadel identity, check the code reached no log, then remove everything. `SMOKE_UP=up-observability` also checks Tempo, Prometheus and Loki through Grafana, and that the code is not in Loki |
 | **Build and quality** | |
 | `make generate` | Regenerate code from `api/openapi.yaml` (ogen) and SQL queries (sqlc) |
 | `make lint` | Run golangci-lint (including depguard) and vacuum with the Zalando ruleset |
