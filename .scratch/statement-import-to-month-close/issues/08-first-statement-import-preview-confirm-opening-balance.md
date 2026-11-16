@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 (Connections and CSV mapping)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `POST …/connections/{connection_id}/statement-imports/previews` (multipart: file, `export_balance`, `export_balance_confirmation`) refuses mismatched entries and otherwise returns `preview_id`, the Opening balance on the start date, the row count, rows ignored before the start date and the rows' total. It records nothing
 - [ ] `preview_id` is a hash of Account ID, file hash, Export balance and mapping version, so the server keeps no state
