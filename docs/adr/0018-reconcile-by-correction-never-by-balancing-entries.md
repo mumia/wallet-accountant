@@ -1,0 +1,19 @@
+# Reconcile by correction, never by balancing entries; the Opening balance comes from the bank
+
+An Account's books agree with the bank because every entry is right, never because an entry was added to make the numbers meet. There is no Balance adjustment, and a User can never type an Opening balance.
+
+- **Amounts are the bank's.** A Transaction recorded by Accept carries its Imported transaction's amount exactly, and no command changes a Transaction's amount.
+- **The Opening balance is worked out, not entered.** When an Account is added it has only a start date, and it waits for its first Statement import. Every upload carries an **Export balance**: the bank's booked balance, excluding card authorisations not yet booked, at the moment the file was exported. The first import sets the Opening balance to the Export balance minus the sum of the file's rows on or after the start date, and records it as a Transaction against the Opening balance Internal Category.
+- **Every later import is checked.** The Opening balance plus every non-Discarded Imported transaction must equal the new import's Export balance. Otherwise the import is refused. If the import produced Suspected duplicates, the check waits until they are decided. Month close is refused while any relevant check is waiting or failed.
+- **Gaps are fixed by correcting the wrong entry.** A mistaken Accept is reversed: a reversing Transaction with opposite Postings is linked to the original, and the Imported transaction goes back to pending, to be Accepted again or Discarded. A wrong file or mapping is fixed by voiding the import and uploading again. A missing row is fixed by uploading a fuller file. Overlapping rows are skipped as certain repeats.
+- **Only the latest import can be voided,** and only while none of its rows are Accepted, so every remaining import's check stays valid. Voiding the first import also reverses the Opening balance Transaction, and the Account waits for its first import again. That is the only way to change an Opening balance.
+- **The first Export balance gets extra protection.** It is the only Export balance no Balance check can test, because the Opening balance is worked out from it. So the first import asks for it twice, and records nothing until the User has previewed the resulting Opening balance and confirmed it.
+
+We rejected a Balance adjustment, a typed Opening balance and an "edit amount" command, because each of them lets the books agree with the bank while an entry is still wrong. We rejected working the Opening balance out from the first Month close, because that hides first-month errors the same way a Balance adjustment would.
+
+## Consequences
+
+- An error in the first file is folded into the Opening balance at first. A mapping error is caught by the next import's check, because the mapping is reused. A missing row is caught when a later file that overlaps the period brings it in. Only a row the bank permanently leaves out of every export goes unnoticed.
+- Every bank must provide a booked balance with each export. A bank that offers only an available balance (including card authorisations not yet booked) would fail checks whenever an authorisation is outstanding.
+- An Account with no statement files, such as cash, gets no Opening balance under this rule. How cash Accounts work is still open.
+- Fixing an old import is expensive: every later import must be voided first.

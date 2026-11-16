@@ -1,6 +1,6 @@
 # Household isolation by both row-level security and query filters
 
-Every table and every event carries a `household_id`. Isolation between Households is enforced twice:
+Every Household-scoped table and event carries a `household_id`. Users and Invitations are instance-level: their events have a NULL Household, and their tables have none. Policies admit them only in instance scope, when `app.household_id` is empty (ADR-0017). Isolation between Households is enforced twice:
 
 - **In the application.** Every repository query filters by Household. Tests check that a Household can never read or change another Household's rows.
 - **In PostgreSQL.** Row-level security policies on every Household-scoped table compare `household_id` with a transaction-local setting, `app.household_id`. Each request or event handler sets it with `set_config('app.household_id', …, true)` at the start of its database transaction. Policies read it as `NULLIF(current_setting('app.household_id', true), '')::uuid`: on a pooled connection that has set it before, the setting reads as `''` (not NULL) once the transaction ends, and a plain `::uuid` cast would throw. Tables use `FORCE ROW LEVEL SECURITY`, so the policies also apply to the table owner.

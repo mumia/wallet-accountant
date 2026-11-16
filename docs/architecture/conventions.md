@@ -38,7 +38,9 @@ All aggregate and event IDs are UUIDv7. The application generates them, never th
 
 - Configuration comes only from environment variables.
 - Logs use `log/slog` with JSON output.
-- Traces and metrics use OpenTelemetry. The exporter is on by default. Which telemetry backend to use is still to be decided.
+- Logs, traces and metrics are exported over OTLP by default. Logs also go to stdout as JSON; slog reaches OTLP through the OpenTelemetry slog bridge.
+- Telemetry goes to an OpenTelemetry Collector, which forwards it to the Grafana stack: Tempo for traces, Prometheus for metrics, Loki for logs, Grafana to view them (ADR-0016). Development uses the all-in-one `otel-lgtm` image from `compose.dev.yaml`; self-hosting runs the collector and enables the backends with the `observability` profile (`make up-observability`).
+- Events carry W3C trace context (`traceparent`, ADR-0015), so a Watermill handler continues the trace of the request that caused the event.
 
 ## Make targets
 
@@ -52,11 +54,13 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make run-api` / `make run-worker` | Run a single run mode |
 | `make migrate` | Run the `migrate` run mode against the dev database |
 | `make rebuild` | Run the `rebuild` run mode against the dev database |
+| `make dev-bootstrap` | Run the `bootstrap` run mode against the dev database |
 | `make grafana` | Open the local Grafana UI |
 | **Self-hosted** (`compose.yaml`; everything in Docker) | |
 | `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector |
 | `make up-observability` | Same as `make up`, plus Tempo, Prometheus, Loki and Grafana |
 | `make logs` | Follow the app's logs |
+| `make bootstrap` | Run the `bootstrap` run mode once and print the first Instance administrator Invitation code (ADR-0017) |
 | **Build and quality** | |
 | `make generate` | Regenerate code from `api/openapi.yaml` (ogen) and SQL queries (sqlc) |
 | `make lint` | Run golangci-lint (including depguard) and vacuum with the Zalando ruleset |
