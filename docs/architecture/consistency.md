@@ -9,7 +9,7 @@ Every spec that adds or changes a command adds or updates its row here. Code rev
 | Issue bootstrap Invitation | Households | Bootstrap Invitation issued, or reissued with a new code if still unredeemed; its code lookup row updated | — |
 | Redeem Invitation | Households | Invitation redeemed; User registered with the Invitation's role and its identity lookup row saved | — |
 | Create Household | Households → Ledger | Household created; creator added as member, with the User's membership index row; the three Internal Categories (Opening balance, Household transfer, Uncategorised) created | — |
-| Create Category | Ledger | Category created | — |
+| Create Category | Ledger | Household's Category tree locked; parent and sibling names read and checked; Category created | — |
 | Add Account | Ledger | Account created, awaiting its first Statement import | — |
 | Save CSV mapping | Ingestion | Connection's mapping validated and saved | — |
 | Upload Statement import | Ingestion → Ledger | Statement import recorded with its Export balance; new Imported transactions recorded as pending or Suspected duplicate; certain repeats skipped; Balance check run, or left waiting for Suspected duplicates. First import only: Opening balance Transaction recorded, Account balance set, Account transaction list updated | Notification to the Household when Suspected duplicates were found |
@@ -20,3 +20,4 @@ Every spec that adds or changes a command adds or updates its row here. Code rev
 | Set Transaction Category | Ledger | Transaction's Category changed; Account's Uncategorised count and closed-month flag updated; Account transaction list updated | Category totals, Budget actuals |
 | Reverse Transaction | Ledger → Ingestion | Reversing Transaction recorded and linked; touched Accounts' balances, Uncategorised counts and closed-month flags updated; Account transaction list updated; linked Imported transaction back to pending | Category totals, Budget actuals |
 | Close month | Ledger ← Ingestion | Unresolved Imported transactions and Balance checks checked through the Ingestion port; Account month marked closed with its Statement balance | — |
+| Rename or move Category | Ledger | Household's Category tree locked; new parent and sibling names read and checked; Category renamed and/or moved | — |

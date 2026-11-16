@@ -90,24 +90,194 @@ func (s *Category) SetParentID(val OptUUID) {
 	s.ParentID = val
 }
 
-// A Household's Categories.
-// Ref: #/components/schemas/CategoryList
-type CategoryList struct {
-	// Every Category of the Household.
-	Items []Category `json:"items"`
+func (*Category) changeCategoryRes() {}
+func (*Category) createCategoryRes() {}
+
+// A change to a Category; a property left out stays as it is.
+// Ref: #/components/schemas/CategoryChange
+type CategoryChange struct {
+	// The new name, unique among its siblings.
+	Name OptString `json:"name"`
+	// The Category to move it under, or `null` to make it a root Category.
+	ParentID OptNilUUID `json:"parent_id"`
+}
+
+// GetName returns the value of Name.
+func (s *CategoryChange) GetName() OptString {
+	return s.Name
+}
+
+// GetParentID returns the value of ParentID.
+func (s *CategoryChange) GetParentID() OptNilUUID {
+	return s.ParentID
+}
+
+// SetName sets the value of Name.
+func (s *CategoryChange) SetName(val OptString) {
+	s.Name = val
+}
+
+// SetParentID sets the value of ParentID.
+func (s *CategoryChange) SetParentID(val OptNilUUID) {
+	s.ParentID = val
+}
+
+// A new Category.
+// Ref: #/components/schemas/CategoryCreation
+type CategoryCreation struct {
+	// The Category's name, unique among its siblings.
+	Name string `json:"name"`
+	// INCOME or EXPENSE; required for a root Category. A sub-Category takes its parent's kind.
+	Kind OptString `json:"kind"`
+	// The Category to create it under; absent for a root Category.
+	ParentID OptUUID `json:"parent_id"`
+}
+
+// GetName returns the value of Name.
+func (s *CategoryCreation) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *CategoryCreation) GetKind() OptString {
+	return s.Kind
+}
+
+// GetParentID returns the value of ParentID.
+func (s *CategoryCreation) GetParentID() OptUUID {
+	return s.ParentID
+}
+
+// SetName sets the value of Name.
+func (s *CategoryCreation) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *CategoryCreation) SetKind(val OptString) {
+	s.Kind = val
+}
+
+// SetParentID sets the value of ParentID.
+func (s *CategoryCreation) SetParentID(val OptUUID) {
+	s.ParentID = val
+}
+
+// A Category in the Household's Category tree, with its sub-Categories.
+// Ref: #/components/schemas/CategoryNode
+type CategoryNode struct {
+	// The Category's ID (UUIDv7).
+	CategoryID uuid.UUID `json:"category_id"`
+	// The Category's name.
+	Name string `json:"name"`
+	// What the Category is for; Internal Categories belong to the system.
+	Kind string `json:"kind"`
+	// The parent Category's ID; absent for a root Category.
+	ParentID OptUUID `json:"parent_id"`
+	// The sub-Categories, sorted by name; absent when there are none.
+	Children []CategoryNode `json:"children"`
+}
+
+// GetCategoryID returns the value of CategoryID.
+func (s *CategoryNode) GetCategoryID() uuid.UUID {
+	return s.CategoryID
+}
+
+// GetName returns the value of Name.
+func (s *CategoryNode) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *CategoryNode) GetKind() string {
+	return s.Kind
+}
+
+// GetParentID returns the value of ParentID.
+func (s *CategoryNode) GetParentID() OptUUID {
+	return s.ParentID
+}
+
+// GetChildren returns the value of Children.
+func (s *CategoryNode) GetChildren() []CategoryNode {
+	return s.Children
+}
+
+// SetCategoryID sets the value of CategoryID.
+func (s *CategoryNode) SetCategoryID(val uuid.UUID) {
+	s.CategoryID = val
+}
+
+// SetName sets the value of Name.
+func (s *CategoryNode) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *CategoryNode) SetKind(val string) {
+	s.Kind = val
+}
+
+// SetParentID sets the value of ParentID.
+func (s *CategoryNode) SetParentID(val OptUUID) {
+	s.ParentID = val
+}
+
+// SetChildren sets the value of Children.
+func (s *CategoryNode) SetChildren(val []CategoryNode) {
+	s.Children = val
+}
+
+// A Household's Categories as a tree.
+// Ref: #/components/schemas/CategoryTree
+type CategoryTree struct {
+	// The root Categories, sorted by name, each with its sub-Categories.
+	Items []CategoryNode `json:"items"`
 }
 
 // GetItems returns the value of Items.
-func (s *CategoryList) GetItems() []Category {
+func (s *CategoryTree) GetItems() []CategoryNode {
 	return s.Items
 }
 
 // SetItems sets the value of Items.
-func (s *CategoryList) SetItems(val []Category) {
+func (s *CategoryTree) SetItems(val []CategoryNode) {
 	s.Items = val
 }
 
-func (*CategoryList) listCategoriesRes() {}
+func (*CategoryTree) listCategoriesRes() {}
+
+type ChangeCategoryConflict Problem
+
+func (*ChangeCategoryConflict) changeCategoryRes() {}
+
+type ChangeCategoryNotFound Problem
+
+func (*ChangeCategoryNotFound) changeCategoryRes() {}
+
+type ChangeCategoryUnauthorized Problem
+
+func (*ChangeCategoryUnauthorized) changeCategoryRes() {}
+
+type ChangeCategoryUnprocessableEntity Problem
+
+func (*ChangeCategoryUnprocessableEntity) changeCategoryRes() {}
+
+type CreateCategoryConflict Problem
+
+func (*CreateCategoryConflict) createCategoryRes() {}
+
+type CreateCategoryNotFound Problem
+
+func (*CreateCategoryNotFound) createCategoryRes() {}
+
+type CreateCategoryUnauthorized Problem
+
+func (*CreateCategoryUnauthorized) createCategoryRes() {}
+
+type CreateCategoryUnprocessableEntity Problem
+
+func (*CreateCategoryUnprocessableEntity) createCategoryRes() {}
 
 type CreateHouseholdForbidden Problem
 
@@ -288,6 +458,74 @@ func (s *Me) SetIsInstanceAdministrator(val bool) {
 
 func (*Me) createRegistrationRes() {}
 func (*Me) getMeRes()              {}
+
+// NewOptNilUUID returns new OptNilUUID with value set to v.
+func NewOptNilUUID(v uuid.UUID) OptNilUUID {
+	return OptNilUUID{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilUUID is optional nullable uuid.UUID.
+type OptNilUUID struct {
+	Value uuid.UUID
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilUUID was set.
+func (o OptNilUUID) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilUUID) Reset() {
+	var v uuid.UUID
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilUUID) SetTo(v uuid.UUID) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilUUID) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilUUID) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v uuid.UUID
+	o.Value = v
+}
+
+// IsEmpty returns true if the field was omitted from the payload (not Set and not Null).
+func (o OptNilUUID) IsEmpty() bool {
+	return !o.Set && !o.Null
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilUUID) Get() (v uuid.UUID, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilUUID) Or(d uuid.UUID) uuid.UUID {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
 
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {

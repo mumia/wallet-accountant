@@ -6,6 +6,8 @@ package oas
 type OperationName = string
 
 const (
+	ChangeCategoryOperation     OperationName = "ChangeCategory"
+	CreateCategoryOperation     OperationName = "CreateCategory"
 	CreateHouseholdOperation    OperationName = "CreateHousehold"
 	CreateRegistrationOperation OperationName = "CreateRegistration"
 	GetHouseholdOperation       OperationName = "GetHousehold"

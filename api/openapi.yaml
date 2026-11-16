@@ -166,27 +166,110 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
   /households/{household_id}/categories:
+    post:
+      operationId: createCategory
+      summary: Create a Category
+      description: |
+        Creates an Income or Expense Category, at the root or under
+        `parent_id`. A sub-Category takes its parent's kind, so `kind` may be
+        left out; a different kind is refused. Internal Categories belong to
+        the system: creating one, or a Category under one, gets 422 with the
+        problem type `/problems/internal-category`. A name already used by a
+        sibling (ignoring case and surrounding spaces) gets 409 with the
+        problem type `/problems/category-name-taken`. Any other refusal is
+        422 with the problem type `/problems/invalid-category`.
+      tags:
+        - Categories
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreation'
+      responses:
+        '201':
+          description: The new Category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
     get:
       operationId: listCategories
-      summary: The Household's Categories
+      summary: The Household's Category tree
       description: |
-        Lists every Category of the Household, Internal Categories included.
-        The tree is given by each Category's `parent_id`.
+        Lists every Category of the Household as a tree, Internal Categories
+        included: the root Categories, each with its sub-Categories in
+        `children`. Siblings are sorted by name.
       tags:
         - Categories
       parameters:
         - $ref: '#/components/parameters/HouseholdID'
       responses:
         '200':
-          description: The Household's Categories
+          description: The Household's Category tree
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CategoryList'
+                $ref: '#/components/schemas/CategoryTree'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/categories/{category_id}:
+    patch:
+      operationId: changeCategory
+      summary: Rename or move a Category
+      description: |
+        Renames the Category when `name` is given, and moves it when
+        `parent_id` is given: under that Category, or to the root when it is
+        `null`. A Category keeps its kind, so it can only move under a parent
+        of the same kind, and never under itself or one of its
+        sub-Categories. Internal Categories can't be renamed or moved, and
+        nothing can be moved under one (422, `/problems/internal-category`).
+        A name already used by a sibling in the place the Category ends up
+        gets 409 (`/problems/category-name-taken`); any other refusal is 422
+        (`/problems/invalid-category`).
+      tags:
+        - Categories
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/CategoryID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryChange'
+      responses:
+        '200':
+          description: The Category as changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
         default:
           $ref: '#/components/responses/Problem'
 components:
@@ -209,6 +292,14 @@ components:
       in: path
       required: true
       description: The Household's ID
+      schema:
+        type: string
+        format: uuid
+    CategoryID:
+      name: category_id
+      in: path
+      required: true
+      description: The Category's ID
       schema:
         type: string
         format: uuid
@@ -353,17 +444,90 @@ components:
           type: string
           format: uuid
           description: The parent Category's ID; absent for a root Category
-    CategoryList:
+    CategoryNode:
       type: object
-      description: A Household's Categories
+      description: A Category in the Household's Category tree, with its sub-Categories
+      required:
+        - category_id
+        - name
+        - kind
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: The Category's ID (UUIDv7)
+        name:
+          type: string
+          description: The Category's name
+          example: Eating out
+        kind:
+          type: string
+          description: What the Category is for; Internal Categories belong to the system
+          x-extensible-enum:
+            - INCOME
+            - EXPENSE
+            - INTERNAL
+          example: EXPENSE
+        parent_id:
+          type: string
+          format: uuid
+          description: The parent Category's ID; absent for a root Category
+        children:
+          type: array
+          description: The sub-Categories, sorted by name; absent when there are none
+          items:
+            $ref: '#/components/schemas/CategoryNode'
+    CategoryTree:
+      type: object
+      description: A Household's Categories as a tree
       required:
         - items
       properties:
         items:
           type: array
-          description: Every Category of the Household
+          description: The root Categories, sorted by name, each with its sub-Categories
           items:
-            $ref: '#/components/schemas/Category'
+            $ref: '#/components/schemas/CategoryNode'
+    CategoryCreation:
+      type: object
+      description: A new Category
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The Category's name, unique among its siblings
+          example: Coffee
+        kind:
+          type: string
+          description: |
+            INCOME or EXPENSE; required for a root Category. A sub-Category
+            takes its parent's kind.
+          x-extensible-enum:
+            - INCOME
+            - EXPENSE
+          example: EXPENSE
+        parent_id:
+          type: string
+          format: uuid
+          description: The Category to create it under; absent for a root Category
+    CategoryChange:
+      type: object
+      description: A change to a Category; a property left out stays as it is
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The new name, unique among its siblings
+          example: Espresso
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The Category to move it under, or `null` to make it a root Category
     CurrencyCode:
       type: string
       description: A currency code, such as an ISO 4217 code
