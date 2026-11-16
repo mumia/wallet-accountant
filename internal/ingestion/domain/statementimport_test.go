@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -71,10 +72,94 @@ func TestRecordingAStatementImportRefusals(t *testing.T) {
 	tooPrecise := firstImport()
 	tooPrecise.ExportBalance = dec("1.001")
 	decidertest.Given(t, domain.StatementImport).When(tooPrecise).ThenError(domain.ErrInvalidExportBalance)
+}
 
-	later := firstImport()
-	later.First = false
-	decidertest.Given(t, domain.StatementImport).When(later).ThenError(domain.ErrLaterImportsNotSupported)
+// laterImport is an Account's later import whose Balance check passes: the
+// Opening balance 510.50 plus the 1989.50 already imported plus this
+// file's -45.10 is its Export balance 2454.90.
+func laterImport() domain.RecordStatementImport {
+	return domain.RecordStatementImport{
+		ConnectionID:   theConnection,
+		AccountID:      theAccount,
+		FileHash:       "def456",
+		MappingVersion: 2,
+		Currency:       "EUR",
+		ExportBalance:  dec("2454.90"),
+		RowsImported:   1,
+		RowsSkipped:    2,
+		RowsIgnored:    0,
+		RowsTotal:      dec("-45.10"),
+		OpeningBalance: dec("510.50"),
+		EarlierTotal:   dec("1989.50"),
+	}
+}
+
+// A later import is recorded with its Balance check passed when the
+// Opening balance plus every earlier Imported transaction plus its rows
+// make its Export balance (ADR-0018). It records no Opening balance.
+func TestALaterImportPassingItsBalanceCheckIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	decidertest.Given(t, domain.StatementImport).
+		When(laterImport()).
+		Then(domain.StatementImportRecorded{
+			ConnectionID:   theConnection,
+			AccountID:      theAccount,
+			FileHash:       "def456",
+			MappingVersion: 2,
+			Currency:       "EUR",
+			ExportBalance:  dec("2454.90"),
+			RowsImported:   1,
+			RowsSkipped:    2,
+			RowsIgnored:    0,
+			RowsTotal:      dec("-45.10"),
+			BalanceCheck:   domain.BalanceCheckPassed,
+		})
+
+	s := decidertest.Given(t, domain.StatementImport, domain.StatementImportEvent(domain.StatementImportRecorded{
+		ConnectionID: theConnection, AccountID: theAccount, FileHash: "def456", Currency: "EUR",
+		ExportBalance: dec("2454.90"), RowsImported: 1, RowsSkipped: 2, RowsTotal: dec("-45.10"),
+		BalanceCheck: domain.BalanceCheckPassed,
+	})).State()
+
+	if s.RowsSkipped != 2 || s.OpeningBalance != nil || s.BalanceCheck != domain.BalanceCheckPassed {
+		t.Errorf("state = %+v, want 2 rows skipped, no Opening balance and the check passed", s)
+	}
+}
+
+// A later import whose rows don't bring the Account to its Export balance
+// is refused whole, with the expected balance, the Export balance and the
+// difference (spec story 43b).
+func TestALaterImportFailingItsBalanceCheckIsRefused(t *testing.T) {
+	t.Parallel()
+
+	missingRow := laterImport()
+	missingRow.ExportBalance = dec("2400.00")
+
+	decidertest.Given(t, domain.StatementImport).When(missingRow).ThenError(domain.ErrBalanceCheckFailed)
+
+	_, err := domain.StatementImport.Decide(domain.StatementImport.Initial, missingRow)
+
+	var failed *domain.BalanceCheckFailedError
+	if !errors.As(err, &failed) {
+		t.Fatalf("error = %v, want a *BalanceCheckFailedError", err)
+	}
+
+	if !failed.Expected.Equal(dec("2454.90")) || !failed.ExportBalance.Equal(dec("2400.00")) ||
+		!failed.Difference.Equal(dec("-54.90")) || failed.Currency != "EUR" {
+		t.Errorf("failed check = %+v, want expected 2454.90, Export balance 2400.00, difference -54.90 EUR", failed)
+	}
+
+	// The Opening balance counts: without it, 1989.50 - 45.10 = 1944.40 is
+	// not the Export balance.
+	noOpening := laterImport()
+	noOpening.OpeningBalance = sharedkernel.Decimal{}
+	decidertest.Given(t, domain.StatementImport).When(noOpening).ThenError(domain.ErrBalanceCheckFailed)
+
+	// So do the earlier Imported transactions.
+	noEarlier := laterImport()
+	noEarlier.EarlierTotal = sharedkernel.Decimal{}
+	decidertest.Given(t, domain.StatementImport).When(noEarlier).ThenError(domain.ErrBalanceCheckFailed)
 }
 
 func TestTheFoldKeepsWhatTheImportRecorded(t *testing.T) {

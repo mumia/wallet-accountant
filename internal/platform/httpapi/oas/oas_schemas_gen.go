@@ -2025,7 +2025,10 @@ type SaveCsvMappingUnprocessableEntity Problem
 
 func (*SaveCsvMappingUnprocessableEntity) saveCsvMappingRes() {}
 
-// Problem details (RFC 9457) of a refused statement file.
+// Problem details (RFC 9457) of a refused statement file. An unreadable file lists its bad `rows`; a
+// failed Balance check gives the `expected_balance` (the Opening balance plus every non-Discarded
+// Imported transaction, the file's new rows included), the `export_balance`, and the `difference`
+// (Export balance minus expected balance).
 // Ref: #/components/schemas/StatementFileProblem
 type StatementFileProblem struct {
 	// Identifies the problem type.
@@ -2037,7 +2040,10 @@ type StatementFileProblem struct {
 	// A human-readable explanation of this occurrence.
 	Detail OptString `json:"detail"`
 	// Every line of the file that can't be read, with the reason.
-	Rows []RowError `json:"rows"`
+	Rows            []RowError `json:"rows"`
+	ExpectedBalance OptMoney   `json:"expected_balance"`
+	ExportBalance   OptMoney   `json:"export_balance"`
+	Difference      OptMoney   `json:"difference"`
 }
 
 // GetType returns the value of Type.
@@ -2065,6 +2071,21 @@ func (s *StatementFileProblem) GetRows() []RowError {
 	return s.Rows
 }
 
+// GetExpectedBalance returns the value of ExpectedBalance.
+func (s *StatementFileProblem) GetExpectedBalance() OptMoney {
+	return s.ExpectedBalance
+}
+
+// GetExportBalance returns the value of ExportBalance.
+func (s *StatementFileProblem) GetExportBalance() OptMoney {
+	return s.ExportBalance
+}
+
+// GetDifference returns the value of Difference.
+func (s *StatementFileProblem) GetDifference() OptMoney {
+	return s.Difference
+}
+
 // SetType sets the value of Type.
 func (s *StatementFileProblem) SetType(val string) {
 	s.Type = val
@@ -2090,6 +2111,21 @@ func (s *StatementFileProblem) SetRows(val []RowError) {
 	s.Rows = val
 }
 
+// SetExpectedBalance sets the value of ExpectedBalance.
+func (s *StatementFileProblem) SetExpectedBalance(val OptMoney) {
+	s.ExpectedBalance = val
+}
+
+// SetExportBalance sets the value of ExportBalance.
+func (s *StatementFileProblem) SetExportBalance(val OptMoney) {
+	s.ExportBalance = val
+}
+
+// SetDifference sets the value of Difference.
+func (s *StatementFileProblem) SetDifference(val OptMoney) {
+	s.Difference = val
+}
+
 func (*StatementFileProblem) previewStatementImportRes() {}
 func (*StatementFileProblem) uploadStatementImportRes()  {}
 
@@ -2105,11 +2141,15 @@ type StatementImport struct {
 	ExportBalance Money     `json:"export_balance"`
 	// The rows that became Imported transactions.
 	RowsImported int32 `json:"rows_imported"`
+	// The rows skipped because an earlier Imported transaction of the Account has the same bank
+	// transaction ID, Booking date and amount.
+	RowsSkippedAsCertainRepeats int32 `json:"rows_skipped_as_certain_repeats"`
 	// The rows booked before the Account's start date, which were ignored.
 	RowsIgnoredBeforeStartDate int32    `json:"rows_ignored_before_start_date"`
 	RowsTotal                  Money    `json:"rows_total"`
 	OpeningBalance             OptMoney `json:"opening_balance"`
-	// The Balance check; the first import passes it by construction.
+	// The Balance check; the first import passes it by construction, and a later import that fails it is
+	// refused.
 	BalanceCheck string `json:"balance_check"`
 	// When the import was recorded.
 	ImportedAt time.Time `json:"imported_at"`
@@ -2138,6 +2178,11 @@ func (s *StatementImport) GetExportBalance() Money {
 // GetRowsImported returns the value of RowsImported.
 func (s *StatementImport) GetRowsImported() int32 {
 	return s.RowsImported
+}
+
+// GetRowsSkippedAsCertainRepeats returns the value of RowsSkippedAsCertainRepeats.
+func (s *StatementImport) GetRowsSkippedAsCertainRepeats() int32 {
+	return s.RowsSkippedAsCertainRepeats
 }
 
 // GetRowsIgnoredBeforeStartDate returns the value of RowsIgnoredBeforeStartDate.
@@ -2188,6 +2233,11 @@ func (s *StatementImport) SetExportBalance(val Money) {
 // SetRowsImported sets the value of RowsImported.
 func (s *StatementImport) SetRowsImported(val int32) {
 	s.RowsImported = val
+}
+
+// SetRowsSkippedAsCertainRepeats sets the value of RowsSkippedAsCertainRepeats.
+func (s *StatementImport) SetRowsSkippedAsCertainRepeats(val int32) {
+	s.RowsSkippedAsCertainRepeats = val
 }
 
 // SetRowsIgnoredBeforeStartDate sets the value of RowsIgnoredBeforeStartDate.

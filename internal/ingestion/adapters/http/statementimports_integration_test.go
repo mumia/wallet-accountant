@@ -40,16 +40,17 @@ type preview struct {
 }
 
 type statementImport struct {
-	StatementImportID          string `json:"statement_import_id"`
-	ConnectionID               string `json:"connection_id"`
-	AccountID                  string `json:"account_id"`
-	ExportBalance              money  `json:"export_balance"`
-	RowsImported               int    `json:"rows_imported"`
-	RowsIgnoredBeforeStartDate int    `json:"rows_ignored_before_start_date"`
-	RowsTotal                  money  `json:"rows_total"`
-	OpeningBalance             *money `json:"opening_balance"`
-	BalanceCheck               string `json:"balance_check"`
-	ImportedAt                 string `json:"imported_at"`
+	StatementImportID           string `json:"statement_import_id"`
+	ConnectionID                string `json:"connection_id"`
+	AccountID                   string `json:"account_id"`
+	ExportBalance               money  `json:"export_balance"`
+	RowsImported                int    `json:"rows_imported"`
+	RowsSkippedAsCertainRepeats int    `json:"rows_skipped_as_certain_repeats"`
+	RowsIgnoredBeforeStartDate  int    `json:"rows_ignored_before_start_date"`
+	RowsTotal                   money  `json:"rows_total"`
+	OpeningBalance              *money `json:"opening_balance"`
+	BalanceCheck                string `json:"balance_check"`
+	ImportedAt                  string `json:"imported_at"`
 }
 
 type account struct {
@@ -399,15 +400,6 @@ func TestConfirmingIsRefused(t *testing.T) {
 		if a := f.getAccount(t); a.Balance == nil || a.Balance.Amount.String() != "510.50" {
 			t.Errorf("account = %+v, want the first import's Opening balance kept", a)
 		}
-	})
-
-	t.Run("a later import without preview_id", func(t *testing.T) {
-		t.Parallel()
-		f := newImportFixture(t, app, "later")
-
-		f.confirm(t, statement, "2500.00")
-		f.upload(t, "", otherStatement, "100.00", "").
-			AssertProblem(t, http.StatusUnprocessableEntity, "/problems/later-statement-imports-not-supported")
 	})
 
 	t.Run("a Connection without a mapping", func(t *testing.T) {

@@ -16,11 +16,29 @@ var (
 	// ErrFileHashRequired is returned for a Statement import without the
 	// hash of its file, which deduplicates it.
 	ErrFileHashRequired = errors.New("statement file hash required")
-	// ErrLaterImportsNotSupported is returned for an import that is not the
-	// Account's first: Balance checks of later imports come in a later
-	// ticket.
-	ErrLaterImportsNotSupported = errors.New("later statement imports are not supported yet")
+	// ErrBalanceCheckFailed is returned, as a *BalanceCheckFailedError, for
+	// a later import whose rows don't bring the Account to its Export
+	// balance.
+	ErrBalanceCheckFailed = errors.New("balance check failed")
 )
+
+// BalanceCheckFailedError is a failed Balance check (ADR-0018): what the
+// Account's Opening balance and Imported transactions, with the new rows,
+// add up to, the Export balance they should equal, and the difference
+// (Export balance minus expected), in the Account currency.
+type BalanceCheckFailedError struct {
+	Expected      sharedkernel.Decimal
+	ExportBalance sharedkernel.Decimal
+	Difference    sharedkernel.Decimal
+	Currency      string
+}
+
+func (e *BalanceCheckFailedError) Error() string {
+	return fmt.Sprintf("%s: expected %s %s, Export balance %s, difference %s",
+		ErrBalanceCheckFailed, e.Expected, e.Currency, e.ExportBalance, e.Difference)
+}
+
+func (e *BalanceCheckFailedError) Unwrap() error { return ErrBalanceCheckFailed }
 
 // BalanceCheck is the state of a Statement import's Balance check.
 type BalanceCheck string
@@ -40,8 +58,10 @@ type StatementImportState struct {
 	Currency       string
 	ExportBalance  sharedkernel.Decimal
 	RowsImported   int
-	RowsIgnored    int
-	RowsTotal      sharedkernel.Decimal
+	// RowsSkipped counts the certain repeats left out (spec story 38).
+	RowsSkipped int
+	RowsIgnored int
+	RowsTotal   sharedkernel.Decimal
 	// OpeningBalance is set only for the Account's first import.
 	OpeningBalance *sharedkernel.Decimal
 	BalanceCheck   BalanceCheck
@@ -53,8 +73,11 @@ type (
 	StatementImportCommand interface{ isStatementImportCommand() }
 
 	// RecordStatementImport records one upload of a statement file: its
-	// Export balance and what its rows came to. First marks the Account's
-	// first import, which works out the Opening balance.
+	// Export balance and what its rows came to, certain repeats already
+	// skipped. First marks the Account's first import, which works out the
+	// Opening balance. A later import carries the Account's Opening balance
+	// and the total of its earlier non-Discarded Imported transactions, for
+	// its Balance check.
 	RecordStatementImport struct {
 		ConnectionID   sharedkernel.ID
 		AccountID      sharedkernel.ID
@@ -63,9 +86,12 @@ type (
 		Currency       string
 		ExportBalance  sharedkernel.Decimal
 		RowsImported   int
+		RowsSkipped    int
 		RowsIgnored    int
 		RowsTotal      sharedkernel.Decimal
 		First          bool
+		OpeningBalance sharedkernel.Decimal
+		EarlierTotal   sharedkernel.Decimal
 	}
 )
 
@@ -85,6 +111,7 @@ type (
 		Currency       string                `json:"currency"`
 		ExportBalance  sharedkernel.Decimal  `json:"exportbalance"`
 		RowsImported   int                   `json:"rowsimported"`
+		RowsSkipped    int                   `json:"rowsskipped,omitempty"`
 		RowsIgnored    int                   `json:"rowsignored"`
 		RowsTotal      sharedkernel.Decimal  `json:"rowstotal"`
 		OpeningBalance *sharedkernel.Decimal `json:"openingbalance,omitempty"`
@@ -127,15 +154,7 @@ func recordStatementImport(s StatementImportState, c RecordStatementImport) ([]S
 		return nil, err
 	}
 
-	if !c.First {
-		return nil, ErrLaterImportsNotSupported
-	}
-
-	// The first import has nothing earlier to check against: its Opening
-	// balance makes the Balance check pass by construction.
-	opening := c.ExportBalance.Sub(c.RowsTotal)
-
-	return []StatementImportEvent{StatementImportRecorded{
+	recorded := StatementImportRecorded{
 		ConnectionID:   c.ConnectionID,
 		AccountID:      c.AccountID,
 		FileHash:       c.FileHash,
@@ -143,11 +162,36 @@ func recordStatementImport(s StatementImportState, c RecordStatementImport) ([]S
 		Currency:       currency.Code(),
 		ExportBalance:  c.ExportBalance,
 		RowsImported:   c.RowsImported,
+		RowsSkipped:    c.RowsSkipped,
 		RowsIgnored:    c.RowsIgnored,
 		RowsTotal:      c.RowsTotal,
-		OpeningBalance: &opening,
 		BalanceCheck:   BalanceCheckPassed,
-	}}, nil
+	}
+
+	if c.First {
+		// The first import has nothing earlier to check against: its
+		// Opening balance makes the Balance check pass by construction.
+		opening := c.ExportBalance.Sub(c.RowsTotal)
+		recorded.OpeningBalance = &opening
+
+		return []StatementImportEvent{recorded}, nil
+	}
+
+	// A later import's Balance check: the Opening balance plus every
+	// non-Discarded Imported transaction, this file's rows included, must
+	// be the Export balance. Ledger Transactions aren't used: they lag
+	// while rows wait for review (ADR-0018).
+	expected := c.OpeningBalance.Add(c.EarlierTotal).Add(c.RowsTotal)
+	if !expected.Equal(c.ExportBalance) {
+		return nil, &BalanceCheckFailedError{
+			Expected:      expected,
+			ExportBalance: c.ExportBalance,
+			Difference:    c.ExportBalance.Sub(expected),
+			Currency:      currency.Code(),
+		}
+	}
+
+	return []StatementImportEvent{recorded}, nil
 }
 
 func evolveStatementImport(s StatementImportState, e decider.Envelope[StatementImportEvent]) StatementImportState {
@@ -161,6 +205,7 @@ func evolveStatementImport(s StatementImportState, e decider.Envelope[StatementI
 			Currency:       ev.Currency,
 			ExportBalance:  ev.ExportBalance,
 			RowsImported:   ev.RowsImported,
+			RowsSkipped:    ev.RowsSkipped,
 			RowsIgnored:    ev.RowsIgnored,
 			RowsTotal:      ev.RowsTotal,
 			OpeningBalance: ev.OpeningBalance,

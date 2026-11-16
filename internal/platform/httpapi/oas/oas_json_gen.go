@@ -5904,14 +5904,35 @@ func (s *StatementFileProblem) encodeFields(e *jx.Encoder) {
 			e.ArrEnd()
 		}
 	}
+	{
+		if s.ExpectedBalance.Set {
+			e.FieldStart("expected_balance")
+			s.ExpectedBalance.Encode(e)
+		}
+	}
+	{
+		if s.ExportBalance.Set {
+			e.FieldStart("export_balance")
+			s.ExportBalance.Encode(e)
+		}
+	}
+	{
+		if s.Difference.Set {
+			e.FieldStart("difference")
+			s.Difference.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfStatementFileProblem = [5]string{
+var jsonFieldsNameOfStatementFileProblem = [8]string{
 	0: "type",
 	1: "title",
 	2: "status",
 	3: "detail",
 	4: "rows",
+	5: "expected_balance",
+	6: "export_balance",
+	7: "difference",
 }
 
 // Decode decodes StatementFileProblem from json.
@@ -5985,6 +6006,36 @@ func (s *StatementFileProblem) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"rows\"")
+			}
+		case "expected_balance":
+			if err := func() error {
+				s.ExpectedBalance.Reset()
+				if err := s.ExpectedBalance.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"expected_balance\"")
+			}
+		case "export_balance":
+			if err := func() error {
+				s.ExportBalance.Reset()
+				if err := s.ExportBalance.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"export_balance\"")
+			}
+		case "difference":
+			if err := func() error {
+				s.Difference.Reset()
+				if err := s.Difference.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"difference\"")
 			}
 		default:
 			return d.Skip()
@@ -6072,6 +6123,10 @@ func (s *StatementImport) encodeFields(e *jx.Encoder) {
 		e.Int32(s.RowsImported)
 	}
 	{
+		e.FieldStart("rows_skipped_as_certain_repeats")
+		e.Int32(s.RowsSkippedAsCertainRepeats)
+	}
+	{
 		e.FieldStart("rows_ignored_before_start_date")
 		e.Int32(s.RowsIgnoredBeforeStartDate)
 	}
@@ -6095,17 +6150,18 @@ func (s *StatementImport) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfStatementImport = [10]string{
-	0: "statement_import_id",
-	1: "connection_id",
-	2: "account_id",
-	3: "export_balance",
-	4: "rows_imported",
-	5: "rows_ignored_before_start_date",
-	6: "rows_total",
-	7: "opening_balance",
-	8: "balance_check",
-	9: "imported_at",
+var jsonFieldsNameOfStatementImport = [11]string{
+	0:  "statement_import_id",
+	1:  "connection_id",
+	2:  "account_id",
+	3:  "export_balance",
+	4:  "rows_imported",
+	5:  "rows_skipped_as_certain_repeats",
+	6:  "rows_ignored_before_start_date",
+	7:  "rows_total",
+	8:  "opening_balance",
+	9:  "balance_check",
+	10: "imported_at",
 }
 
 // Decode decodes StatementImport from json.
@@ -6175,8 +6231,20 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"rows_imported\"")
 			}
-		case "rows_ignored_before_start_date":
+		case "rows_skipped_as_certain_repeats":
 			requiredBitSet[0] |= 1 << 5
+			if err := func() error {
+				v, err := d.Int32()
+				s.RowsSkippedAsCertainRepeats = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rows_skipped_as_certain_repeats\"")
+			}
+		case "rows_ignored_before_start_date":
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				v, err := d.Int32()
 				s.RowsIgnoredBeforeStartDate = int32(v)
@@ -6188,7 +6256,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"rows_ignored_before_start_date\"")
 			}
 		case "rows_total":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				if err := s.RowsTotal.Decode(d); err != nil {
 					return err
@@ -6208,7 +6276,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"opening_balance\"")
 			}
 		case "balance_check":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				v, err := d.Str()
 				s.BalanceCheck = string(v)
@@ -6220,7 +6288,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"balance_check\"")
 			}
 		case "imported_at":
-			requiredBitSet[1] |= 1 << 1
+			requiredBitSet[1] |= 1 << 2
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.ImportedAt = v
@@ -6241,8 +6309,8 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
-		0b01111111,
-		0b00000011,
+		0b11111111,
+		0b00000110,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

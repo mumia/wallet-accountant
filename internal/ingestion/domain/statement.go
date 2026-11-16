@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -28,7 +29,42 @@ var (
 type Statement struct {
 	Rows    []StatementRow
 	Ignored int
+	// Skipped counts the certain repeats WithoutCertainRepeats left out.
+	Skipped int
 	Total   sharedkernel.Decimal
+}
+
+// ImportedKey is what tells a certain repeat: an earlier Imported
+// transaction's bank transaction ID, Booking date and amount.
+type ImportedKey struct {
+	BankTransactionID string
+	BookingDate       time.Time
+	Amount            sharedkernel.Decimal
+}
+
+// WithoutCertainRepeats leaves out, and counts, every row whose bank
+// transaction ID, Booking date and amount all equal those of an earlier
+// Imported transaction of the Account (spec story 38), and works the total
+// out again. A row without a bank transaction ID is never a certain
+// repeat, and rows are compared only with earlier imports, never with each
+// other.
+func (s Statement) WithoutCertainRepeats(earlier []ImportedKey) Statement {
+	out := Statement{Rows: []StatementRow{}, Ignored: s.Ignored, Skipped: s.Skipped}
+
+	for _, r := range s.Rows {
+		if r.BankTransactionID != "" && slices.ContainsFunc(earlier, func(k ImportedKey) bool {
+			return k.BankTransactionID == r.BankTransactionID && k.BookingDate.Equal(r.BookingDate) && k.Amount.Equal(r.Amount)
+		}) {
+			out.Skipped++
+
+			continue
+		}
+
+		out.Rows = append(out.Rows, r)
+		out.Total = out.Total.Add(r.Amount)
+	}
+
+	return out
 }
 
 // ReadStatement reads a statement file with the mapping for an Account in

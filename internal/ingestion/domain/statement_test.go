@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,69 @@ func TestAnExportBalanceMustFitTheCurrency(t *testing.T) {
 
 	if err := domain.CheckExportBalance(dec("10.255"), currency(t, "EUR")); !errors.Is(err, domain.ErrInvalidExportBalance) {
 		t.Errorf("10.255 EUR: err = %v, want ErrInvalidExportBalance", err)
+	}
+}
+
+func statementRow(line int, date, amount, bankID string) domain.StatementRow {
+	d, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		panic(err)
+	}
+
+	return domain.StatementRow{Line: line, BookingDate: d, TransactionDate: d, Amount: dec(amount), BankTransactionID: bankID}
+}
+
+func key(date, amount, bankID string) domain.ImportedKey {
+	r := statementRow(0, date, amount, bankID)
+
+	return domain.ImportedKey{BankTransactionID: bankID, BookingDate: r.BookingDate, Amount: r.Amount}
+}
+
+// A row whose bank transaction ID, Booking date and amount all equal those
+// of an earlier Imported transaction of the Account is a certain repeat:
+// it is skipped and counted, and leaves the total (spec story 38). A row
+// that differs in any of the three, or has no bank transaction ID, is
+// kept; so are identical rows within the file itself.
+func TestCertainRepeatsAreSkipped(t *testing.T) {
+	t.Parallel()
+
+	s := domain.Statement{
+		Rows: []domain.StatementRow{
+			statementRow(2, "2026-01-15", "3000.00", "T-1"),  // repeat
+			statementRow(3, "2026-02-02", "-10.5", "T-2"),    // repeat, amount written differently
+			statementRow(4, "2026-02-03", "-10.50", "T-2"),   // same ID, another date
+			statementRow(5, "2026-02-02", "-10.51", "T-2"),   // same ID, another amount
+			statementRow(6, "2026-02-02", "-10.50", "T-3"),   // another ID
+			statementRow(7, "2026-02-05", "-4.00", ""),       // no bank ID
+			statementRow(8, "2026-02-06", "-1.00", "T-9"),    // new
+			statementRow(9, "2026-02-06", "-1.00", "T-9"),    // the same again within the file
+			statementRow(10, "2026-01-15", "3000.00", "T-1"), // a second repeat of T-1
+		},
+		Ignored: 1,
+		Total:   dec("5951.49"),
+	}
+
+	got := s.WithoutCertainRepeats([]domain.ImportedKey{
+		key("2026-01-15", "3000.00", "T-1"),
+		key("2026-02-02", "-10.50", "T-2"),
+		key("2026-02-05", "-4.00", ""),
+	})
+
+	var lines []int
+	for _, r := range got.Rows {
+		lines = append(lines, r.Line)
+	}
+
+	if want := []int{4, 5, 6, 7, 8, 9}; !slices.Equal(lines, want) {
+		t.Errorf("kept lines = %v, want %v", lines, want)
+	}
+
+	if got.Skipped != 3 || got.Ignored != 1 {
+		t.Errorf("skipped = %d, ignored = %d, want 3 and 1", got.Skipped, got.Ignored)
+	}
+
+	if !got.Total.Equal(dec("-37.51")) {
+		t.Errorf("total = %s, want the kept rows' -37.51", got.Total)
 	}
 }
 

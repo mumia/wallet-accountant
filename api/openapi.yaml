@@ -611,8 +611,17 @@ paths:
         with an unreadable row is refused whole (422
         `/problems/unreadable-statement-file`), and a file already imported
         through the Connection gets 409 `/problems/duplicate-statement-import`.
-        Later imports are not supported yet (422
-        `/problems/later-statement-imports-not-supported`). Amounts, an empty
+
+        A later import takes its Export balance once and no `preview_id`
+        (409 `/problems/opening-balance-already-recorded` with one). A row
+        whose bank transaction ID, Booking date and amount all equal those of
+        an earlier Imported transaction of the Account is skipped as a
+        certain repeat and counted. The import then runs its Balance check
+        (ADR-0018): the Account's Opening balance plus every non-Discarded
+        Imported transaction, the new rows included, must equal the Export
+        balance. Otherwise the whole import is refused with 422
+        `/problems/balance-check-failed`, giving the expected balance, the
+        Export balance and the difference, and nothing is recorded. Amounts, an empty
         file and a Connection without a mapping are refused as by the
         preview. Retrying with the same Idempotency-Key and the same file and
         fields returns the original result, however the form is rebuilt.
@@ -1298,6 +1307,7 @@ components:
         - account_id
         - export_balance
         - rows_imported
+        - rows_skipped_as_certain_repeats
         - rows_ignored_before_start_date
         - rows_total
         - balance_check
@@ -1322,6 +1332,13 @@ components:
           format: int32
           description: The rows that became Imported transactions
           example: 42
+        rows_skipped_as_certain_repeats:
+          type: integer
+          format: int32
+          description: |
+            The rows skipped because an earlier Imported transaction of the
+            Account has the same bank transaction ID, Booking date and amount
+          example: 12
         rows_ignored_before_start_date:
           type: integer
           format: int32
@@ -1333,7 +1350,9 @@ components:
           $ref: '#/components/schemas/Money'
         balance_check:
           type: string
-          description: The Balance check; the first import passes it by construction
+          description: |
+            The Balance check; the first import passes it by construction,
+            and a later import that fails it is refused
           x-extensible-enum:
             - PASSED
           example: PASSED
@@ -1386,7 +1405,13 @@ components:
           description: The earlier Statement import of the same file
     StatementFileProblem:
       type: object
-      description: Problem details (RFC 9457) of a refused statement file
+      description: |
+        Problem details (RFC 9457) of a refused statement file. An unreadable
+        file lists its bad `rows`; a failed Balance check gives the
+        `expected_balance` (the Opening balance plus every non-Discarded
+        Imported transaction, the file's new rows included), the
+        `export_balance`, and the `difference` (Export balance minus
+        expected balance)
       required:
         - type
         - title
@@ -1416,6 +1441,12 @@ components:
           description: Every line of the file that can't be read, with the reason
           items:
             $ref: '#/components/schemas/RowError'
+        expected_balance:
+          $ref: '#/components/schemas/Money'
+        export_balance:
+          $ref: '#/components/schemas/Money'
+        difference:
+          $ref: '#/components/schemas/Money'
     RowError:
       type: object
       description: Why one line of a statement file can't be read

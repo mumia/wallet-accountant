@@ -175,10 +175,18 @@ type Handler interface {
 	// that got its Opening balance since the preview gets 409
 	// `/problems/opening-balance-already-recorded`. A file with an unreadable row is refused whole (422
 	// `/problems/unreadable-statement-file`), and a file already imported through the Connection gets 409
-	// `/problems/duplicate-statement-import`. Later imports are not supported yet (422
-	// `/problems/later-statement-imports-not-supported`). Amounts, an empty file and a Connection without
-	// a mapping are refused as by the preview. Retrying with the same Idempotency-Key and the same file
-	// and fields returns the original result, however the form is rebuilt.
+	// `/problems/duplicate-statement-import`.
+	//
+	// A later import takes its Export balance once and no `preview_id` (409
+	// `/problems/opening-balance-already-recorded` with one). A row whose bank transaction ID, Booking
+	// date and amount all equal those of an earlier Imported transaction of the Account is skipped as a
+	// certain repeat and counted. The import then runs its Balance check (ADR-0018): the Account's Opening
+	// balance plus every non-Discarded Imported transaction, the new rows included, must equal the Export
+	// balance. Otherwise the whole import is refused with 422 `/problems/balance-check-failed`, giving the
+	// expected balance, the Export balance and the difference, and nothing is recorded. Amounts, an empty
+	// file and a Connection without a mapping are refused as by the preview. Retrying with the same
+	// Idempotency-Key and the same file and fields returns the original result, however the form is
+	// rebuilt.
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports
 	UploadStatementImport(ctx context.Context, req *StatementImportUploadMultipart, params UploadStatementImportParams) (UploadStatementImportRes, error)

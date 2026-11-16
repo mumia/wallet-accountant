@@ -24,7 +24,7 @@ type StatementImportFolds struct{}
 var _ eventstore.FoldStore[domain.StatementImportState] = StatementImportFolds{}
 
 const statementImportColumns = `connection_id, account_id, file_hash, mapping_version, currency, export_balance::text,
-	rows_imported, rows_ignored, rows_total::text, opening_balance::text, balance_check, recorded_at`
+	rows_imported, rows_skipped, rows_ignored, rows_total::text, opening_balance::text, balance_check, recorded_at`
 
 func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState, error) {
 	var (
@@ -36,7 +36,7 @@ func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState
 
 	dest := append([]any{
 		&s.ConnectionID, &s.AccountID, &s.FileHash, &s.MappingVersion, &s.Currency, &export,
-		&s.RowsImported, &s.RowsIgnored, &total, &opening, &balanceCheck, &s.RecordedAt,
+		&s.RowsImported, &s.RowsSkipped, &s.RowsIgnored, &total, &opening, &balanceCheck, &s.RecordedAt,
 	}, extra...)
 
 	if err := row.Scan(dest...); err != nil {
@@ -97,12 +97,12 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 	args := []any{
 		tx.HouseholdID(), id, s.ConnectionID, s.AccountID, s.FileHash, s.MappingVersion, s.Currency,
 		s.ExportBalance.String(), s.RowsImported, s.RowsIgnored, s.RowsTotal.String(), opening, string(s.BalanceCheck),
-		s.RecordedAt, f.Version, f.SchemaVersion,
+		s.RecordedAt, f.Version, f.SchemaVersion, s.RowsSkipped,
 	}
 	q := `INSERT INTO statement_imports (household_id, id, connection_id, account_id, file_hash, mapping_version, currency,
 	          export_balance, rows_imported, rows_ignored, rows_total, opening_balance, balance_check, recorded_at,
-	          version, schema_version)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16)
+	          version, schema_version, rows_skipped)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17)
 	      ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
@@ -110,8 +110,8 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 		q = `UPDATE statement_imports SET connection_id = $3, account_id = $4, file_hash = $5, mapping_version = $6,
 		         currency = $7, export_balance = $8::numeric, rows_imported = $9, rows_ignored = $10,
 		         rows_total = $11::numeric, opening_balance = $12::numeric, balance_check = $13, recorded_at = $14,
-		         version = $15, schema_version = $16
-		     WHERE household_id = $1 AND id = $2 AND version = $17`
+		         version = $15, schema_version = $16, rows_skipped = $17
+		     WHERE household_id = $1 AND id = $2 AND version = $18`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
@@ -176,6 +176,74 @@ func (StatementImportReader) ImportOfFile(ctx context.Context, tx *eventstore.Tx
 	}
 
 	return id, true, nil
+}
+
+// LockAccount implements app.StatementImportReader with a
+// transaction-level advisory lock on the Account's imports: the Balance
+// check reads every Imported transaction of the Account, which no unique
+// index or fold version can guard.
+func (StatementImportReader) LockAccount(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('ingestion.account-imports:' || $1::text, 0))`,
+		account); err != nil {
+		return fmt.Errorf("lock account imports: %w", err)
+	}
+
+	return nil
+}
+
+// ImportedSoFar implements app.StatementImportReader. Every state but
+// Discarded counts, so pending, Accepted and kept rows all do.
+func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (app.ImportedSoFar, error) {
+	var (
+		soFar          app.ImportedSoFar
+		opening, total string
+	)
+
+	err := tx.QueryRow(ctx, `SELECT
+		    (SELECT COALESCE(SUM(opening_balance), 0)::text FROM statement_imports
+		      WHERE household_id = $1 AND account_id = $2),
+		    (SELECT COALESCE(SUM(amount), 0)::text FROM imported_transactions
+		      WHERE household_id = $1 AND account_id = $2 AND state <> 'discarded')`,
+		tx.HouseholdID(), account).Scan(&opening, &total)
+	if err != nil {
+		return app.ImportedSoFar{}, fmt.Errorf("read account imports: %w", err)
+	}
+
+	if soFar.OpeningBalance, err = sharedkernel.ParseDecimal(opening); err != nil {
+		return app.ImportedSoFar{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	if soFar.Total, err = sharedkernel.ParseDecimal(total); err != nil {
+		return app.ImportedSoFar{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	rows, err := tx.Query(ctx, `SELECT bank_transaction_id, booking_date, amount::text FROM imported_transactions
+		WHERE household_id = $1 AND account_id = $2 AND state <> 'discarded' AND bank_transaction_id <> ''`,
+		tx.HouseholdID(), account)
+	if err != nil {
+		return app.ImportedSoFar{}, fmt.Errorf("read account imports: %w", err)
+	}
+
+	soFar.Keys, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.ImportedKey, error) {
+		var (
+			k      domain.ImportedKey
+			amount string
+		)
+
+		if err := r.Scan(&k.BankTransactionID, &k.BookingDate, &amount); err != nil {
+			return k, err //nolint:wrapcheck // wrapped below
+		}
+
+		d, err := sharedkernel.ParseDecimal(amount)
+		k.Amount = d
+
+		return k, err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return app.ImportedSoFar{}, fmt.Errorf("read account imports: %w", err)
+	}
+
+	return soFar, nil
 }
 
 // ImportedTransactionFolds stores Imported transaction folds.

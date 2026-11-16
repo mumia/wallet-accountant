@@ -38,11 +38,8 @@ var (
 	ErrPreviewMismatch = errors.New("upload doesn't match its preview")
 	// ErrOpeningBalanceAlreadyRecorded is returned for previewing or
 	// confirming a first import of an Account that already has its Opening
-	// balance.
+	// balance, and for a later import sent with a preview_id.
 	ErrOpeningBalanceAlreadyRecorded = errors.New("opening balance already recorded")
-	// ErrLaterImportsNotSupported is returned for an import that isn't the
-	// Account's first.
-	ErrLaterImportsNotSupported = domain.ErrLaterImportsNotSupported
 )
 
 // DuplicateImportError is returned for a file already imported through the
@@ -125,6 +122,23 @@ type StatementImportReader interface {
 	// ImportOfFile returns the Connection's import of the file with the
 	// hash, if there is one.
 	ImportOfFile(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID, fileHash string) (uuid.UUID, bool, error)
+	// LockAccount holds the Account's Statement imports until the
+	// transaction ends, so imports of one Account, through any of its
+	// Connections, run their Balance checks one after the other.
+	LockAccount(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) error
+	// ImportedSoFar returns what a later import of the Account is checked
+	// against.
+	ImportedSoFar(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (ImportedSoFar, error)
+}
+
+// ImportedSoFar is what an Account's Statement imports have brought in: the
+// Opening balance of its first import, the total of its non-Discarded
+// Imported transactions (pending, Accepted or kept), and the keys of those
+// with a bank transaction ID, which tell certain repeats.
+type ImportedSoFar struct {
+	OpeningBalance sharedkernel.Decimal
+	Total          sharedkernel.Decimal
+	Keys           []domain.ImportedKey
 }
 
 // Upload is a statement file with its Export balance. Confirmation is the
@@ -221,7 +235,9 @@ func (s *StatementImports) Preview(ctx context.Context, household, connection uu
 // file, the Export balance and the current mapping version. It records the
 // Statement import, a pending Imported transaction per row and, through the
 // Ledger, the Opening balance Transaction, all in one database transaction
-// (consistency map: Upload Statement import).
+// (consistency map: Upload Statement import). A later import takes no
+// preview: with the Account's imports locked, it skips certain repeats and
+// is recorded only if its Balance check passes (ADR-0018).
 func (s *StatementImports) Upload(ctx context.Context, household, connection uuid.UUID, up Upload) (StatementImport, error) {
 	ids := newIDs()
 
@@ -243,29 +259,45 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 			return err
 		}
 
+		first := r.account.AwaitingFirstStatementImport
+
 		switch {
-		case !r.account.AwaitingFirstStatementImport && up.PreviewID != "":
+		case !first && up.PreviewID != "":
 			return ErrOpeningBalanceAlreadyRecorded
-		case !r.account.AwaitingFirstStatementImport:
-			return ErrLaterImportsNotSupported
-		case up.PreviewID == "":
+		case first && up.PreviewID == "":
 			return ErrPreviewRequired
-		case up.PreviewID != domain.PreviewID(r.connection.AccountID, connection, r.fileHash, up.ExportBalance, r.connection.MappingVersion):
+		case first && up.PreviewID != domain.PreviewID(r.connection.AccountID, connection, r.fileHash, up.ExportBalance, r.connection.MappingVersion):
 			return ErrPreviewMismatch
 		}
 
-		res, err := s.imports.Execute(ctx, tx, importID, domain.RecordStatementImport{
+		cmd := domain.RecordStatementImport{
 			ConnectionID:   connection,
 			AccountID:      r.connection.AccountID,
 			FileHash:       r.fileHash,
 			MappingVersion: r.connection.MappingVersion,
 			Currency:       r.account.Currency.Code(),
 			ExportBalance:  up.ExportBalance,
-			RowsImported:   len(r.statement.Rows),
-			RowsIgnored:    r.statement.Ignored,
-			RowsTotal:      r.statement.Total,
-			First:          true,
-		})
+			First:          first,
+		}
+
+		if !first {
+			if err := s.reader.LockAccount(ctx, tx, r.connection.AccountID); err != nil {
+				return err //nolint:wrapcheck // the adapter's error
+			}
+
+			soFar, err := s.reader.ImportedSoFar(ctx, tx, r.connection.AccountID)
+			if err != nil {
+				return err //nolint:wrapcheck // the adapter's error
+			}
+
+			r.statement = r.statement.WithoutCertainRepeats(soFar.Keys)
+			cmd.OpeningBalance, cmd.EarlierTotal = soFar.OpeningBalance, soFar.Total
+		}
+
+		cmd.RowsImported, cmd.RowsSkipped = len(r.statement.Rows), r.statement.Skipped
+		cmd.RowsIgnored, cmd.RowsTotal = r.statement.Ignored, r.statement.Total
+
+		res, err := s.imports.Execute(ctx, tx, importID, cmd)
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}
@@ -293,8 +325,10 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 			}
 		}
 
-		if err := s.ledger.RecordOpeningBalance(ctx, tx, r.connection.AccountID, openingID, *res.State.OpeningBalance); err != nil {
-			return err //nolint:wrapcheck // the port's error
+		if first {
+			if err := s.ledger.RecordOpeningBalance(ctx, tx, r.connection.AccountID, openingID, *res.State.OpeningBalance); err != nil {
+				return err //nolint:wrapcheck // the port's error
+			}
 		}
 
 		recorded = StatementImport{ID: importID, State: res.State}

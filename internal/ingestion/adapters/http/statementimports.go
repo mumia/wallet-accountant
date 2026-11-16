@@ -30,7 +30,7 @@ const (
 	CSVMappingRequiredType            = "/problems/csv-mapping-required"
 	PreviewRequiredType               = "/problems/preview-required"
 	PreviewMismatchType               = "/problems/preview-mismatch"
-	LaterImportsNotSupportedType      = "/problems/later-statement-imports-not-supported"
+	BalanceCheckFailedType            = "/problems/balance-check-failed"
 	InvalidCursorType                 = "/problems/invalid-cursor"
 )
 
@@ -297,6 +297,7 @@ func refusal(err error) (outcome, bool) {
 	var (
 		duplicate *app.DuplicateImportError
 		rows      *domain.RowsError
+		failed    *domain.BalanceCheckFailedError
 	)
 
 	switch {
@@ -339,12 +340,35 @@ func refusal(err error) (outcome, bool) {
 	case errors.Is(err, app.ErrPreviewMismatch):
 		return refused(PreviewMismatchType, "Upload doesn't match its preview",
 			"The file, the Export balance or the Connection's CSV mapping differs from the preview; preview it again.")
-	case errors.Is(err, app.ErrLaterImportsNotSupported):
-		return refused(LaterImportsNotSupportedType, "Later Statement imports not supported",
-			"Only an Account's first Statement import is supported yet.")
+	case errors.As(err, &failed):
+		return balanceCheckFailed(failed)
 	default:
 		return outcome{}, false
 	}
+}
+
+// balanceCheckFailed answers a later import refused by its Balance check
+// with the expected balance, the Export balance and the difference.
+func balanceCheckFailed(e *domain.BalanceCheckFailedError) (outcome, bool) {
+	p := fileProblem(BalanceCheckFailedType, "Balance check failed", fmt.Sprintf(
+		"The Account's Opening balance and Imported transactions, with this file's new rows, come to %s %s, "+
+			"but the Export balance is %s %s (difference %s). Nothing was imported: check the file, its mapping "+
+			"and the Export balance.", e.Expected, e.Currency, e.ExportBalance, e.Currency, e.Difference))
+
+	for dst, v := range map[*oas.OptMoney]sharedkernel.Decimal{
+		&p.ExpectedBalance: e.Expected, &p.ExportBalance: e.ExportBalance, &p.Difference: e.Difference,
+	} {
+		m, err := money(v, e.Currency)
+		if err != nil {
+			// The Decider checked the currency; the amounts are the
+			// currency's own sums, so this can't happen.
+			return outcome{}, false
+		}
+
+		*dst = oas.NewOptMoney(m)
+	}
+
+	return outcome{refused: p}, true
 }
 
 func fileProblem(typ, title, detail string) *oas.StatementFileProblem {
@@ -356,13 +380,14 @@ func fileProblem(typ, title, detail string) *oas.StatementFileProblem {
 func statementImportResponse(i app.StatementImport) (*oas.StatementImport, error) {
 	s := i.State
 	out := &oas.StatementImport{
-		StatementImportID:          i.ID,
-		ConnectionID:               s.ConnectionID,
-		AccountID:                  s.AccountID,
-		RowsImported:               int32(s.RowsImported), //nolint:gosec // a statement file is far smaller
-		RowsIgnoredBeforeStartDate: int32(s.RowsIgnored),  //nolint:gosec // a statement file is far smaller
-		BalanceCheck:               "PASSED",
-		ImportedAt:                 s.RecordedAt,
+		StatementImportID:           i.ID,
+		ConnectionID:                s.ConnectionID,
+		AccountID:                   s.AccountID,
+		RowsImported:                int32(s.RowsImported), //nolint:gosec // a statement file is far smaller
+		RowsSkippedAsCertainRepeats: int32(s.RowsSkipped),  //nolint:gosec // a statement file is far smaller
+		RowsIgnoredBeforeStartDate:  int32(s.RowsIgnored),  //nolint:gosec // a statement file is far smaller
+		BalanceCheck:                "PASSED",
+		ImportedAt:                  s.RecordedAt,
 	}
 
 	var err error
