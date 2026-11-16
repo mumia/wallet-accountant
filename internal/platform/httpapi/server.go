@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/mumia/wallet-accountant/internal/platform/authn"
@@ -15,9 +16,11 @@ import (
 )
 
 // NewHandler returns the HTTP handler of the API: the ogen server for h,
-// with bearer tokens checked by auth, every error as problem+json, and a log
-// record, a trace and metrics for every request.
-func NewHandler(h oas.Handler, auth authn.Authenticator, tel *telemetry.Telemetry) (http.Handler, error) {
+// with bearer tokens checked by auth, every error as problem+json,
+// Idempotency-Key honoured on every POST (keys stored through pool, which
+// connects as wa_app), and a log record, a trace and metrics for every
+// request.
+func NewHandler(h oas.Handler, auth authn.Authenticator, pool *pgxpool.Pool, tel *telemetry.Telemetry) (http.Handler, error) {
 	errs := Errors{Logger: tel.Logger}
 
 	srv, err := oas.NewServer(h, security{auth: auth},
@@ -31,7 +34,9 @@ func NewHandler(h oas.Handler, auth authn.Authenticator, tel *telemetry.Telemetr
 		return nil, fmt.Errorf("ogen server: %w", err)
 	}
 
-	return otelhttp.NewHandler(logRequests(tel.Logger, srv), "http.server",
+	idem := &idempotency{pool: pool, auth: auth, logger: tel.Logger, next: srv}
+
+	return otelhttp.NewHandler(logRequests(tel.Logger, idem), "http.server",
 		otelhttp.WithTracerProvider(tel.TracerProvider),
 		otelhttp.WithMeterProvider(tel.MeterProvider),
 		otelhttp.WithPropagators(tel.Propagator),

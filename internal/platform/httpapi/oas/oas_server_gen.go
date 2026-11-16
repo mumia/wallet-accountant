@@ -8,6 +8,14 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CreateHousehold implements createHousehold operation.
+	//
+	// Creates a Household with a name and a Base currency. The caller becomes its first member, and its
+	// Internal Categories (Opening balance, Household transfer, Uncategorised) are created with it. An
+	// unregistered caller gets 403 with the problem type `/problems/registration-required`.
+	//
+	// POST /households
+	CreateHousehold(ctx context.Context, req *HouseholdCreation, params CreateHouseholdParams) (CreateHouseholdRes, error)
 	// CreateRegistration implements createRegistration operation.
 	//
 	// Redeems an Invitation code, making the signed-in identity a User with the role the Invitation grants
@@ -15,7 +23,14 @@ type Handler interface {
 	// so codes can't be probed. An identity that is already a User gets 409.
 	//
 	// POST /registrations
-	CreateRegistration(ctx context.Context, req *Registration) (CreateRegistrationRes, error)
+	CreateRegistration(ctx context.Context, req *Registration, params CreateRegistrationParams) (CreateRegistrationRes, error)
+	// GetHousehold implements getHousehold operation.
+	//
+	// Returns a Household the caller is a member of. Any other Household, and every Household for an
+	// unregistered caller, is 404: a 403 would confirm that it exists.
+	//
+	// GET /households/{household_id}
+	GetHousehold(ctx context.Context, params GetHouseholdParams) (GetHouseholdRes, error)
 	// GetMe implements getMe operation.
 	//
 	// Returns the User the bearer token belongs to, and whether they are Instance administrator. An
@@ -24,6 +39,20 @@ type Handler interface {
 	//
 	// GET /me
 	GetMe(ctx context.Context) (GetMeRes, error)
+	// ListCategories implements listCategories operation.
+	//
+	// Lists every Category of the Household, Internal Categories included. The tree is given by each
+	// Category's `parent_id`.
+	//
+	// GET /households/{household_id}/categories
+	ListCategories(ctx context.Context, params ListCategoriesParams) (ListCategoriesRes, error)
+	// ListHouseholds implements listHouseholds operation.
+	//
+	// Lists the Households the caller is a member of. An unregistered caller gets 403 with the problem
+	// type `/problems/registration-required`.
+	//
+	// GET /households
+	ListHouseholds(ctx context.Context) (ListHouseholdsRes, error)
 	// NewError creates *ProblemStatusCode from error returned by handler.
 	//
 	// Used for common default response.

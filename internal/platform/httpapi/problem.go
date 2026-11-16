@@ -39,6 +39,12 @@ func Problem(status int, typ, title, detail string) oas.Problem {
 	return p
 }
 
+// NotFoundProblem is the 404 of a resource the caller may not know exists.
+// It says nothing more, so it never confirms that the resource exists.
+func NotFoundProblem() oas.Problem {
+	return Problem(http.StatusNotFound, "", "", "")
+}
+
 // Errors implements the error hooks of the ogen server so that every error
 // leaves as application/problem+json with its status set. It is embedded in
 // the application's oas.Handler to provide NewError.

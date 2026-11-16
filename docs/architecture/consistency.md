@@ -8,7 +8,7 @@ Every spec that adds or changes a command adds or updates its row here. Code rev
 |---|---|---|---|
 | Issue bootstrap Invitation | Households | Bootstrap Invitation issued, or reissued with a new code if still unredeemed; its code lookup row updated | — |
 | Redeem Invitation | Households | Invitation redeemed; User registered with the Invitation's role and its identity lookup row saved | — |
-| Create Household | Households → Ledger | Household created; creator added as member; the four Internal Categories created | — |
+| Create Household | Households → Ledger | Household created; creator added as member, with the User's membership index row; the three Internal Categories (Opening balance, Household transfer, Uncategorised) created | — |
 | Create Category | Ledger | Category created | — |
 | Add Account | Ledger | Account created, awaiting its first Statement import | — |
 | Save CSV mapping | Ingestion | Connection's mapping validated and saved | — |

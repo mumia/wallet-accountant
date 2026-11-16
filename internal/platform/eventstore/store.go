@@ -80,6 +80,10 @@ func (t *Tx) SetHousehold(ctx context.Context, household uuid.UUID) error {
 	return nil
 }
 
+// SetActor names the User the transaction's events are recorded for, as a
+// request does once it has resolved its User.
+func (t *Tx) SetActor(user uuid.UUID) { t.scope.ActorID = user }
+
 func setHousehold(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
 	setting := ""
 	if household != uuid.Nil {

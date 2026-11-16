@@ -17,6 +17,10 @@ const (
 
 	UserStreamType     = "households.user"
 	UserRegisteredType = "io.walletaccountant.households.user.registered.v1"
+
+	HouseholdStreamType      = "households.household"
+	HouseholdCreatedType     = "io.walletaccountant.households.household.created.v1"
+	HouseholdMemberAddedType = "io.walletaccountant.households.household.memberadded.v1"
 )
 
 type (
@@ -24,6 +28,8 @@ type (
 	InvitationAggregate = eventstore.Aggregate[domain.InvitationState, domain.InvitationCommand, domain.InvitationEvent]
 	// UserAggregate is the User Decider wired to the runtime.
 	UserAggregate = eventstore.Aggregate[domain.UserState, domain.UserCommand, domain.UserEvent]
+	// HouseholdAggregate is the Household Decider wired to the runtime.
+	HouseholdAggregate = eventstore.Aggregate[domain.HouseholdState, domain.HouseholdCommand, domain.HouseholdEvent]
 )
 
 // NewInvitationAggregate wires the Invitation Decider to its fold store.
@@ -50,6 +56,21 @@ func NewUserAggregate(folds eventstore.FoldStore[domain.UserState]) UserAggregat
 	return UserAggregate{
 		StreamType:        UserStreamType,
 		Decider:           domain.User,
+		Codec:             codec,
+		Folds:             folds,
+		FoldSchemaVersion: 1,
+	}
+}
+
+// NewHouseholdAggregate wires the Household Decider to its fold store.
+func NewHouseholdAggregate(folds eventstore.FoldStore[domain.HouseholdState]) HouseholdAggregate {
+	codec := eventstore.NewCodec[domain.HouseholdEvent](Source)
+	eventstore.Register[domain.HouseholdEvent, domain.HouseholdCreated](codec, HouseholdCreatedType)
+	eventstore.Register[domain.HouseholdEvent, domain.HouseholdMemberAdded](codec, HouseholdMemberAddedType)
+
+	return HouseholdAggregate{
+		StreamType:        HouseholdStreamType,
+		Decider:           domain.Household,
 		Codec:             codec,
 		Folds:             folds,
 		FoldSchemaVersion: 1,

@@ -153,6 +153,14 @@ func (a *App) TokenFor(issuer, subject string) string {
 func (a *App) Do(t testing.TB, method, path, token string, body io.Reader) *Response {
 	t.Helper()
 
+	return a.DoWithHeader(t, method, path, token, nil, body)
+}
+
+// DoWithHeader sends a request with extra headers; token is sent as a
+// bearer token unless it is empty.
+func (a *App) DoWithHeader(t testing.TB, method, path, token string, header http.Header, body io.Reader) *Response {
+	t.Helper()
+
 	req, err := http.NewRequestWithContext(t.Context(), method, a.baseURL+path, body)
 	if err != nil {
 		t.Fatal(err)
@@ -164,6 +172,12 @@ func (a *App) Do(t testing.TB, method, path, token string, body io.Reader) *Resp
 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+
+	for name, values := range header {
+		for _, v := range values {
+			req.Header.Add(name, v)
+		}
 	}
 
 	res, err := http.DefaultClient.Do(req)

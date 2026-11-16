@@ -7,6 +7,8 @@ import (
 
 	householdspg "github.com/mumia/wallet-accountant/internal/households/adapters/postgres"
 	householdsapp "github.com/mumia/wallet-accountant/internal/households/app"
+	ledgerpg "github.com/mumia/wallet-accountant/internal/ledger/adapters/postgres"
+	ledgerapp "github.com/mumia/wallet-accountant/internal/ledger/app"
 	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
 	"github.com/mumia/wallet-accountant/internal/platform/forwarding"
 )
@@ -22,6 +24,40 @@ func NewUsers(pool *pgxpool.Pool) *householdsapp.Users {
 	)
 }
 
+// Contexts are the bounded contexts' application services, built on one
+// wa_app pool.
+type Contexts struct {
+	Users      *householdsapp.Users
+	Households *householdsapp.Households
+	Categories *ledgerapp.Categories
+}
+
+// NewContexts builds every bounded context's application services on pool,
+// which connects as wa_app, wiring each cross-context port.
+func NewContexts(pool *pgxpool.Pool) Contexts {
+	store := eventstore.NewStore(pool)
+
+	// Households seeds Internal Categories through the Ledger, and the Ledger
+	// runs its requests through Households' request transaction.
+	categories := &ledgerapp.Categories{}
+	households := householdsapp.NewHouseholds(store,
+		householdsapp.NewHouseholdAggregate(householdspg.HouseholdFolds{}),
+		householdspg.Lookups{},
+		householdspg.HouseholdLookups{},
+		categories,
+	)
+	*categories = *ledgerapp.NewCategories(households,
+		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}),
+		ledgerpg.CategoryReader{},
+	)
+
+	return Contexts{
+		Users:      NewUsers(pool),
+		Households: households,
+		Categories: categories,
+	}
+}
+
 // handlers lists every deferred event handler the worker runs. Each bounded
 // context adds its Watermill handlers here.
 func handlers() []forwarding.Handler {
@@ -34,6 +70,8 @@ func rebuildTargets() []eventstore.RebuildTarget {
 	return []eventstore.RebuildTarget{
 		householdsapp.NewInvitationAggregate(householdspg.InvitationFolds{}).RebuildTarget(),
 		householdsapp.NewUserAggregate(householdspg.UserFolds{}).RebuildTarget(),
+		householdsapp.NewHouseholdAggregate(householdspg.HouseholdFolds{}).RebuildTarget(),
+		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}).RebuildTarget(),
 	}
 }
 
