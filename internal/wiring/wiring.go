@@ -126,6 +126,7 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 		AccountHandler:     ledgerhttp.NewAccountHandler(contexts.Accounts),
 		ConnectionHandler:  ingestionhttp.NewConnectionHandler(contexts.Connections),
 		TransactionHandler: ledgerhttp.NewTransactionHandler(contexts.Transactions),
+		MonthHandler:       ledgerhttp.NewMonthHandler(contexts.Months),
 		StatementImportHandler: ingestionhttp.NewStatementImportHandler(contexts.StatementImports,
 			contexts.ImportedTransactions),
 		Errors: httpapi.Errors{Logger: tel.Logger},
@@ -297,6 +298,7 @@ type apiHandler struct {
 	*ledgerhttp.AccountHandler
 	*ingestionhttp.ConnectionHandler
 	*ledgerhttp.TransactionHandler
+	*ledgerhttp.MonthHandler
 	*ingestionhttp.StatementImportHandler
 	httpapi.Errors
 }

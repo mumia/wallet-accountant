@@ -361,6 +361,53 @@ func (StatementImportReader) UndecidedSuspectedDuplicates(ctx context.Context, t
 	return n, nil
 }
 
+// MonthImports implements app.StatementImportReader. A voided import's rows
+// are all Discarded, and its Balance check, even a waiting one, never
+// counts. An import is relevant to the month when any of its rows, in any
+// state, is booked in or before it.
+func (StatementImportReader) MonthImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time,
+) (app.MonthImports, error) {
+	from := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
+	until := from.AddDate(0, 1, 0)
+
+	var m app.MonthImports
+
+	if err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE state = 'pending'),
+			count(*) FILTER (WHERE state = 'suspected_duplicate')
+		FROM imported_transactions
+		WHERE household_id = $1 AND account_id = $2 AND booking_date >= $3 AND booking_date < $4`,
+		tx.HouseholdID(), account, from, until).Scan(&m.Pending, &m.SuspectedDuplicates); err != nil {
+		return app.MonthImports{}, fmt.Errorf("count the month's unresolved imported transactions: %w", err)
+	}
+
+	rows, err := tx.Query(ctx, `SELECT s.id, s.balance_check FROM statement_imports s
+		WHERE s.household_id = $1 AND s.account_id = $2 AND s.voided_at IS NULL
+		  AND s.balance_check IN ('waiting', 'failed')
+		  AND EXISTS (SELECT 1 FROM imported_transactions i
+		              WHERE i.household_id = s.household_id AND i.statement_import_id = s.id AND i.booking_date < $3)
+		ORDER BY s.id`, tx.HouseholdID(), account, until)
+	if err != nil {
+		return app.MonthImports{}, fmt.Errorf("list the month's unchecked statement imports: %w", err)
+	}
+
+	m.UncheckedImports, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (app.UncheckedImport, error) {
+		var (
+			u     app.UncheckedImport
+			check string
+		)
+
+		err := r.Scan(&u.ID, &check)
+		u.BalanceCheck = domain.BalanceCheck(check)
+
+		return u, err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return app.MonthImports{}, fmt.Errorf("list the month's unchecked statement imports: %w", err)
+	}
+
+	return m, nil
+}
+
 // ImportedTransactionFolds stores Imported transaction folds.
 type ImportedTransactionFolds struct{}
 

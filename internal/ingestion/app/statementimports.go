@@ -196,6 +196,26 @@ type StatementImportReader interface {
 	// UndecidedSuspectedDuplicates counts the Statement import's Imported
 	// transactions that are still Suspected duplicates.
 	UndecidedSuspectedDuplicates(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID) (int, error)
+	// MonthImports counts the Account's pending and Suspected duplicate
+	// Imported transactions booked in the month, and lists its non-voided
+	// Statement imports with rows booked in or before the month whose
+	// Balance check is waiting or failed, in the order they were recorded.
+	MonthImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time) (MonthImports, error)
+}
+
+// MonthImports is what an Account's Statement imports leave unresolved in
+// a Booking month: the Ledger's Month close reads it.
+type MonthImports struct {
+	Pending             int
+	SuspectedDuplicates int
+	UncheckedImports    []UncheckedImport
+}
+
+// UncheckedImport is a Statement import whose Balance check is waiting or
+// failed.
+type UncheckedImport struct {
+	ID           uuid.UUID
+	BalanceCheck domain.BalanceCheck
 }
 
 // ImportRowState is an Imported transaction of a Statement import and its

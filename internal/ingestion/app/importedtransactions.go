@@ -165,6 +165,40 @@ func (s *ImportedTransactions) ReturnToPending(ctx context.Context, tx *eventsto
 	return nil
 }
 
+// MonthImports reports, in the caller's transaction, what the Account's
+// Statement imports leave unresolved in the Booking month: its pending and
+// Suspected duplicate Imported transactions (Discarded don't count), and
+// its non-voided Statement imports with rows in or before the month whose
+// Balance check is waiting or failed. The Ledger's month status reads it.
+func (s *ImportedTransactions) MonthImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time,
+) (MonthImports, error) {
+	m, err := s.checks.MonthImports(ctx, tx, account, month)
+	if err != nil {
+		return MonthImports{}, err //nolint:wrapcheck // already wrapped by the adapter
+	}
+
+	return m, nil
+}
+
+// MonthImportsForClose is MonthImports after locking the Account's
+// Statement imports, so an upload or a waiting Balance check running at the
+// same time is either seen whole or runs after the close. The Ledger calls
+// it to close the month (consistency map: Close month).
+func (s *ImportedTransactions) MonthImportsForClose(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+	month time.Time,
+) (MonthImports, error) {
+	if err := s.checks.LockAccount(ctx, tx, account); err != nil {
+		return MonthImports{}, err //nolint:wrapcheck // already wrapped by the adapter
+	}
+
+	m, err := s.checks.MonthImports(ctx, tx, account, month)
+	if err != nil {
+		return MonthImports{}, err //nolint:wrapcheck // already wrapped by the adapter
+	}
+
+	return m, nil
+}
+
 // Discard Discards a pending Imported transaction or a Suspected
 // duplicate so it never reaches the Ledger. Discarded is final
 // (consistency map: Keep or Discard Imported transaction).

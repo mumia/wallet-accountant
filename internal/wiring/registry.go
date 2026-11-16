@@ -43,6 +43,9 @@ type Contexts struct {
 	// the Ledger.
 	StatementImports     *ingestionapp.StatementImports
 	ImportedTransactions *ingestionapp.ImportedTransactions
+	// Months shows and closes Accounts' months, reading unresolved Imported
+	// transactions and Balance checks through Ingestion.
+	Months *ledgerapp.Months
 }
 
 // NewContexts builds every bounded context's application services on pool,
@@ -74,6 +77,7 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}),
 		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}),
 		ledgerpg.TransactionReader{}, ledgerpg.CategoryReader{}, ledgerIngestion{imported: imported})
+	months := ledgerapp.NewMonths(households, accountAggregate, ledgerIngestion{imported: imported})
 	connections := ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{})
 	ledger := ingestionLedger{accounts: accounts, transactions: transactions}
 	rows := ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{})
@@ -91,6 +95,7 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		StatementImports: ingestionapp.NewStatementImports(households, ledger, connections, statementImports, rows,
 			ingestionpg.StatementImportReader{}),
 		ImportedTransactions: imported,
+		Months:               months,
 	}
 }
 

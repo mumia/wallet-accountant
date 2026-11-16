@@ -35,6 +35,8 @@ tags:
     description: Uploads of a bank statement file through a Connection (ADR-0018)
   - name: Imported transactions
     description: Rows brought in by Statement imports, waiting for review
+  - name: Months
+    description: An Account's Booking months, their status and Month close (ADR-0018)
 paths:
   /me:
     get:
@@ -544,6 +546,95 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/months/{booking_month}:
+    get:
+      operationId: getAccountMonth
+      summary: An Account's month status
+      description: |
+        Returns one Booking month of the Account (months are decided by
+        Booking date): whether it is `OPEN` or `CLOSED`, the Statement
+        balance it closed with, the computed closing balance (the Opening
+        balance plus every month up to this one; absent while the Account
+        awaits its first Statement import), how many of its Imported
+        transactions are pending or undecided Suspected duplicates, how many
+        of its Transactions are in Uncategorised, and whether it changed
+        after it closed. It is always current: it is read in the request's
+        own transaction.
+      tags:
+        - Months
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/BookingMonthPath'
+      responses:
+        '200':
+          description: The month's status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountMonth'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/months/{booking_month}/close:
+    post:
+      operationId: closeAccountMonth
+      summary: Close an Account's month
+      description: |
+        Closes the Booking month with the Statement balance, the closing
+        balance on the bank statement. The close is refused with 422
+        `/problems/month-close-refused`, listing every failed condition in
+        `reasons` at once, while any Imported transaction booked in the month
+        is pending or an undecided Suspected duplicate, any Transaction booked
+        in it is in Uncategorised, a Statement import with rows in or before
+        the month has its Balance check waiting or failed (voided imports
+        don't count), or the computed closing balance differs from the
+        Statement balance (both amounts and the difference are given). Nothing
+        is ever booked to make the balances meet: a gap is closed by
+        correcting the entry that is wrong (ADR-0018). A month already closed
+        gets 409 `/problems/month-already-closed`, and an Account awaiting its
+        first Statement import 409
+        `/problems/account-awaiting-first-statement-import`. A Statement
+        balance in another currency than the Account's, or with more decimal
+        places than it has, or a month before the Account's start date gets
+        422 `/problems/invalid-month-close`.
+      tags:
+        - Months
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/BookingMonthPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthClosing'
+      responses:
+        '200':
+          description: The closed month's status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountMonth'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/MonthCloseRefused'
+        default:
+          $ref: '#/components/responses/Problem'
   /households/{household_id}/imported-transactions/{imported_transaction_id}/accept:
     post:
       operationId: acceptImportedTransaction
@@ -999,6 +1090,15 @@ components:
         type: string
         pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
         example: 2026-01
+    BookingMonthPath:
+      name: booking_month
+      in: path
+      required: true
+      description: The Booking month, written YYYY-MM
+      schema:
+        type: string
+        pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+        example: 2026-01
     Cursor:
       name: cursor
       in: query
@@ -1078,6 +1178,14 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/StatementFileProblem'
+    MonthCloseRefused:
+      description: |
+        The month can't close yet (`reasons` lists every failed condition),
+        or the request can't be carried out
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/MonthCloseProblem'
     Problem:
       description: An error
       content:
@@ -2022,6 +2130,159 @@ components:
         next_cursor:
           type: string
           description: The cursor of the next page; absent on the last page
+    AccountMonth:
+      type: object
+      description: One Booking month of an Account and what is left to do before it closes
+      required:
+        - account_id
+        - booking_month
+        - state
+        - pending
+        - suspected_duplicates
+        - uncategorised
+        - flagged
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: The Account
+        booking_month:
+          type: string
+          description: The Booking month, written YYYY-MM
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          example: 2026-01
+        state:
+          type: string
+          description: Whether the month is closed
+          x-extensible-enum:
+            - OPEN
+            - CLOSED
+          example: OPEN
+        statement_balance:
+          $ref: '#/components/schemas/Money'
+        closed_at:
+          type: string
+          format: date-time
+          description: When the month closed; absent while it is open
+          example: '2026-02-03T18:00:00Z'
+        computed_balance:
+          $ref: '#/components/schemas/Money'
+        pending:
+          type: integer
+          format: int32
+          description: The month's Imported transactions waiting for review
+          example: 4
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: The month's Imported transactions that are undecided Suspected duplicates
+          example: 1
+        uncategorised:
+          type: integer
+          format: int32
+          description: The month's Transactions whose other side is in Uncategorised
+          example: 2
+        flagged:
+          type: boolean
+          description: Whether the month changed after it closed
+          example: false
+    MonthClosing:
+      type: object
+      description: The Statement balance a month closes with
+      required:
+        - statement_balance
+      properties:
+        statement_balance:
+          $ref: '#/components/schemas/Money'
+    MonthCloseProblem:
+      type: object
+      description: |
+        Problem details (RFC 9457) of a refused Month close. `reasons` lists
+        every failed condition, each with its details beside it: the
+        `pending`, `suspected_duplicates` and `uncategorised` counts, the
+        `unchecked_statement_imports`, and for a balance mismatch the
+        `computed_balance`, the `statement_balance` and the `difference`
+        (Statement balance minus computed balance)
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/month-close-refused
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Month can't close
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 422
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        reasons:
+          type: array
+          description: Every condition that stops the month closing
+          items:
+            type: string
+            x-extensible-enum:
+              - PENDING
+              - SUSPECTED_DUPLICATES
+              - UNCATEGORISED
+              - BALANCE_CHECK_NOT_PASSED
+              - BALANCE_MISMATCH
+            example: BALANCE_MISMATCH
+        pending:
+          type: integer
+          format: int32
+          description: The month's Imported transactions waiting for review
+          example: 4
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: The month's undecided Suspected duplicates
+          example: 1
+        uncategorised:
+          type: integer
+          format: int32
+          description: The month's Transactions in Uncategorised
+          example: 2
+        unchecked_statement_imports:
+          type: array
+          description: The Statement imports with rows in or before the month whose Balance check hasn't passed
+          items:
+            $ref: '#/components/schemas/UncheckedStatementImport'
+        computed_balance:
+          $ref: '#/components/schemas/Money'
+        statement_balance:
+          $ref: '#/components/schemas/Money'
+        difference:
+          $ref: '#/components/schemas/Money'
+    UncheckedStatementImport:
+      type: object
+      description: A Statement import whose Balance check stops a Month close
+      required:
+        - statement_import_id
+        - balance_check
+      properties:
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import
+        balance_check:
+          type: string
+          description: Its Balance check
+          x-extensible-enum:
+            - WAITING
+            - FAILED
+          example: WAITING
     Money:
       type: object
       description: |

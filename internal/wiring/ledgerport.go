@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
 	ingestionapp "github.com/mumia/wallet-accountant/internal/ingestion/app"
+	ingestiondomain "github.com/mumia/wallet-accountant/internal/ingestion/domain"
 	ledgerapp "github.com/mumia/wallet-accountant/internal/ledger/app"
+	ledgerdomain "github.com/mumia/wallet-accountant/internal/ledger/domain"
 	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 )
@@ -112,4 +115,45 @@ var _ ledgerapp.Ingestion = ledgerIngestion{}
 func (i ledgerIngestion) ReturnToPending(ctx context.Context, tx *eventstore.Tx, importedTransaction, transaction uuid.UUID,
 ) error {
 	return i.imported.ReturnToPending(ctx, tx, importedTransaction, transaction) //nolint:wrapcheck // already wrapped by Ingestion
+}
+
+// MonthImports implements ledgerapp.Ingestion.
+func (i ledgerIngestion) MonthImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time,
+) (ledgerdomain.MonthImports, error) {
+	m, err := i.imported.MonthImports(ctx, tx, account, month)
+	if err != nil {
+		return ledgerdomain.MonthImports{}, err //nolint:wrapcheck // already wrapped by Ingestion
+	}
+
+	return monthImports(m), nil
+}
+
+// MonthImportsForClose implements ledgerapp.Ingestion.
+func (i ledgerIngestion) MonthImportsForClose(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time,
+) (ledgerdomain.MonthImports, error) {
+	m, err := i.imported.MonthImportsForClose(ctx, tx, account, month)
+	if err != nil {
+		return ledgerdomain.MonthImports{}, err //nolint:wrapcheck // already wrapped by Ingestion
+	}
+
+	return monthImports(m), nil
+}
+
+// monthImports translates Ingestion's report on a month into the Ledger's
+// terms.
+func monthImports(m ingestionapp.MonthImports) ledgerdomain.MonthImports {
+	out := ledgerdomain.MonthImports{Pending: m.Pending, SuspectedDuplicates: m.SuspectedDuplicates}
+
+	for _, u := range m.UncheckedImports {
+		check := ledgerdomain.ImportCheckWaiting
+		if u.BalanceCheck == ingestiondomain.BalanceCheckFailed {
+			check = ledgerdomain.ImportCheckFailed
+		}
+
+		out.UncheckedImports = append(out.UncheckedImports, ledgerdomain.UncheckedImport{
+			StatementImportID: u.ID, Check: check,
+		})
+	}
+
+	return out
 }

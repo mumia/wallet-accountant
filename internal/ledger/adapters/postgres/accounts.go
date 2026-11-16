@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -47,63 +48,97 @@ func (AccountFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (
 		f.State.OpeningBalanceTransactionID = *opening
 	}
 
-	if f.State.Months, f.State.Uncategorised, err = loadMonths(ctx, tx, id); err != nil {
+	if err := loadMonths(ctx, tx, id, &f.State); err != nil {
 		return eventstore.Fold[domain.AccountState]{}, false, err
 	}
 
 	return f, true, nil
 }
 
-// loadMonths returns the Account's net change and Uncategorised count per
-// Booking month; each map is nil when it has no month.
-func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (map[string]sharedkernel.Decimal, map[string]int, error) {
-	rows, err := tx.Query(ctx, `SELECT booking_month, net_change::text, uncategorised FROM account_months
-		WHERE household_id = $1 AND account_id = $2`, tx.HouseholdID(), account)
+// loadMonths reads the Account's net change, Uncategorised count and
+// Month close per Booking month into s; each map stays nil when it has no
+// month.
+func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *domain.AccountState) error {
+	rows, err := tx.Query(ctx, `SELECT booking_month, net_change::text, uncategorised, statement_balance::text,
+			closed_at, closed_by, flagged
+		FROM account_months WHERE household_id = $1 AND account_id = $2`, tx.HouseholdID(), account)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load account months: %w", err)
+		return fmt.Errorf("load account months: %w", err)
 	}
 	defer rows.Close()
-
-	var (
-		months        map[string]sharedkernel.Decimal
-		uncategorised map[string]int
-	)
 
 	for rows.Next() {
 		var (
 			month, change string
 			count         int
+			statement     *string
+			closedAt      *time.Time
+			closedBy      *uuid.UUID
+			flagged       bool
 		)
 
-		if err := rows.Scan(&month, &change, &count); err != nil {
-			return nil, nil, fmt.Errorf("load account months: %w", err)
+		if err := rows.Scan(&month, &change, &count, &statement, &closedAt, &closedBy, &flagged); err != nil {
+			return fmt.Errorf("load account months: %w", err)
 		}
 
 		d, err := sharedkernel.ParseDecimal(change)
 		if err != nil {
-			return nil, nil, err //nolint:wrapcheck // already wrapped by the shared kernel
+			return err //nolint:wrapcheck // already wrapped by the shared kernel
 		}
 
-		if months == nil {
-			months = map[string]sharedkernel.Decimal{}
+		if s.Months == nil {
+			s.Months = map[string]sharedkernel.Decimal{}
 		}
 
-		months[month] = d
+		s.Months[month] = d
 
 		if count != 0 {
-			if uncategorised == nil {
-				uncategorised = map[string]int{}
+			if s.Uncategorised == nil {
+				s.Uncategorised = map[string]int{}
 			}
 
-			uncategorised[month] = count
+			s.Uncategorised[month] = count
+		}
+
+		if statement != nil {
+			if s.Closed, err = closeOf(s.Closed, month, *statement, closedAt, closedBy, flagged); err != nil {
+				return err
+			}
 		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("load account months: %w", err)
+		return fmt.Errorf("load account months: %w", err)
 	}
 
-	return months, uncategorised, nil
+	return nil
+}
+
+// closeOf adds a stored Month close to closes.
+func closeOf(closes map[string]domain.MonthClose, month, statement string, closedAt *time.Time, closedBy *uuid.UUID,
+	flagged bool,
+) (map[string]domain.MonthClose, error) {
+	balance, err := sharedkernel.ParseDecimal(statement)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	c := domain.MonthClose{StatementBalance: balance, Flagged: flagged}
+	if closedAt != nil {
+		c.ClosedAt = closedAt.UTC()
+	}
+
+	if closedBy != nil {
+		c.ClosedBy = *closedBy
+	}
+
+	if closes == nil {
+		closes = map[string]domain.MonthClose{}
+	}
+
+	closes[month] = c
+
+	return closes, nil
 }
 
 // Save implements eventstore.FoldStore.
@@ -146,7 +181,8 @@ func (AccountFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f
 	}
 
 	// A month with an Uncategorised count normally moved the balance too,
-	// but a Transaction of zero doesn't: save every month either map has.
+	// but a Transaction of zero doesn't, and a month can close with no
+	// Transaction at all: save every month any map has.
 	months := map[string]struct{}{}
 	for m := range s.Months {
 		months[m] = struct{}{}
@@ -156,11 +192,34 @@ func (AccountFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f
 		months[m] = struct{}{}
 	}
 
+	for m := range s.Closed {
+		months[m] = struct{}{}
+	}
+
 	for month := range months {
+		var (
+			statement *string
+			closedAt  *time.Time
+			closedBy  *uuid.UUID
+		)
+
+		c, closed := s.Closed[month]
+		if closed {
+			statement = new(c.StatementBalance.String())
+
+			if !c.ClosedAt.IsZero() {
+				closedAt = &c.ClosedAt
+			}
+
+			if c.ClosedBy != uuid.Nil {
+				closedBy = &c.ClosedBy
+			}
+		}
+
 		if _, err := tx.Exec(ctx, `INSERT INTO account_months (household_id, account_id, booking_month, net_change,
-				uncategorised)
-			VALUES ($1, $2, $3, $4::numeric, $5)`, tx.HouseholdID(), id, month, s.Months[month].String(),
-			s.Uncategorised[month]); err != nil {
+				uncategorised, statement_balance, closed_at, closed_by, flagged)
+			VALUES ($1, $2, $3, $4::numeric, $5, $6::numeric, $7, $8, $9)`, tx.HouseholdID(), id, month,
+			s.Months[month].String(), s.Uncategorised[month], statement, closedAt, closedBy, c.Flagged); err != nil {
 			return fmt.Errorf("save account months: %w", err)
 		}
 	}

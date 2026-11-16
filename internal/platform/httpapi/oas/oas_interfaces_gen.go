@@ -17,6 +17,10 @@ type ChangeTransactionRes interface {
 	changeTransactionRes()
 }
 
+type CloseAccountMonthRes interface {
+	closeAccountMonthRes()
+}
+
 type CreateCategoryRes interface {
 	createCategoryRes()
 }
@@ -35,6 +39,10 @@ type CreateRegistrationRes interface {
 
 type DiscardImportedTransactionRes interface {
 	discardImportedTransactionRes()
+}
+
+type GetAccountMonthRes interface {
+	getAccountMonthRes()
 }
 
 type GetAccountRes interface {

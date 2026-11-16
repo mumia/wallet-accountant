@@ -193,6 +193,132 @@ func (s *AccountList) SetItems(val []Account) {
 
 func (*AccountList) listAccountsRes() {}
 
+// One Booking month of an Account and what is left to do before it closes.
+// Ref: #/components/schemas/AccountMonth
+type AccountMonth struct {
+	// The Account.
+	AccountID uuid.UUID `json:"account_id"`
+	// The Booking month, written YYYY-MM.
+	BookingMonth string `json:"booking_month"`
+	// Whether the month is closed.
+	State            string   `json:"state"`
+	StatementBalance OptMoney `json:"statement_balance"`
+	// When the month closed; absent while it is open.
+	ClosedAt        OptDateTime `json:"closed_at"`
+	ComputedBalance OptMoney    `json:"computed_balance"`
+	// The month's Imported transactions waiting for review.
+	Pending int32 `json:"pending"`
+	// The month's Imported transactions that are undecided Suspected duplicates.
+	SuspectedDuplicates int32 `json:"suspected_duplicates"`
+	// The month's Transactions whose other side is in Uncategorised.
+	Uncategorised int32 `json:"uncategorised"`
+	// Whether the month changed after it closed.
+	Flagged bool `json:"flagged"`
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *AccountMonth) GetAccountID() uuid.UUID {
+	return s.AccountID
+}
+
+// GetBookingMonth returns the value of BookingMonth.
+func (s *AccountMonth) GetBookingMonth() string {
+	return s.BookingMonth
+}
+
+// GetState returns the value of State.
+func (s *AccountMonth) GetState() string {
+	return s.State
+}
+
+// GetStatementBalance returns the value of StatementBalance.
+func (s *AccountMonth) GetStatementBalance() OptMoney {
+	return s.StatementBalance
+}
+
+// GetClosedAt returns the value of ClosedAt.
+func (s *AccountMonth) GetClosedAt() OptDateTime {
+	return s.ClosedAt
+}
+
+// GetComputedBalance returns the value of ComputedBalance.
+func (s *AccountMonth) GetComputedBalance() OptMoney {
+	return s.ComputedBalance
+}
+
+// GetPending returns the value of Pending.
+func (s *AccountMonth) GetPending() int32 {
+	return s.Pending
+}
+
+// GetSuspectedDuplicates returns the value of SuspectedDuplicates.
+func (s *AccountMonth) GetSuspectedDuplicates() int32 {
+	return s.SuspectedDuplicates
+}
+
+// GetUncategorised returns the value of Uncategorised.
+func (s *AccountMonth) GetUncategorised() int32 {
+	return s.Uncategorised
+}
+
+// GetFlagged returns the value of Flagged.
+func (s *AccountMonth) GetFlagged() bool {
+	return s.Flagged
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *AccountMonth) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
+
+// SetBookingMonth sets the value of BookingMonth.
+func (s *AccountMonth) SetBookingMonth(val string) {
+	s.BookingMonth = val
+}
+
+// SetState sets the value of State.
+func (s *AccountMonth) SetState(val string) {
+	s.State = val
+}
+
+// SetStatementBalance sets the value of StatementBalance.
+func (s *AccountMonth) SetStatementBalance(val OptMoney) {
+	s.StatementBalance = val
+}
+
+// SetClosedAt sets the value of ClosedAt.
+func (s *AccountMonth) SetClosedAt(val OptDateTime) {
+	s.ClosedAt = val
+}
+
+// SetComputedBalance sets the value of ComputedBalance.
+func (s *AccountMonth) SetComputedBalance(val OptMoney) {
+	s.ComputedBalance = val
+}
+
+// SetPending sets the value of Pending.
+func (s *AccountMonth) SetPending(val int32) {
+	s.Pending = val
+}
+
+// SetSuspectedDuplicates sets the value of SuspectedDuplicates.
+func (s *AccountMonth) SetSuspectedDuplicates(val int32) {
+	s.SuspectedDuplicates = val
+}
+
+// SetUncategorised sets the value of Uncategorised.
+func (s *AccountMonth) SetUncategorised(val int32) {
+	s.Uncategorised = val
+}
+
+// SetFlagged sets the value of Flagged.
+func (s *AccountMonth) SetFlagged(val bool) {
+	s.Flagged = val
+}
+
+func (*AccountMonth) closeAccountMonthRes() {}
+func (*AccountMonth) getAccountMonthRes()   {}
+
 // A Transaction as one line of an Account's single-entry list.
 // Ref: #/components/schemas/AccountTransaction
 type AccountTransaction struct {
@@ -614,6 +740,22 @@ func (*ChangeTransactionUnauthorized) changeTransactionRes() {}
 type ChangeTransactionUnprocessableEntity Problem
 
 func (*ChangeTransactionUnprocessableEntity) changeTransactionRes() {}
+
+type CloseAccountMonthBadRequest Problem
+
+func (*CloseAccountMonthBadRequest) closeAccountMonthRes() {}
+
+type CloseAccountMonthConflict Problem
+
+func (*CloseAccountMonthConflict) closeAccountMonthRes() {}
+
+type CloseAccountMonthNotFound Problem
+
+func (*CloseAccountMonthNotFound) closeAccountMonthRes() {}
+
+type CloseAccountMonthUnauthorized Problem
+
+func (*CloseAccountMonthUnauthorized) closeAccountMonthRes() {}
 
 // A Connection between an Account and a source of its transactions.
 // Ref: #/components/schemas/Connection
@@ -1046,6 +1188,18 @@ func (*DiscardImportedTransactionNotFound) discardImportedTransactionRes() {}
 type DiscardImportedTransactionUnauthorized Problem
 
 func (*DiscardImportedTransactionUnauthorized) discardImportedTransactionRes() {}
+
+type GetAccountMonthBadRequest Problem
+
+func (*GetAccountMonthBadRequest) getAccountMonthRes() {}
+
+type GetAccountMonthNotFound Problem
+
+func (*GetAccountMonthNotFound) getAccountMonthRes() {}
+
+type GetAccountMonthUnauthorized Problem
+
+func (*GetAccountMonthUnauthorized) getAccountMonthRes() {}
 
 type GetAccountNotFound Problem
 
@@ -1509,6 +1663,173 @@ func (s *Money) SetAmount(val amount.Amount) {
 // SetCurrency sets the value of Currency.
 func (s *Money) SetCurrency(val CurrencyCode) {
 	s.Currency = val
+}
+
+// Problem details (RFC 9457) of a refused Month close. `reasons` lists every failed condition, each
+// with its details beside it: the `pending`, `suspected_duplicates` and `uncategorised` counts, the
+// `unchecked_statement_imports`, and for a balance mismatch the `computed_balance`, the
+// `statement_balance` and the `difference` (Statement balance minus computed balance).
+// Ref: #/components/schemas/MonthCloseProblem
+type MonthCloseProblem struct {
+	// Identifies the problem type.
+	Type string `json:"type"`
+	// A short, human-readable summary of the problem type.
+	Title string `json:"title"`
+	// The HTTP status code.
+	Status int32 `json:"status"`
+	// A human-readable explanation of this occurrence.
+	Detail OptString `json:"detail"`
+	// Every condition that stops the month closing.
+	Reasons []string `json:"reasons"`
+	// The month's Imported transactions waiting for review.
+	Pending OptInt32 `json:"pending"`
+	// The month's undecided Suspected duplicates.
+	SuspectedDuplicates OptInt32 `json:"suspected_duplicates"`
+	// The month's Transactions in Uncategorised.
+	Uncategorised OptInt32 `json:"uncategorised"`
+	// The Statement imports with rows in or before the month whose Balance check hasn't passed.
+	UncheckedStatementImports []UncheckedStatementImport `json:"unchecked_statement_imports"`
+	ComputedBalance           OptMoney                   `json:"computed_balance"`
+	StatementBalance          OptMoney                   `json:"statement_balance"`
+	Difference                OptMoney                   `json:"difference"`
+}
+
+// GetType returns the value of Type.
+func (s *MonthCloseProblem) GetType() string {
+	return s.Type
+}
+
+// GetTitle returns the value of Title.
+func (s *MonthCloseProblem) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *MonthCloseProblem) GetStatus() int32 {
+	return s.Status
+}
+
+// GetDetail returns the value of Detail.
+func (s *MonthCloseProblem) GetDetail() OptString {
+	return s.Detail
+}
+
+// GetReasons returns the value of Reasons.
+func (s *MonthCloseProblem) GetReasons() []string {
+	return s.Reasons
+}
+
+// GetPending returns the value of Pending.
+func (s *MonthCloseProblem) GetPending() OptInt32 {
+	return s.Pending
+}
+
+// GetSuspectedDuplicates returns the value of SuspectedDuplicates.
+func (s *MonthCloseProblem) GetSuspectedDuplicates() OptInt32 {
+	return s.SuspectedDuplicates
+}
+
+// GetUncategorised returns the value of Uncategorised.
+func (s *MonthCloseProblem) GetUncategorised() OptInt32 {
+	return s.Uncategorised
+}
+
+// GetUncheckedStatementImports returns the value of UncheckedStatementImports.
+func (s *MonthCloseProblem) GetUncheckedStatementImports() []UncheckedStatementImport {
+	return s.UncheckedStatementImports
+}
+
+// GetComputedBalance returns the value of ComputedBalance.
+func (s *MonthCloseProblem) GetComputedBalance() OptMoney {
+	return s.ComputedBalance
+}
+
+// GetStatementBalance returns the value of StatementBalance.
+func (s *MonthCloseProblem) GetStatementBalance() OptMoney {
+	return s.StatementBalance
+}
+
+// GetDifference returns the value of Difference.
+func (s *MonthCloseProblem) GetDifference() OptMoney {
+	return s.Difference
+}
+
+// SetType sets the value of Type.
+func (s *MonthCloseProblem) SetType(val string) {
+	s.Type = val
+}
+
+// SetTitle sets the value of Title.
+func (s *MonthCloseProblem) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *MonthCloseProblem) SetStatus(val int32) {
+	s.Status = val
+}
+
+// SetDetail sets the value of Detail.
+func (s *MonthCloseProblem) SetDetail(val OptString) {
+	s.Detail = val
+}
+
+// SetReasons sets the value of Reasons.
+func (s *MonthCloseProblem) SetReasons(val []string) {
+	s.Reasons = val
+}
+
+// SetPending sets the value of Pending.
+func (s *MonthCloseProblem) SetPending(val OptInt32) {
+	s.Pending = val
+}
+
+// SetSuspectedDuplicates sets the value of SuspectedDuplicates.
+func (s *MonthCloseProblem) SetSuspectedDuplicates(val OptInt32) {
+	s.SuspectedDuplicates = val
+}
+
+// SetUncategorised sets the value of Uncategorised.
+func (s *MonthCloseProblem) SetUncategorised(val OptInt32) {
+	s.Uncategorised = val
+}
+
+// SetUncheckedStatementImports sets the value of UncheckedStatementImports.
+func (s *MonthCloseProblem) SetUncheckedStatementImports(val []UncheckedStatementImport) {
+	s.UncheckedStatementImports = val
+}
+
+// SetComputedBalance sets the value of ComputedBalance.
+func (s *MonthCloseProblem) SetComputedBalance(val OptMoney) {
+	s.ComputedBalance = val
+}
+
+// SetStatementBalance sets the value of StatementBalance.
+func (s *MonthCloseProblem) SetStatementBalance(val OptMoney) {
+	s.StatementBalance = val
+}
+
+// SetDifference sets the value of Difference.
+func (s *MonthCloseProblem) SetDifference(val OptMoney) {
+	s.Difference = val
+}
+
+func (*MonthCloseProblem) closeAccountMonthRes() {}
+
+// The Statement balance a month closes with.
+// Ref: #/components/schemas/MonthClosing
+type MonthClosing struct {
+	StatementBalance Money `json:"statement_balance"`
+}
+
+// GetStatementBalance returns the value of StatementBalance.
+func (s *MonthClosing) GetStatementBalance() Money {
+	return s.StatementBalance
+}
+
+// SetStatementBalance sets the value of StatementBalance.
+func (s *MonthClosing) SetStatementBalance(val Money) {
+	s.StatementBalance = val
 }
 
 // NewOptBool returns new OptBool with value set to v.
@@ -3096,6 +3417,35 @@ func (s *TransactionChange) GetCategoryID() uuid.UUID {
 // SetCategoryID sets the value of CategoryID.
 func (s *TransactionChange) SetCategoryID(val uuid.UUID) {
 	s.CategoryID = val
+}
+
+// A Statement import whose Balance check stops a Month close.
+// Ref: #/components/schemas/UncheckedStatementImport
+type UncheckedStatementImport struct {
+	// The Statement import.
+	StatementImportID uuid.UUID `json:"statement_import_id"`
+	// Its Balance check.
+	BalanceCheck string `json:"balance_check"`
+}
+
+// GetStatementImportID returns the value of StatementImportID.
+func (s *UncheckedStatementImport) GetStatementImportID() uuid.UUID {
+	return s.StatementImportID
+}
+
+// GetBalanceCheck returns the value of BalanceCheck.
+func (s *UncheckedStatementImport) GetBalanceCheck() string {
+	return s.BalanceCheck
+}
+
+// SetStatementImportID sets the value of StatementImportID.
+func (s *UncheckedStatementImport) SetStatementImportID(val uuid.UUID) {
+	s.StatementImportID = val
+}
+
+// SetBalanceCheck sets the value of BalanceCheck.
+func (s *UncheckedStatementImport) SetBalanceCheck(val string) {
+	s.BalanceCheck = val
 }
 
 type UploadStatementImportNotFound Problem

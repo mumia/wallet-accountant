@@ -83,6 +83,9 @@ type AccountState struct {
 	// Uncategorised counts, per Booking month, the Transactions whose other
 	// side is in Uncategorised. A month with none is absent.
 	Uncategorised map[string]int
+	// Closed holds every closed Booking month's Month close. An open month
+	// is absent.
+	Closed map[string]MonthClose
 }
 
 // HasBalance reports whether the Account has a balance: only once its
@@ -258,6 +261,8 @@ func decideAccount(s AccountState, c AccountCommand) ([]AccountEvent, error) {
 		return recategoriseTransaction(s, c)
 	case ReopenOpeningBalance:
 		return reopenOpeningBalance(s, c)
+	case CloseMonth:
+		return closeMonth(s, c)
 	default:
 		return nil, nil
 	}
@@ -444,6 +449,12 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 		if ev.WasUncategorised {
 			s.Uncategorised = counted(s.Uncategorised, month, -1)
 		}
+	case MonthClosed:
+		// Kept to the microsecond, as the fold store and the event store
+		// keep times, so a stored fold equals a rebuilt one.
+		s.Closed = closed(s.Closed, ev.Month, MonthClose{
+			StatementBalance: ev.StatementBalance, ClosedAt: e.Time.Truncate(time.Microsecond), ClosedBy: e.ActorID,
+		})
 	case TransactionRecategorised:
 		month := bookingMonth(ev.BookingDate)
 

@@ -56,6 +56,22 @@ type Handler interface {
 	//
 	// PATCH /households/{household_id}/transactions/{transaction_id}
 	ChangeTransaction(ctx context.Context, req *TransactionChange, params ChangeTransactionParams) (ChangeTransactionRes, error)
+	// CloseAccountMonth implements closeAccountMonth operation.
+	//
+	// Closes the Booking month with the Statement balance, the closing balance on the bank statement. The
+	// close is refused with 422 `/problems/month-close-refused`, listing every failed condition in
+	// `reasons` at once, while any Imported transaction booked in the month is pending or an undecided
+	// Suspected duplicate, any Transaction booked in it is in Uncategorised, a Statement import with rows
+	// in or before the month has its Balance check waiting or failed (voided imports don't count), or the
+	// computed closing balance differs from the Statement balance (both amounts and the difference are
+	// given). Nothing is ever booked to make the balances meet: a gap is closed by correcting the entry
+	// that is wrong (ADR-0018). A month already closed gets 409 `/problems/month-already-closed`, and an
+	// Account awaiting its first Statement import 409 `/problems/account-awaiting-first-statement-import`.
+	// A Statement balance in another currency than the Account's, or with more decimal places than it has,
+	// or a month before the Account's start date gets 422 `/problems/invalid-month-close`.
+	//
+	// POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/close
+	CloseAccountMonth(ctx context.Context, req *MonthClosing, params CloseAccountMonthParams) (CloseAccountMonthRes, error)
 	// CreateCategory implements createCategory operation.
 	//
 	// Creates an Income or Expense Category, at the root or under `parent_id`. A sub-Category takes its
@@ -110,6 +126,17 @@ type Handler interface {
 	//
 	// GET /households/{household_id}/accounts/{account_id}
 	GetAccount(ctx context.Context, params GetAccountParams) (GetAccountRes, error)
+	// GetAccountMonth implements getAccountMonth operation.
+	//
+	// Returns one Booking month of the Account (months are decided by Booking date): whether it is `OPEN`
+	// or `CLOSED`, the Statement balance it closed with, the computed closing balance (the Opening balance
+	// plus every month up to this one; absent while the Account awaits its first Statement import), how
+	// many of its Imported transactions are pending or undecided Suspected duplicates, how many of its
+	// Transactions are in Uncategorised, and whether it changed after it closed. It is always current: it
+	// is read in the request's own transaction.
+	//
+	// GET /households/{household_id}/accounts/{account_id}/months/{booking_month}
+	GetAccountMonth(ctx context.Context, params GetAccountMonthParams) (GetAccountMonthRes, error)
 	// GetHousehold implements getHousehold operation.
 	//
 	// Returns a Household the caller is a member of. Any other Household, and every Household for an

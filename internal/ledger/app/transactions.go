@@ -143,6 +143,15 @@ type Ingestion interface {
 	// Transaction that was just reversed, to pending, in the caller's
 	// transaction (consistency map: Reverse Transaction).
 	ReturnToPending(ctx context.Context, tx *eventstore.Tx, importedTransaction, transaction uuid.UUID) error
+	// MonthImports reports, in the caller's transaction, what the Account's
+	// Statement imports leave unresolved in the Booking month month.
+	MonthImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time) (domain.MonthImports, error)
+	// MonthImportsForClose is MonthImports for a Month close: it first holds
+	// the Account's Statement imports until the transaction ends, so no
+	// upload or waiting Balance check runs between the read and the close
+	// (consistency map: Close month).
+	MonthImportsForClose(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time,
+	) (domain.MonthImports, error)
 }
 
 // Transactions records, corrects and lists a Household's Transactions.
