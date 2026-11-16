@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (Project scaffolding and tooling)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] The `migrate` run mode runs golang-migrate forward-only as `wa_owner`; `make migrate` runs it against the dev database
 - [ ] The first migration creates the three roles (ADR-0014), the event store table, Watermill's offsets table and the processed-events table. The event store has `FORCE ROW LEVEL SECURITY` with the `app.household_id` policy and admits rows with a NULL Household only in instance scope
