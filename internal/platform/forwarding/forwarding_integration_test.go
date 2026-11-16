@@ -237,6 +237,38 @@ func TestEventsAreForwardedExactlyOnceInOrder(t *testing.T) {
 	}
 }
 
+// A forwarder stopped while it is still subscribing stops at once and
+// cleanly: Watermill's subscription then fails on the cancelled context, and
+// closing its router would wait for a handler that never started.
+func TestAForwarderStoppedWhileStartingStopsCleanly(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+
+	for range 20 {
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+
+		go func() {
+			done <- forwarding.Run(ctx, forwarding.Config{
+				Reader:       e.reader,
+				Handlers:     []forwarding.Handler{(&recorder{group: "early"}).handler()},
+				CloseTimeout: 5 * time.Second,
+			})
+		}()
+
+		cancel()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("forwarder stopped with an error: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("forwarder did not stop")
+		}
+	}
+}
+
 // Transaction IDs order numerically, not as text: Drain once compared them
 // as text, so "1003" < "992" and it returned before the newer events were
 // handled whenever the transaction ID gained a digit.

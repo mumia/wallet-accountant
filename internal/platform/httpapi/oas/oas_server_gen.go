@@ -181,12 +181,28 @@ type Handler interface {
 	//
 	// GET /households/{household_id}/accounts/{account_id}/imported-transactions
 	ListImportedTransactions(ctx context.Context, params ListImportedTransactionsParams) (ListImportedTransactionsRes, error)
+	// ListNotifications implements listNotifications operation.
+	//
+	// Lists every Notification of the Household, newest first, with whether the caller has marked it read.
+	// Notifications are raised a little after what caused them, by a deferred handler (ADR-0013): a
+	// Statement import with Suspected duplicates raises a `SUSPECTED_DUPLICATES_FOUND` one linking to the
+	// import.
+	//
+	// GET /households/{household_id}/notifications
+	ListNotifications(ctx context.Context, params ListNotificationsParams) (ListNotificationsRes, error)
 	// ListStatementImports implements listStatementImports operation.
 	//
 	// Lists every Statement import of the Connection, in the order they were recorded.
 	//
 	// GET /households/{household_id}/connections/{connection_id}/statement-imports
 	ListStatementImports(ctx context.Context, params ListStatementImportsParams) (ListStatementImportsRes, error)
+	// MarkNotificationRead implements markNotificationRead operation.
+	//
+	// Marks the Notification read for the caller only; every other member still sees it unread until they
+	// mark it read too. Marking it read again changes nothing.
+	//
+	// POST /households/{household_id}/notifications/{notification_id}/read
+	MarkNotificationRead(ctx context.Context, params MarkNotificationReadParams) (MarkNotificationReadRes, error)
 	// PreviewStatementImport implements previewStatementImport operation.
 	//
 	// Reads a statement file with the Connection's CSV mapping and shows the Opening balance the Account's

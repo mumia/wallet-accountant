@@ -43,6 +43,7 @@ type Contexts struct {
 	// the Ledger.
 	StatementImports     *ingestionapp.StatementImports
 	ImportedTransactions *ingestionapp.ImportedTransactions
+	Notifications        *householdsapp.Notifications
 }
 
 // NewContexts builds every bounded context's application services on pool,
@@ -91,13 +92,17 @@ func NewContexts(pool *pgxpool.Pool) Contexts {
 		StatementImports: ingestionapp.NewStatementImports(households, ledger, connections, statementImports, rows,
 			ingestionpg.StatementImportReader{}),
 		ImportedTransactions: imported,
+		Notifications: householdsapp.NewNotifications(households,
+			householdsapp.NewNotificationAggregate(householdspg.NotificationFolds{}), householdspg.NotificationReader{}),
 	}
 }
 
 // handlers lists every deferred event handler the worker runs. Each bounded
 // context adds its Watermill handlers here.
 func handlers() []forwarding.Handler {
-	return nil
+	return []forwarding.Handler{
+		suspectedDuplicatesNotifier(),
+	}
 }
 
 // rebuildTargets lists every aggregate whose folds the rebuild run mode
@@ -113,6 +118,7 @@ func rebuildTargets() []eventstore.RebuildTarget {
 		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}).RebuildTarget(),
 		ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{}).RebuildTarget(),
 		ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{}).RebuildTarget(),
+		householdsapp.NewNotificationAggregate(householdspg.NotificationFolds{}).RebuildTarget(),
 	}
 }
 

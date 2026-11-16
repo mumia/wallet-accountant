@@ -121,11 +121,12 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 	contexts := NewContexts(pool)
 
 	handler, err := httpapi.NewHandler(apiHandler{
-		Handler:            householdshttp.NewHandler(contexts.Users, contexts.Households),
-		ledgerHandler:      ledgerhttp.NewHandler(contexts.Categories),
-		AccountHandler:     ledgerhttp.NewAccountHandler(contexts.Accounts),
-		ConnectionHandler:  ingestionhttp.NewConnectionHandler(contexts.Connections),
-		TransactionHandler: ledgerhttp.NewTransactionHandler(contexts.Transactions),
+		Handler:             householdshttp.NewHandler(contexts.Users, contexts.Households),
+		NotificationHandler: householdshttp.NewNotificationHandler(contexts.Notifications),
+		ledgerHandler:       ledgerhttp.NewHandler(contexts.Categories),
+		AccountHandler:      ledgerhttp.NewAccountHandler(contexts.Accounts),
+		ConnectionHandler:   ingestionhttp.NewConnectionHandler(contexts.Connections),
+		TransactionHandler:  ledgerhttp.NewTransactionHandler(contexts.Transactions),
 		StatementImportHandler: ingestionhttp.NewStatementImportHandler(contexts.StatementImports,
 			contexts.ImportedTransactions),
 		Errors: httpapi.Errors{Logger: tel.Logger},
@@ -293,6 +294,7 @@ func runBootstrap(ctx context.Context, cfg config.Config, tel *telemetry.Telemet
 // problem+json error hooks.
 type apiHandler struct {
 	*householdshttp.Handler
+	*householdshttp.NotificationHandler
 	*ledgerHandler
 	*ledgerhttp.AccountHandler
 	*ingestionhttp.ConnectionHandler
