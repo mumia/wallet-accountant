@@ -308,6 +308,94 @@ func TestDecidingTheLastSuspectedDuplicatesConcurrentlyRunsTheCheck(t *testing.T
 	wg.Wait()
 }
 
+// A later import is checked against the Opening balance and the pending,
+// Accepted and kept rows only: an earlier import's undecided Suspected
+// duplicates don't count until they are kept. Here both of the waiting
+// import's Suspected duplicates are real repeats, and the next file's
+// Export balance, which the bank worked out without them, passes.
+func TestUndecidedSuspectedDuplicatesDontCountInALaterBalanceCheck(t *testing.T) {
+	t.Parallel()
+	f := newSuspectedFixture(t, apitest.Start(t), "alice")
+
+	var waiting statementImport
+	f.upload(t, "", overlapWithoutIDs, "2454.90", "").AssertJSON(t, http.StatusCreated, &waiting)
+
+	if waiting.BalanceCheck != "WAITING" {
+		t.Fatalf("import = %+v, want its check waiting", waiting)
+	}
+
+	var next statementImport
+	f.upload(t, "", "Date;Description;Amount\n20/02/2026;Bonus;100,00\n", "2554.90", "").
+		AssertJSON(t, http.StatusCreated, &next)
+
+	if next.BalanceCheck != "PASSED" {
+		t.Errorf("next import = %+v, want its check passed", next)
+	}
+
+	// Once decided as repeats, the waiting import's check passes too.
+	for _, i := range f.suspected(t) {
+		f.decide(t, i.ImportedTransactionID, "discard", "DISCARDED")
+	}
+
+	if got := f.importNamed(t, waiting.StatementImportID); got.BalanceCheck != "PASSED" {
+		t.Errorf("waiting import's check = %q, want passed", got.BalanceCheck)
+	}
+}
+
+// A Keep and a Discard of an import's last Suspected duplicate at the same
+// moment: one of them decides it and runs the waiting check; the other
+// then finds it decided, so a Keep is refused and a Discard Discards the
+// now pending row without running the check again. Neither fails.
+func TestKeepingAndDiscardingTheLastSuspectedDuplicateConcurrently(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+
+	const rounds = 6
+
+	var wg sync.WaitGroup
+	for round := range rounds {
+		wg.Go(func() {
+			f := newSuspectedFixture(t, app, fmt.Sprintf("member-%d", round))
+
+			var si statementImport
+			f.upload(t, "", overlapWithoutIDs, "2454.90", "").AssertJSON(t, http.StatusCreated, &si)
+
+			suspected := f.suspected(t)
+			f.decide(t, suspected["SALARY"].ImportedTransactionID, "discard", "DISCARDED")
+
+			coffee := suspected["coffee"].ImportedTransactionID
+			responses := make([]*apitest.Response, 2)
+
+			var decisions sync.WaitGroup
+			for n, action := range []string{"keep", "discard"} {
+				decisions.Go(func() {
+					responses[n] = f.app.Do(t, http.MethodPost, f.importedPath(coffee, action), f.token, nil)
+				})
+			}
+
+			decisions.Wait()
+
+			keep, discard := responses[0], responses[1]
+			if discard.Status != http.StatusOK {
+				t.Errorf("round %d: discard = %d %s, want 200 whichever ran first", round, discard.Status, discard.Body)
+			}
+
+			want := "PASSED" // the coffee was a repeat
+			if keep.Status == http.StatusOK {
+				want = "FAILED" // kept first, against the Export balance
+			} else {
+				keep.AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-not-suspected-duplicate")
+			}
+
+			if got := f.importNamed(t, si.StatementImportID); got.BalanceCheck != want {
+				t.Errorf("round %d: check = %q, want %s", round, got.BalanceCheck, want)
+			}
+		})
+	}
+
+	wg.Wait()
+}
+
 // Only a Suspected duplicate is kept, a Suspected duplicate is decided
 // before it is Accepted, and a decision is made once. A refusal changes
 // nothing.

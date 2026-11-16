@@ -435,13 +435,13 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 		s.AwaitingFirstStatementImport = true
 		s.OpeningBalanceTransactionID = sharedkernel.NilID
 		s.Months = moved(s.Months, s.StartDate.Format(MonthLayout), ev.Amount)
-		s.Closed = flagged(s.Closed, s.StartDate.Format(MonthLayout))
+		s.Closed = flaggedFrom(s.Closed, s.StartDate.Format(MonthLayout))
 	case TransactionBooked:
 		// The event was written with DateLayout, so it always parses.
 		date, _ := time.Parse(DateLayout, ev.BookingDate)
 		month := date.Format(MonthLayout)
 		s.Months = moved(s.Months, month, ev.Amount)
-		s.Closed = flagged(s.Closed, month)
+		s.Closed = flaggedFrom(s.Closed, month)
 
 		if ev.Uncategorised {
 			s.Uncategorised = counted(s.Uncategorised, month, 1)
@@ -449,7 +449,7 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 	case ReversalBooked:
 		month := bookingMonth(ev.BookingDate)
 		s.Months = moved(s.Months, month, ev.Amount)
-		s.Closed = flagged(s.Closed, month)
+		s.Closed = flaggedFrom(s.Closed, month)
 
 		if ev.WasUncategorised {
 			s.Uncategorised = counted(s.Uncategorised, month, -1)

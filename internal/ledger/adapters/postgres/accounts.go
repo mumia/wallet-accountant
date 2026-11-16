@@ -175,28 +175,39 @@ func (AccountFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f
 		return eventstore.ErrVersionConflict
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM account_months WHERE household_id = $1 AND account_id = $2`,
-		tx.HouseholdID(), id); err != nil {
-		return fmt.Errorf("save account months: %w", err)
-	}
+	return saveMonths(ctx, tx, id, s)
+}
 
+// saveMonths saves the Account's months in two statements, however many it
+// has: one upsert that writes only the months that changed, and one delete
+// of any month no map holds any more.
+func saveMonths(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.AccountState) error {
 	// A month with an Uncategorised count normally moved the balance too,
 	// but a Transaction of zero doesn't, and a month can close with no
 	// Transaction at all: save every month any map has.
-	months := map[string]struct{}{}
+	set := map[string]struct{}{}
 	for m := range s.Months {
-		months[m] = struct{}{}
+		set[m] = struct{}{}
 	}
 
 	for m := range s.Uncategorised {
-		months[m] = struct{}{}
+		set[m] = struct{}{}
 	}
 
 	for m := range s.Closed {
-		months[m] = struct{}{}
+		set[m] = struct{}{}
 	}
 
-	for month := range months {
+	var (
+		months, changes []string
+		statements      []*string
+		counts          []int
+		closedAts       []*time.Time
+		closedBys       []*uuid.UUID
+		flags           []bool
+	)
+
+	for month := range set {
 		var (
 			statement *string
 			closedAt  *time.Time
@@ -216,12 +227,34 @@ func (AccountFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f
 			}
 		}
 
-		if _, err := tx.Exec(ctx, `INSERT INTO account_months (household_id, account_id, booking_month, net_change,
-				uncategorised, statement_balance, closed_at, closed_by, flagged)
-			VALUES ($1, $2, $3, $4::numeric, $5, $6::numeric, $7, $8, $9)`, tx.HouseholdID(), id, month,
-			s.Months[month].String(), s.Uncategorised[month], statement, closedAt, closedBy, c.Flagged); err != nil {
-			return fmt.Errorf("save account months: %w", err)
-		}
+		months = append(months, month)
+		changes = append(changes, s.Months[month].String())
+		counts = append(counts, s.Uncategorised[month])
+		statements = append(statements, statement)
+		closedAts = append(closedAts, closedAt)
+		closedBys = append(closedBys, closedBy)
+		flags = append(flags, c.Flagged)
+	}
+
+	if _, err := tx.Exec(ctx, `INSERT INTO account_months AS m (household_id, account_id, booking_month, net_change,
+			uncategorised, statement_balance, closed_at, closed_by, flagged)
+		SELECT $1, $2, u.month, u.change::numeric, u.count, u.statement::numeric, u.closed_at, u.closed_by, u.flagged
+		FROM unnest($3::text[], $4::text[], $5::int[], $6::text[], $7::timestamptz[], $8::uuid[], $9::bool[])
+			AS u (month, change, count, statement, closed_at, closed_by, flagged)
+		ON CONFLICT (account_id, booking_month) DO UPDATE SET net_change = EXCLUDED.net_change,
+			uncategorised = EXCLUDED.uncategorised, statement_balance = EXCLUDED.statement_balance,
+			closed_at = EXCLUDED.closed_at, closed_by = EXCLUDED.closed_by, flagged = EXCLUDED.flagged
+		WHERE (m.net_change, m.uncategorised, m.statement_balance, m.closed_at, m.closed_by, m.flagged)
+			IS DISTINCT FROM (EXCLUDED.net_change, EXCLUDED.uncategorised, EXCLUDED.statement_balance,
+				EXCLUDED.closed_at, EXCLUDED.closed_by, EXCLUDED.flagged)`,
+		tx.HouseholdID(), id, months, changes, counts, statements, closedAts, closedBys, flags); err != nil {
+		return fmt.Errorf("save account months: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM account_months
+		WHERE household_id = $1 AND account_id = $2 AND NOT booking_month = ANY($3::text[])`,
+		tx.HouseholdID(), id, months); err != nil {
+		return fmt.Errorf("save account months: %w", err)
 	}
 
 	return nil

@@ -150,11 +150,11 @@ type StatementImportReader struct{}
 
 var _ app.StatementImportReader = StatementImportReader{}
 
-// StatementImports implements app.StatementImportReader. Statement import
-// IDs are UUIDv7, so they come in the order they were recorded.
+// StatementImports implements app.StatementImportReader, in the order the
+// imports were recorded (see LatestImport).
 func (StatementImportReader) StatementImports(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID) ([]app.StatementImport, error) {
 	rows, err := tx.Query(ctx, `SELECT `+statementImportColumns+`, id
-		FROM statement_imports WHERE household_id = $1 AND connection_id = $2 ORDER BY id`, tx.HouseholdID(), connection)
+		FROM statement_imports WHERE household_id = $1 AND connection_id = $2 ORDER BY recorded_at, id`, tx.HouseholdID(), connection)
 	if err != nil {
 		return nil, fmt.Errorf("list statement imports: %w", err)
 	}
@@ -206,13 +206,14 @@ func (StatementImportReader) LockAccount(ctx context.Context, tx *eventstore.Tx,
 	return nil
 }
 
-// LatestImport implements app.StatementImportReader. Statement import IDs
-// are UUIDv7, so the greatest is the latest.
+// LatestImport implements app.StatementImportReader: the import recorded
+// last, as ImportedUpTo orders them. Not the greatest ID: an upload takes
+// its ID before it waits for LockAccount, so IDs can be out of record order.
 func (StatementImportReader) LatestImport(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (uuid.UUID, bool, error) {
 	var id uuid.UUID
 
 	err := tx.QueryRow(ctx, `SELECT id FROM statement_imports
-		WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL ORDER BY id DESC LIMIT 1`,
+		WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL ORDER BY recorded_at DESC, id DESC LIMIT 1`,
 		tx.HouseholdID(), account).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, false, nil
@@ -251,10 +252,12 @@ func (StatementImportReader) RowsOf(ctx context.Context, tx *eventstore.Tx, stat
 	return list, nil
 }
 
-// ImportedSoFar implements app.StatementImportReader. Every state but
-// Discarded counts, so pending, Suspected duplicate, Accepted and kept rows
-// all do; their keys come in Booking date and import order, so a
-// Suspected duplicate names the first row it resembles. A voided import's
+// ImportedSoFar implements app.StatementImportReader. The total is the
+// pending, Accepted and kept rows: an undecided Suspected duplicate of a
+// waiting import counts only once it is kept (spec "Later imports"). Its
+// key does count, as every state's but Discarded; keys come in Booking
+// date and import order, so a Suspected duplicate names the first row it
+// resembles. A voided import's
 // rows are all Discarded, and a voided first import's Opening balance
 // doesn't count: it was reversed.
 func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (app.ImportedSoFar, error) {
@@ -267,7 +270,7 @@ func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.T
 		    (SELECT COALESCE(SUM(opening_balance), 0)::text FROM statement_imports
 		      WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL),
 		    (SELECT COALESCE(SUM(amount), 0)::text FROM imported_transactions
-		      WHERE household_id = $1 AND account_id = $2 AND state <> 'discarded')`,
+		      WHERE household_id = $1 AND account_id = $2 AND state NOT IN ('discarded', 'suspected_duplicate'))`,
 		tx.HouseholdID(), account).Scan(&opening, &total)
 	if err != nil {
 		return app.ImportedSoFar{}, fmt.Errorf("read account imports: %w", err)
@@ -315,7 +318,9 @@ func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.T
 // ImportedUpTo implements app.StatementImportReader. The Statement imports
 // up to this one are those recorded no later than it: imports of one
 // Account are recorded one after the other under LockAccount. Like
-// ImportedSoFar, it leaves out voided imports' Opening balance and rows.
+// ImportedSoFar, it leaves out voided imports' Opening balance and rows,
+// and undecided Suspected duplicates: the import's own are all decided
+// when its check runs, and an earlier waiting import's don't count yet.
 func (StatementImportReader) ImportedUpTo(ctx context.Context, tx *eventstore.Tx, account, statementImport uuid.UUID,
 ) (app.ImportedSoFar, error) {
 	var (
@@ -328,7 +333,7 @@ func (StatementImportReader) ImportedUpTo(ctx context.Context, tx *eventstore.Tx
 		      WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL),
 		    (SELECT COALESCE(SUM(t.amount), 0)::text FROM imported_transactions t
 		       JOIN statement_imports i ON i.household_id = t.household_id AND i.id = t.statement_import_id
-		      WHERE t.household_id = $1 AND t.account_id = $2 AND t.state <> 'discarded' AND i.voided_at IS NULL
+		      WHERE t.household_id = $1 AND t.account_id = $2 AND t.state NOT IN ('discarded', 'suspected_duplicate') AND i.voided_at IS NULL
 		        AND (i.recorded_at, i.id) <= (SELECT recorded_at, id FROM statement_imports
 		                                       WHERE household_id = $1 AND id = $3))`,
 		tx.HouseholdID(), account, statementImport).Scan(&opening, &total)

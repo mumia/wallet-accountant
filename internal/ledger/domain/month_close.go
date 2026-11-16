@@ -16,6 +16,9 @@ var (
 	// ErrMonthBeforeStartDate is returned for closing a month before the
 	// Account's start date, where its history doesn't reach.
 	ErrMonthBeforeStartDate = errors.New("month is before the account's start date")
+	// ErrMonthNotStarted is returned for closing a month later than the
+	// month the close is given in: it has no Statement yet.
+	ErrMonthNotStarted = errors.New("month hasn't started yet")
 	// ErrMonthCloseRefused is returned, as a *MonthCloseRefusedError, for a
 	// month that can't close yet.
 	ErrMonthCloseRefused = errors.New("month close refused")
@@ -106,8 +109,10 @@ type MonthClose struct {
 }
 
 // CloseMonth closes the Booking month Month (any day in it) with the
-// Statement balance. Imports is what Ingestion reported about the month.
+// Statement balance, on the day Today. Imports is what Ingestion reported
+// about the month.
 type CloseMonth struct {
+	Today            time.Time
 	Month            time.Time
 	StatementBalance sharedkernel.Decimal
 	Imports          MonthImports
@@ -150,6 +155,8 @@ func closeMonth(s AccountState, c CloseMonth) ([]AccountEvent, error) {
 		return nil, ErrAwaitingFirstStatementImport
 	case month < s.StartDate.Format(MonthLayout):
 		return nil, fmt.Errorf("%w: %s is before %s", ErrMonthBeforeStartDate, month, s.StartDate.Format(DateLayout))
+	case month > c.Today.Format(MonthLayout):
+		return nil, fmt.Errorf("%w: %s is after %s", ErrMonthNotStarted, month, c.Today.Format(DateLayout))
 	}
 
 	if _, closed := s.Closed[month]; closed {
@@ -212,6 +219,19 @@ func flagged(closes map[string]MonthClose, month string) map[string]MonthClose {
 	c.Flagged = true
 
 	return closed(closes, month, c)
+}
+
+// flaggedFrom returns closes with every closed month from month on flagged:
+// a change that moves the balance of month moves the closing balance of
+// every later month too (ClosingBalance), so each of them is touched.
+func flaggedFrom(closes map[string]MonthClose, month string) map[string]MonthClose {
+	for m := range closes {
+		if m >= month {
+			closes = flagged(closes, m)
+		}
+	}
+
+	return closes
 }
 
 // FlagMonth flags the closed Booking month of Month (any day in it) for a

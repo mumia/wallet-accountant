@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -60,10 +59,38 @@ func (s Statement) WithSuspectedDuplicates(earlier []ImportedKey) Statement {
 	out := s
 	out.Rows, out.Suspected = make([]StatementRow, 0, len(s.Rows)), s.Suspected
 
+	// Index the earlier Imported transactions once, keeping the first of
+	// each key, so each row is told in constant time.
+	byBankID := make(map[string]sharedkernel.ID, len(earlier))
+	byLook := make(map[lookKey]sharedkernel.ID, len(earlier))
+
+	for _, k := range earlier {
+		if k.BankTransactionID != "" {
+			if _, ok := byBankID[k.BankTransactionID]; !ok {
+				byBankID[k.BankTransactionID] = k.ID
+			}
+		}
+
+		look := lookKeyOf(k.BookingDate, k.Amount, k.Description)
+		if _, ok := byLook[look]; !ok {
+			byLook[look] = k.ID
+		}
+	}
+
 	for _, r := range s.Rows {
-		i := slices.IndexFunc(earlier, func(k ImportedKey) bool { return resembles(r, k) })
-		if i >= 0 {
-			r.Resembles = earlier[i].ID
+		var (
+			id    sharedkernel.ID
+			found bool
+		)
+
+		if r.BankTransactionID != "" {
+			id, found = byBankID[r.BankTransactionID]
+		} else {
+			id, found = byLook[lookKeyOf(r.BookingDate, r.Amount, r.Description)]
+		}
+
+		if found {
+			r.Resembles = id
 			out.Suspected++
 		}
 
@@ -73,13 +100,34 @@ func (s Statement) WithSuspectedDuplicates(earlier []ImportedKey) Statement {
 	return out
 }
 
-func resembles(r StatementRow, k ImportedKey) bool {
-	if r.BankTransactionID != "" {
-		return k.BankTransactionID == r.BankTransactionID
-	}
+// dayKey is a Booking date as a map key: two dates are the same key exactly
+// when they are Equal.
+type dayKey struct {
+	sec  int64
+	nsec int
+}
 
-	return k.BookingDate.Equal(r.BookingDate) && k.Amount.Equal(r.Amount) &&
-		NormaliseDescription(k.Description) == NormaliseDescription(r.Description)
+func dayKeyOf(d time.Time) dayKey { return dayKey{sec: d.Unix(), nsec: d.Nanosecond()} }
+
+// lookKey is what a row without a bank transaction ID looks like: its
+// Booking date, amount (by value, so 10.5 and 10.50 agree) and normalised
+// description.
+type lookKey struct {
+	day         dayKey
+	amount      string
+	description string
+}
+
+func lookKeyOf(d time.Time, amount sharedkernel.Decimal, description string) lookKey {
+	return lookKey{day: dayKeyOf(d), amount: amount.String(), description: NormaliseDescription(description)}
+}
+
+// repeatKey is what a certain repeat shares with an earlier Imported
+// transaction: its bank transaction ID, Booking date and amount (by value).
+type repeatKey struct {
+	bankTransactionID string
+	day               dayKey
+	amount            string
 }
 
 // NormaliseDescription is a bank description as Suspected duplicates
@@ -98,10 +146,15 @@ func NormaliseDescription(d string) string {
 func (s Statement) WithoutCertainRepeats(earlier []ImportedKey) Statement {
 	out := Statement{Rows: []StatementRow{}, Ignored: s.Ignored, Skipped: s.Skipped}
 
+	repeats := make(map[repeatKey]bool, len(earlier))
+	for _, k := range earlier {
+		if k.BankTransactionID != "" {
+			repeats[repeatKey{k.BankTransactionID, dayKeyOf(k.BookingDate), k.Amount.String()}] = true
+		}
+	}
+
 	for _, r := range s.Rows {
-		if r.BankTransactionID != "" && slices.ContainsFunc(earlier, func(k ImportedKey) bool {
-			return k.BankTransactionID == r.BankTransactionID && k.BookingDate.Equal(r.BookingDate) && k.Amount.Equal(r.Amount)
-		}) {
+		if r.BankTransactionID != "" && repeats[repeatKey{r.BankTransactionID, dayKeyOf(r.BookingDate), r.Amount.String()}] {
 			out.Skipped++
 
 			continue

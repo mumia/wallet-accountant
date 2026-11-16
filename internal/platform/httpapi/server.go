@@ -34,7 +34,7 @@ func NewHandler(h oas.Handler, auth authn.Authenticator, pool *pgxpool.Pool, tel
 		return nil, fmt.Errorf("ogen server: %w", err)
 	}
 
-	idem := &idempotency{pool: pool, auth: auth, logger: tel.Logger, next: srv}
+	idem := &idempotency{pool: pool, auth: auth, logger: tel.Logger, next: srv, abandonAfter: defaultAbandonAfter}
 
 	return otelhttp.NewHandler(logRequests(tel.Logger, idem), "http.server",
 		otelhttp.WithTracerProvider(tel.TracerProvider),

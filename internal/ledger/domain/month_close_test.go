@@ -15,6 +15,10 @@ var (
 	january  = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	february = time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC)
 
+	// closingDay is when the tests close their months: every month up to
+	// March 2026 has started.
+	closingDay = time.Date(2026, time.March, 10, 9, 30, 0, 0, time.UTC)
+
 	laterImport = sharedkernel.MustParseID("0198f0a0-0000-7000-8000-0000000000c1")
 	thirdImport = sharedkernel.MustParseID("0198f0a0-0000-7000-8000-0000000000c2")
 )
@@ -58,18 +62,18 @@ func TestClosingAMonth(t *testing.T) {
 	t.Parallel()
 
 	decidertest.Given(t, domain.Account, reviewed()...).
-		When(domain.CloseMonth{Month: january, StatementBalance: dec("87.70")}).
+		When(domain.CloseMonth{Today: closingDay, Month: january, StatementBalance: dec("87.70")}).
 		Then(domain.MonthClosed{Month: "2026-01", StatementBalance: dec("87.70")})
 
 	decidertest.Given(t, domain.Account, reviewed()...).
-		When(domain.CloseMonth{Month: february, StatementBalance: dec("3087.7")}).
+		When(domain.CloseMonth{Today: closingDay, Month: february, StatementBalance: dec("3087.7")}).
 		Then(domain.MonthClosed{Month: "2026-02", StatementBalance: dec("3087.7")})
 
 	// A month with no Transaction of its own closes at the previous month's
 	// balance.
 	march := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
 	decidertest.Given(t, domain.Account, reviewed()...).
-		When(domain.CloseMonth{Month: march, StatementBalance: dec("3087.70")}).
+		When(domain.CloseMonth{Today: closingDay, Month: march, StatementBalance: dec("3087.70")}).
 		Then(domain.MonthClosed{Month: "2026-03", StatementBalance: dec("3087.70")})
 }
 
@@ -108,7 +112,7 @@ func TestEachCloseConditionRefusesTheClose(t *testing.T) {
 				Uncategorised: true,
 			})
 
-		got := refusal(t, past, domain.CloseMonth{Month: january, StatementBalance: dec("87.70")})
+		got := refusal(t, past, domain.CloseMonth{Today: closingDay, Month: january, StatementBalance: dec("87.70")})
 		want := &domain.MonthCloseRefusedError{Uncategorised: 1}
 
 		if !reflect.DeepEqual(got, want) {
@@ -119,7 +123,7 @@ func TestEachCloseConditionRefusesTheClose(t *testing.T) {
 	t.Run("balance mismatch", func(t *testing.T) {
 		t.Parallel()
 
-		got := refusal(t, reviewed(), domain.CloseMonth{Month: january, StatementBalance: dec("90.00")})
+		got := refusal(t, reviewed(), domain.CloseMonth{Today: closingDay, Month: january, StatementBalance: dec("90.00")})
 		m := got.Mismatch
 
 		if m == nil || !m.Computed.Equal(dec("87.70")) || !m.Statement.Equal(dec("90.00")) || !m.Difference.Equal(dec("2.30")) ||
@@ -132,6 +136,7 @@ func TestEachCloseConditionRefusesTheClose(t *testing.T) {
 		t.Parallel()
 
 		got := refusal(t, reviewed(), domain.CloseMonth{
+			Today: closingDay,
 			Month: january, StatementBalance: dec("87.70"), Imports: domain.MonthImports{Pending: 2},
 		})
 
@@ -144,6 +149,7 @@ func TestEachCloseConditionRefusesTheClose(t *testing.T) {
 		t.Parallel()
 
 		got := refusal(t, reviewed(), domain.CloseMonth{
+			Today: closingDay,
 			Month: january, StatementBalance: dec("87.70"), Imports: domain.MonthImports{SuspectedDuplicates: 1},
 		})
 
@@ -158,6 +164,7 @@ func TestEachCloseConditionRefusesTheClose(t *testing.T) {
 
 			unchecked := []domain.UncheckedImport{{StatementImportID: laterImport, Check: check}}
 			got := refusal(t, reviewed(), domain.CloseMonth{
+				Today: closingDay,
 				Month: january, StatementBalance: dec("87.70"), Imports: domain.MonthImports{UncheckedImports: unchecked},
 			})
 
@@ -188,6 +195,7 @@ func TestEveryFailedConditionIsListedTogether(t *testing.T) {
 	}
 
 	got := refusal(t, past, domain.CloseMonth{
+		Today: closingDay,
 		Month: january, StatementBalance: dec("80.00"),
 		Imports: domain.MonthImports{Pending: 3, SuspectedDuplicates: 1, UncheckedImports: unchecked},
 	})
@@ -203,14 +211,21 @@ func TestEveryFailedConditionIsListedTogether(t *testing.T) {
 func TestClosingAMonthRefusals(t *testing.T) {
 	t.Parallel()
 
-	closeJanuary := domain.CloseMonth{Month: january, StatementBalance: dec("87.70")}
+	closeJanuary := domain.CloseMonth{Today: closingDay, Month: january, StatementBalance: dec("87.70")}
 
 	decidertest.Given(t, domain.Account).When(closeJanuary).ThenError(domain.ErrAccountNotAdded)
 	decidertest.Given(t, domain.Account, mainAdded).When(closeJanuary).ThenError(domain.ErrAwaitingFirstStatementImport)
 
 	// mainAdded starts on 2026-01-15: December is before its history.
-	december := domain.CloseMonth{Month: time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC), StatementBalance: dec("0")}
+	december := domain.CloseMonth{Today: closingDay, Month: time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC), StatementBalance: dec("0")}
 	decidertest.Given(t, domain.Account, reviewed()...).When(december).ThenError(domain.ErrMonthBeforeStartDate)
+
+	// A month that hasn't started yet on the day of the close can't close;
+	// the month in progress can.
+	april := domain.CloseMonth{
+		Today: closingDay, Month: time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), StatementBalance: dec("3087.70"),
+	}
+	decidertest.Given(t, domain.Account, reviewed()...).When(april).ThenError(domain.ErrMonthNotStarted)
 
 	tooPrecise := closeJanuary
 	tooPrecise.StatementBalance = dec("87.701")
@@ -226,6 +241,6 @@ func TestClosingAMonthRefusals(t *testing.T) {
 	// Another month still closes.
 	decidertest.Given(t, domain.Account, append(reviewed(),
 		domain.MonthClosed{Month: "2026-01", StatementBalance: dec("87.70")})...).
-		When(domain.CloseMonth{Month: february, StatementBalance: dec("3087.70")}).
+		When(domain.CloseMonth{Today: closingDay, Month: february, StatementBalance: dec("3087.70")}).
 		Then(domain.MonthClosed{Month: "2026-02", StatementBalance: dec("3087.70")})
 }

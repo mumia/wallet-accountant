@@ -949,7 +949,8 @@ func (s *Server) handleChangeTransactionRequest(args [2]string, argsEscaped bool
 // that is wrong (ADR-0018). A month already closed gets 409 `/problems/month-already-closed`, and an
 // Account awaiting its first Statement import 409 `/problems/account-awaiting-first-statement-import`.
 // A Statement balance in another currency than the Account's, or with more decimal places than it has,
-// or a month before the Account's start date gets 422 `/problems/invalid-month-close`.
+// a month before the Account's start date, or a month that hasn't started yet gets 422
+// `/problems/invalid-month-close`.
 //
 // POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/close
 func (s *Server) handleCloseAccountMonthRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {

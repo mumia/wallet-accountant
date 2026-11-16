@@ -139,6 +139,49 @@ func TestAChangeInAClosedMonthFlagsIt(t *testing.T) {
 	})
 }
 
+// A change that moves a closed month's balance moves the closing balance of
+// every later month, so every later closed month is flagged too; a
+// recategorisation moves no balance and flags only its own month.
+func TestABalanceChangeFlagsEveryLaterClosedMonth(t *testing.T) {
+	t.Parallel()
+
+	closedFebruary := func(t *testing.T) closedJanuary {
+		t.Helper()
+
+		f := newClosedJanuary(t, apitest.Start(t))
+		f.accepted(t, "Coffee", map[string]any{"category_id": f.housing})
+		assertMonth(t, f.closed(t, "2026-02", "2500.00"), "CLOSED", 0, 0, 0)
+
+		return f
+	}
+
+	t.Run("reverse", func(t *testing.T) {
+		t.Parallel()
+		f := closedFebruary(t)
+
+		f.reversed(t, f.rent.TransactionID)
+
+		assertFlagged(t, f.month(t, "2026-01"), "2510.50")
+		february := f.month(t, "2026-02")
+		assertFlagged(t, february, "2500.00")
+		assertMoney(t, "computed balance", *february.ComputedBalance, "3500.00")
+	})
+
+	t.Run("recategorise", func(t *testing.T) {
+		t.Parallel()
+		f := closedFebruary(t)
+
+		f.setCategory(t, f.rent.TransactionID, f.createCategory(t, "Rent", "EXPENSE")).
+			AssertJSON(t, http.StatusOK, &transaction{})
+
+		assertFlagged(t, f.month(t, "2026-01"), "2510.50")
+
+		if february := f.month(t, "2026-02"); february.Flagged {
+			t.Errorf("february = %+v, want it unflagged: a recategorisation moves no balance", february)
+		}
+	})
+}
+
 // A later import bringing rows into a closed month shows them as pending,
 // counted in its status; the month isn't flagged until something changes
 // it (spec story 63).

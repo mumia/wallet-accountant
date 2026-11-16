@@ -103,6 +103,8 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 		return invalid("The Statement balance has more decimal places than the Account currency.")
 	case errors.Is(err, app.ErrMonthBeforeStartDate):
 		return invalid("The month is before the Account's start date.")
+	case errors.Is(err, app.ErrMonthNotStarted):
+		return invalid("The month hasn't started yet, so it has no Statement balance to close with.")
 	case err != nil:
 		return nil, fmt.Errorf("close account month: %w", err)
 	}

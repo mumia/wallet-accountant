@@ -603,7 +603,8 @@ paths:
         first Statement import 409
         `/problems/account-awaiting-first-statement-import`. A Statement
         balance in another currency than the Account's, or with more decimal
-        places than it has, or a month before the Account's start date gets
+        places than it has, a month before the Account's start date, or a month
+        that hasn't started yet gets
         422 `/problems/invalid-month-close`.
       tags:
         - Months

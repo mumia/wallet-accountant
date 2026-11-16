@@ -231,9 +231,10 @@ type ImportRowState struct {
 }
 
 // ImportedSoFar is what an Account's Statement imports have brought in: the
-// Opening balance of its first import, the total of its non-Discarded
-// Imported transactions (pending, Suspected duplicate, Accepted or kept),
-// and their keys, which tell certain repeats and Suspected duplicates.
+// Opening balance of its first import, the total of its pending, Accepted
+// and kept Imported transactions (an undecided Suspected duplicate counts
+// only once kept), and the keys of every non-Discarded one, which tell
+// certain repeats and Suspected duplicates.
 type ImportedSoFar struct {
 	OpeningBalance sharedkernel.Decimal
 	Total          sharedkernel.Decimal
@@ -296,7 +297,7 @@ func (s *StatementImports) Preview(ctx context.Context, household, connection uu
 	var p Preview
 
 	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		r, err := s.read(ctx, tx, connection, up)
+		r, err := s.read(ctx, tx, connection, up, false)
 		if err != nil {
 			return err
 		}
@@ -355,7 +356,11 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 	var recorded StatementImport
 
 	err = s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		r, err := s.read(ctx, tx, connection, up)
+		// The Account is read with its imports locked, so whether this is
+		// its first import can't change before it is recorded: a void of
+		// the first import running at the same time either sees this import
+		// recorded or reopens the Account before it is read.
+		r, err := s.read(ctx, tx, connection, up, true)
 		if err != nil {
 			return err
 		}
@@ -382,10 +387,6 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 		}
 
 		if !first {
-			if err := s.reader.LockAccount(ctx, tx, r.connection.AccountID); err != nil {
-				return err //nolint:wrapcheck // the adapter's error
-			}
-
 			soFar, err := s.reader.ImportedSoFar(ctx, tx, r.connection.AccountID)
 			if err != nil {
 				return err //nolint:wrapcheck // the adapter's error
@@ -561,8 +562,10 @@ func (s *StatementImports) List(ctx context.Context, household, connection uuid.
 }
 
 // read reads the statement file through the Connection for its Account,
-// refusing a file the Connection already imported.
-func (s *StatementImports) read(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID, up Upload) (read, error) {
+// refusing a file the Connection already imported. With lock, the
+// Account's Statement imports are locked before the Account is read.
+func (s *StatementImports) read(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID, up Upload, lock bool,
+) (read, error) {
 	fold, found, err := s.connections.Folds.Load(ctx, tx, connection)
 	if err != nil {
 		return read{}, err //nolint:wrapcheck // the adapter's error
@@ -570,6 +573,12 @@ func (s *StatementImports) read(ctx context.Context, tx *eventstore.Tx, connecti
 
 	if !found {
 		return read{}, ErrConnectionNotFound
+	}
+
+	if lock {
+		if err := s.reader.LockAccount(ctx, tx, fold.State.AccountID); err != nil {
+			return read{}, err //nolint:wrapcheck // the adapter's error
+		}
 	}
 
 	if fold.State.CSVMapping == nil {

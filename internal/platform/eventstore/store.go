@@ -80,6 +80,11 @@ func (t *Tx) SetHousehold(ctx context.Context, household uuid.UUID) error {
 	return nil
 }
 
+// Now returns the current time on the Store's clock, the one that stamps
+// the transaction's events, for a command that depends on the day it is
+// given.
+func (t *Tx) Now() time.Time { return t.now().UTC() }
+
 // SetActor names the User the transaction's events are recorded for, as a
 // request does once it has resolved its User.
 func (t *Tx) SetActor(user uuid.UUID) { t.scope.ActorID = user }

@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/mumia/wallet-accountant/internal/apitest"
 )
@@ -428,6 +430,15 @@ func TestClosingAMonthIsRefused(t *testing.T) {
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-month-close")
 	f.closeMonth(t, "2025-12", "0.00").
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-month-close")
+
+	// A month that hasn't started yet has no Statement to close with.
+	next := time.Now().UTC().AddDate(0, 1, 0).Format("2006-01")
+	if p := f.closeMonth(t, next, "2500.00").
+		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-month-close"); !strings.Contains(p.Detail, "started") {
+		t.Errorf("detail = %q, want it to say the month hasn't started", p.Detail)
+	}
+
+	assertMonth(t, f.month(t, next), "OPEN", 0, 0, 0)
 
 	f.closeMonth(t, "2026-13", "0.00").AssertProblem(t, http.StatusBadRequest, "about:blank")
 	f.app.Get(t, f.monthPath("26-01"), f.token).AssertProblem(t, http.StatusBadRequest, "about:blank")

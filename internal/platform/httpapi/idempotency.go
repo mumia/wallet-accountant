@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -39,6 +40,12 @@ const (
 	maxIdempotentBody  = 64 << 20
 	statusSuccessFirst = 200
 	statusSuccessLast  = 299
+
+	// defaultAbandonAfter is how long a reservation is kept for a request
+	// that hasn't finished. A request runs for seconds; one still reserved
+	// after this was abandoned, as when the process stopped while running
+	// it, and a retry takes the key over.
+	defaultAbandonAfter = 10 * time.Minute
 )
 
 // householdPath matches the path of a Household-scoped route.
@@ -69,12 +76,14 @@ func ResponseBelongsTo(ctx context.Context, household uuid.UUID) {
 // Any other response releases the key, so the request can be corrected and
 // sent again. A response holding a Household's data is stored in that
 // Household's scope: the one in the path, or the one the handler names with
-// ResponseBelongsTo.
+// ResponseBelongsTo. A request that panics releases its key too, and a
+// reservation older than abandonAfter is abandoned: a retry takes it over.
 type idempotency struct {
-	pool   *pgxpool.Pool
-	auth   authn.Authenticator
-	logger *slog.Logger
-	next   http.Handler
+	pool         *pgxpool.Pool
+	auth         authn.Authenticator
+	logger       *slog.Logger
+	next         http.Handler
+	abandonAfter time.Duration
 }
 
 func (i *idempotency) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -137,18 +146,18 @@ func (i *idempotency) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		scope.household, _ = uuid.Parse(m[1]) // uuid.Nil if malformed: ogen refuses it
 	}
 
-	rec := &recorder{header: http.Header{}, status: http.StatusOK}
-	i.next.ServeHTTP(rec, r.WithContext(context.WithValue(ctx, responseScopeKey{}, scope)))
-
 	// The outcome is recorded even if the client has gone away.
 	done := context.WithoutCancel(ctx)
 
+	rec := &recorder{header: http.Header{}, status: http.StatusOK}
+	i.serveReserved(done, keyID, stored.reservedAt, rec, r.WithContext(context.WithValue(ctx, responseScopeKey{}, scope)))
+
 	if rec.status >= statusSuccessFirst && rec.status <= statusSuccessLast {
-		if err := i.complete(done, keyID, scope.household, rec.response()); err != nil {
+		if err := i.complete(done, keyID, stored.reservedAt, scope.household, rec.response()); err != nil {
 			// The key stays reserved: a retry gets 409, never a second run.
 			i.logger.ErrorContext(ctx, "store idempotent response", "error", err)
 		}
-	} else if err := i.release(done, keyID); err != nil {
+	} else if err := i.release(done, keyID, stored.reservedAt); err != nil {
 		i.logger.ErrorContext(ctx, "release idempotency key", "error", err)
 	}
 
@@ -158,6 +167,25 @@ func (i *idempotency) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(rec.status)
 	_, _ = w.Write(rec.body.Bytes())
+}
+
+// serveReserved runs the request that reserved the key. If it panics, the
+// key is released before the panic goes on, so a retry isn't refused with
+// 409 for good.
+func (i *idempotency) serveReserved(done context.Context, keyID string, reservedAt time.Time, w http.ResponseWriter,
+	r *http.Request,
+) {
+	defer func() {
+		if p := recover(); p != nil {
+			if err := i.release(done, keyID, reservedAt); err != nil {
+				i.logger.ErrorContext(done, "release idempotency key", "error", err)
+			}
+
+			panic(p)
+		}
+	}()
+
+	i.next.ServeHTTP(w, r)
 }
 
 func (i *idempotency) authenticate(ctx context.Context, r *http.Request) (authn.Identity, bool) {
@@ -186,24 +214,30 @@ const (
 type storedKey struct {
 	state    keyState
 	response storedResponse
+	// reservedAt identifies the reservation of a keyReserved key: only the
+	// request holding it completes or releases the key, never one whose
+	// abandoned reservation was taken over.
+	reservedAt time.Time
 }
 
 // reserve reserves the key for a request, or reports what an earlier
 // request with the key left: a stored response, or that it is still running.
+// A reservation for the same request older than abandonAfter is taken over.
 func (i *idempotency) reserve(ctx context.Context, keyID, requestHash string) (storedKey, error) {
 	var stored storedKey
 
 	err := i.inScope(ctx, uuid.Nil, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `INSERT INTO idempotency_keys (key_id, request_hash) VALUES ($1, $2)
-			ON CONFLICT (key_id) DO NOTHING`, keyID, requestHash)
-		if err != nil {
-			return fmt.Errorf("reserve: %w", err)
-		}
-
-		if tag.RowsAffected() == 1 {
+		err := tx.QueryRow(ctx, `INSERT INTO idempotency_keys (key_id, request_hash, created_at)
+			VALUES ($1, $2, clock_timestamp())
+			ON CONFLICT (key_id) DO NOTHING RETURNING created_at`, keyID, requestHash).Scan(&stored.reservedAt)
+		if err == nil {
 			stored.state = keyReserved
 
 			return nil
+		}
+
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("reserve: %w", err)
 		}
 
 		var (
@@ -230,7 +264,7 @@ func (i *idempotency) reserve(ctx context.Context, keyID, requestHash string) (s
 		case hash != requestHash:
 			stored.state = keyMismatch
 		case !completed:
-			stored.state = keyInUse
+			stored.state, stored.reservedAt, err = i.takeOver(ctx, tx, keyID)
 		case household != nil:
 			stored.state = keyCompleted
 			stored.response, err = householdResponse(ctx, tx, *household, keyID)
@@ -252,6 +286,29 @@ func (i *idempotency) reserve(ctx context.Context, keyID, requestHash string) (s
 
 var errKeyReleased = errors.New("idempotency key released while reading it")
 
+// errReservationTakenOver is returned for completing or releasing a key
+// whose reservation a retry took over after it was abandoned.
+var errReservationTakenOver = errors.New("idempotency key reservation taken over")
+
+// takeOver reserves afresh a key whose request hasn't finished, if its
+// reservation is older than abandonAfter; otherwise the key is in use.
+func (i *idempotency) takeOver(ctx context.Context, tx pgx.Tx, keyID string) (keyState, time.Time, error) {
+	var reservedAt time.Time
+
+	err := tx.QueryRow(ctx, `UPDATE idempotency_keys SET created_at = clock_timestamp()
+		WHERE key_id = $1 AND completed_at IS NULL AND created_at < clock_timestamp() - make_interval(secs => $2)
+		RETURNING created_at`, keyID, i.abandonAfter.Seconds()).Scan(&reservedAt)
+
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return keyInUse, time.Time{}, nil
+	case err != nil:
+		return keyInUse, time.Time{}, fmt.Errorf("take over key: %w", err)
+	}
+
+	return keyReserved, reservedAt, nil
+}
+
 func householdResponse(ctx context.Context, tx pgx.Tx, household uuid.UUID, keyID string) (storedResponse, error) {
 	if err := setScope(ctx, tx, household); err != nil {
 		return storedResponse{}, err
@@ -269,15 +326,23 @@ func householdResponse(ctx context.Context, tx pgx.Tx, household uuid.UUID, keyI
 	return res, nil
 }
 
-// complete stores the response of the request that reserved the key.
-func (i *idempotency) complete(ctx context.Context, keyID string, household uuid.UUID, res storedResponse) error {
+// complete stores the response of the request that reserved the key at
+// reservedAt; nothing is stored if its reservation was taken over.
+func (i *idempotency) complete(ctx context.Context, keyID string, reservedAt time.Time, household uuid.UUID,
+	res storedResponse,
+) error {
 	return i.inScope(ctx, household, func(tx pgx.Tx) error {
 		if household == uuid.Nil {
-			_, err := tx.Exec(ctx, `UPDATE idempotency_keys
-				SET completed_at = now(), status = $2, content_type = NULLIF($3, ''), location = NULLIF($4, ''), body = $5
-				WHERE key_id = $1`, keyID, res.status, res.contentType, res.location, res.body)
+			tag, err := tx.Exec(ctx, `UPDATE idempotency_keys
+				SET completed_at = now(), status = $3, content_type = NULLIF($4, ''), location = NULLIF($5, ''), body = $6
+				WHERE key_id = $1 AND created_at = $2 AND completed_at IS NULL`,
+				keyID, reservedAt, res.status, res.contentType, res.location, res.body)
 			if err != nil {
 				return fmt.Errorf("store response: %w", err)
+			}
+
+			if tag.RowsAffected() == 0 {
+				return errReservationTakenOver
 			}
 
 			return nil
@@ -293,19 +358,27 @@ func (i *idempotency) complete(ctx context.Context, keyID string, household uuid
 			return err
 		}
 
-		if _, err := tx.Exec(ctx, `UPDATE idempotency_keys SET completed_at = now(), household_id = $2 WHERE key_id = $1`,
-			keyID, household); err != nil {
+		tag, err := tx.Exec(ctx, `UPDATE idempotency_keys SET completed_at = now(), household_id = $3
+			WHERE key_id = $1 AND created_at = $2 AND completed_at IS NULL`, keyID, reservedAt, household)
+		if err != nil {
 			return fmt.Errorf("complete key: %w", err)
+		}
+
+		if tag.RowsAffected() == 0 {
+			// Rolls back the stored response too.
+			return errReservationTakenOver
 		}
 
 		return nil
 	})
 }
 
-// release frees the key of a request that didn't succeed.
-func (i *idempotency) release(ctx context.Context, keyID string) error {
+// release frees the key of a request that didn't succeed, unless a retry
+// took its reservation over.
+func (i *idempotency) release(ctx context.Context, keyID string, reservedAt time.Time) error {
 	return i.inScope(ctx, uuid.Nil, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `DELETE FROM idempotency_keys WHERE key_id = $1 AND completed_at IS NULL`, keyID); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM idempotency_keys WHERE key_id = $1 AND created_at = $2 AND completed_at IS NULL`,
+			keyID, reservedAt); err != nil {
 			return fmt.Errorf("release: %w", err)
 		}
 

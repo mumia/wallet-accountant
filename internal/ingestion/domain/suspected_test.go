@@ -1,7 +1,10 @@
 package domain_test
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/mumia/wallet-accountant/internal/ingestion/domain"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
@@ -268,4 +271,55 @@ func TestSuspectedDuplicateRefusals(t *testing.T) {
 	decidertest.Given(t, domain.ImportedTransaction, suspectedRow(t)...).
 		When(domain.AcceptImportedTransaction{TransactionID: theTransaction}).
 		ThenError(domain.ErrImportedTransactionSuspectedDuplicate)
+}
+
+// Telling certain repeats and Suspected duplicates takes time in step with
+// the rows plus the Account's history, not their product: a file of many
+// rows against a long history finishes quickly. Each row still records the
+// first earlier Imported transaction it resembles.
+func TestDuplicateDetectionScalesWithTheHistory(t *testing.T) {
+	t.Parallel()
+
+	const n = 20000
+
+	start := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+	history := make([]domain.ImportedKey, 0, n+1)
+	rows := make([]domain.StatementRow, 0, n+2)
+
+	for i := range n {
+		day := start.AddDate(0, 0, i%3000).Format(time.DateOnly)
+		amount := strconv.Itoa(i) + ".00"
+		history = append(history, earlier(historyID(i), day, amount, "", "Earlier "+strconv.Itoa(i)))
+		rows = append(rows, described(statementRow(i+2, day, amount, ""), "New "+strconv.Itoa(i)))
+	}
+
+	// The last earlier row looks like a new one, and so does a later
+	// earlier one with the same key: the first is recorded.
+	last := history[n-1]
+	again := earlier(historyID(n), last.BookingDate.Format(time.DateOnly), "19999.0", "", "earlier   19999")
+	history = append(history, again)
+	rows = append(rows,
+		described(statementRow(n+2, last.BookingDate.Format(time.DateOnly), "19999", ""), " EARLIER 19999 "),
+		described(statementRow(n+3, "2026-01-01", "1.00", "T-1"), "Repeat"))
+	history = append(history, earlier(historyID(n+1), "2026-01-01", "1.0", "T-1", "Repeat"))
+
+	done := make(chan domain.Statement, 1)
+
+	go func() {
+		done <- domain.Statement{Rows: rows}.WithoutCertainRepeats(history).WithSuspectedDuplicates(history)
+	}()
+
+	select {
+	case got := <-done:
+		if got.Skipped != 1 || got.Suspected != 1 || len(got.Rows) != n+1 || got.Rows[n].Resembles != last.ID {
+			t.Errorf("statement = %d rows, %d skipped, %d suspected (last resembles %s); want %d rows, 1 skipped, 1 suspected resembling %s",
+				len(got.Rows), got.Skipped, got.Suspected, got.Rows[len(got.Rows)-1].Resembles, n+1, last.ID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("detecting duplicates of %d rows against %d earlier ones took more than 2s", n, len(history))
+	}
+}
+
+func historyID(i int) sharedkernel.ID {
+	return sharedkernel.MustParseID(fmt.Sprintf("0198f0a0-0000-7000-8000-%012d", i))
 }

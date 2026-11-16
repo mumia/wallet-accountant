@@ -3,7 +3,9 @@
 package http_test
 
 import (
+	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/mumia/wallet-accountant/internal/apitest"
@@ -199,6 +201,49 @@ func TestVoidingTheFirstImportReopensTheOpeningBalance(t *testing.T) {
 	// A later import's Balance check counts only the new Opening balance
 	// and the corrected rows: 510.50 + 1989.50 - 45.10 = 2454.90.
 	f.upload(t, "", otherStatement, "2454.90", "").AssertJSON(t, http.StatusCreated, &statementImport{})
+}
+
+// Voiding the first import while a later file is uploaded: either the
+// later import is recorded first, and the first is no longer the latest so
+// it can't be voided; or the void runs first, the Account awaits its first
+// Statement import again, and the later upload is refused as needing a
+// preview. Never both, which would record a later import on an Account
+// with no Opening balance.
+func TestVoidingTheFirstImportWhileALaterOneIsUploaded(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+
+	const rounds = 6
+
+	var wg sync.WaitGroup
+	for round := range rounds {
+		wg.Go(func() {
+			f := newImportFixture(t, app, fmt.Sprintf("member-%d", round))
+			first := f.confirm(t, statement, "2500.00")
+
+			var void, upload *apitest.Response
+
+			var both sync.WaitGroup
+			both.Go(func() { void = f.void(t, first.StatementImportID) })
+			both.Go(func() { upload = f.upload(t, "", januaryBonus, "2600.00", "") })
+			both.Wait()
+
+			if upload.Status == http.StatusCreated {
+				void.AssertProblem(t, http.StatusConflict, "/problems/not-the-latest-statement-import")
+
+				return
+			}
+
+			upload.AssertProblem(t, http.StatusUnprocessableEntity, "/problems/preview-required")
+			void.AssertJSON(t, http.StatusOK, &voidedImport{})
+
+			if a := f.getAccount(t); !a.AwaitingFirstStatementImport {
+				t.Errorf("round %d: account = %+v, want it awaiting its first Statement import", round, a)
+			}
+		})
+	}
+
+	wg.Wait()
 }
 
 // Only the Account's latest import can be voided, so every remaining

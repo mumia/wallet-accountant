@@ -19,6 +19,9 @@ var (
 	// ErrMonthBeforeStartDate is returned for closing a month before the
 	// Account's start date.
 	ErrMonthBeforeStartDate = domain.ErrMonthBeforeStartDate
+	// ErrMonthNotStarted is returned for closing a month later than the
+	// current one.
+	ErrMonthNotStarted = domain.ErrMonthNotStarted
 	// ErrMonthCloseRefused is returned, as a *domain.MonthCloseRefusedError,
 	// for a month that can't close yet.
 	ErrMonthCloseRefused = domain.ErrMonthCloseRefused
@@ -126,7 +129,7 @@ func (m *Months) Close(ctx context.Context, household, account uuid.UUID, month 
 		}
 
 		res, err := m.accounts.Execute(ctx, tx, account, domain.CloseMonth{
-			Month: month, StatementBalance: statementBalance, Imports: imports,
+			Today: tx.Now(), Month: month, StatementBalance: statementBalance, Imports: imports,
 		})
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error

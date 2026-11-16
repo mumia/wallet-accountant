@@ -233,12 +233,19 @@ func (s *ImportedTransactions) decide(ctx context.Context, household, id uuid.UU
 		}
 
 		// A row is a Suspected duplicate only from its import on, so a row
-		// that isn't one now never becomes one.
+		// that isn't one now never becomes one. One that is may have been
+		// decided while this waited for the lock: read it again under it.
 		suspected := fold.State.State == domain.ImportedSuspectedDuplicate
 		if suspected {
 			if err := s.checks.LockAccount(ctx, tx, fold.State.AccountID); err != nil {
 				return err //nolint:wrapcheck // the adapter's error
 			}
+
+			if fold, _, err = s.rows.Folds.Load(ctx, tx, id); err != nil {
+				return err //nolint:wrapcheck // the adapter's error
+			}
+
+			suspected = fold.State.State == domain.ImportedSuspectedDuplicate
 		}
 
 		res, err := s.rows.Execute(ctx, tx, id, cmd)
@@ -264,11 +271,21 @@ func (s *ImportedTransactions) decide(ctx context.Context, household, id uuid.UU
 }
 
 // runWaitingCheck runs the Balance check of the row's Statement import once
-// none of its Suspected duplicates is left undecided.
+// none of its Suspected duplicates is left undecided, if it is still
+// waiting: a void never lets it run.
 func (s *ImportedTransactions) runWaitingCheck(ctx context.Context, tx *eventstore.Tx, row domain.ImportedTransactionState) error {
 	undecided, err := s.checks.UndecidedSuspectedDuplicates(ctx, tx, row.StatementImportID)
 	if err != nil || undecided > 0 {
 		return err //nolint:wrapcheck // the adapter's error
+	}
+
+	statementImport, found, err := s.imports.Folds.Load(ctx, tx, row.StatementImportID)
+	if err != nil {
+		return err //nolint:wrapcheck // the adapter's error
+	}
+
+	if !found || statementImport.State.BalanceCheck != domain.BalanceCheckWaiting || statementImport.State.Voided() {
+		return nil
 	}
 
 	upTo, err := s.checks.ImportedUpTo(ctx, tx, row.AccountID, row.StatementImportID)
