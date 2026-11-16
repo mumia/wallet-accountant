@@ -50,6 +50,10 @@ var (
 	// ErrNotOneCategory is returned for setting the Category of a
 	// Transaction whose non-Account side isn't exactly one Category.
 	ErrNotOneCategory = errors.New("the transaction's other side isn't exactly one category")
+	// ErrNotTheOpeningBalanceTransaction is returned for reversing, as the
+	// Opening balance, a Transaction that isn't the Account's Opening
+	// balance Transaction.
+	ErrNotTheOpeningBalanceTransaction = errors.New("not the opening balance transaction")
 )
 
 // Posting is one line of a Transaction: the amount it moves into (positive)
@@ -184,6 +188,13 @@ type (
 		ReversalID sharedkernel.ID
 	}
 
+	// ReverseOpeningBalance reverses the Opening balance Transaction when
+	// its Account's first Statement import is voided (ADR-0018): ReversalID
+	// is the Transaction that records the opposite Postings.
+	ReverseOpeningBalance struct {
+		ReversalID sharedkernel.ID
+	}
+
 	// SetTransactionCategory sets the Category of the non-Account side.
 	SetTransactionCategory struct {
 		CategoryID sharedkernel.ID
@@ -192,6 +203,7 @@ type (
 
 func (RecordTransaction) isTransactionCommand()      {}
 func (ReverseTransaction) isTransactionCommand()     {}
+func (ReverseOpeningBalance) isTransactionCommand()  {}
 func (SetTransactionCategory) isTransactionCommand() {}
 
 type (
@@ -243,6 +255,8 @@ func decideTransaction(s TransactionState, c TransactionCommand) ([]TransactionE
 		return recordTransaction(s, c)
 	case ReverseTransaction:
 		return reverseTransaction(s, c)
+	case ReverseOpeningBalance:
+		return reverseOpeningBalance(s, c)
 	case SetTransactionCategory:
 		return setTransactionCategory(s, c)
 	default:
@@ -324,6 +338,23 @@ func reverseTransaction(s TransactionState, c ReverseTransaction) ([]Transaction
 	}
 
 	switch {
+	case s.ReversedBy != sharedkernel.NilID:
+		return nil, ErrTransactionAlreadyReversed
+	case c.ReversalID == sharedkernel.NilID:
+		return nil, ErrReversalIDRequired
+	}
+
+	return []TransactionEvent{TransactionReversed(c)}, nil
+}
+
+// reverseOpeningBalance reverses the Opening balance Transaction once: only
+// voiding its Account's first Statement import asks for it.
+func reverseOpeningBalance(s TransactionState, c ReverseOpeningBalance) ([]TransactionEvent, error) {
+	switch {
+	case !s.Recorded:
+		return nil, ErrTransactionNotRecorded
+	case !s.OpeningBalance:
+		return nil, ErrNotTheOpeningBalanceTransaction
 	case s.ReversedBy != sharedkernel.NilID:
 		return nil, ErrTransactionAlreadyReversed
 	case c.ReversalID == sharedkernel.NilID:

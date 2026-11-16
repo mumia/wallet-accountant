@@ -20,6 +20,19 @@ var (
 	// a later import whose rows don't bring the Account to its Export
 	// balance.
 	ErrBalanceCheckFailed = errors.New("balance check failed")
+	// ErrStatementImportNotRecorded is returned for voiding a Statement
+	// import that doesn't exist.
+	ErrStatementImportNotRecorded = errors.New("statement import not recorded")
+	// ErrStatementImportAlreadyVoided is returned for voiding a Statement
+	// import twice.
+	ErrStatementImportAlreadyVoided = errors.New("statement import already voided")
+	// ErrNotTheLatestStatementImport is returned for voiding a Statement
+	// import that isn't the Account's latest non-voided one, so every
+	// remaining import's Balance check stays valid (ADR-0018).
+	ErrNotTheLatestStatementImport = errors.New("not the account's latest statement import")
+	// ErrStatementImportHasAcceptedRows is returned for voiding a Statement
+	// import with Accepted rows: their Transactions are reversed first.
+	ErrStatementImportHasAcceptedRows = errors.New("statement import has accepted rows")
 )
 
 // BalanceCheckFailedError is a failed Balance check (ADR-0018): what the
@@ -66,7 +79,13 @@ type StatementImportState struct {
 	OpeningBalance *sharedkernel.Decimal
 	BalanceCheck   BalanceCheck
 	RecordedAt     time.Time
+	// VoidedAt is when the import was voided; the zero time while it isn't.
+	VoidedAt time.Time
 }
+
+// Voided reports whether the import was voided: its rows are Discarded and
+// its file can be imported again.
+func (s StatementImportState) Voided() bool { return !s.VoidedAt.IsZero() }
 
 type (
 	// StatementImportCommand is a command to a Statement import.
@@ -93,9 +112,18 @@ type (
 		OpeningBalance sharedkernel.Decimal
 		EarlierTotal   sharedkernel.Decimal
 	}
+
+	// VoidStatementImport withdraws the import (ADR-0018). Latest says it
+	// is the Account's latest non-voided import; AcceptedRows counts its
+	// Accepted Imported transactions.
+	VoidStatementImport struct {
+		Latest       bool
+		AcceptedRows int
+	}
 )
 
 func (RecordStatementImport) isStatementImportCommand() {}
+func (VoidStatementImport) isStatementImportCommand()   {}
 
 type (
 	// StatementImportEvent is a Statement import's event.
@@ -119,7 +147,11 @@ type (
 	}
 )
 
+// StatementImportVoided is recorded when a Statement import is voided.
+type StatementImportVoided struct{}
+
 func (StatementImportRecorded) isStatementImportEvent() {}
+func (StatementImportVoided) isStatementImportEvent()   {}
 
 // StatementImport is the Statement import Decider (ADR-0018).
 var StatementImport = decider.Decider[StatementImportState, StatementImportCommand, StatementImportEvent]{
@@ -131,6 +163,8 @@ func decideStatementImport(s StatementImportState, c StatementImportCommand) ([]
 	switch c := c.(type) {
 	case RecordStatementImport:
 		return recordStatementImport(s, c)
+	case VoidStatementImport:
+		return voidStatementImport(s, c)
 	default:
 		return nil, nil
 	}
@@ -194,7 +228,30 @@ func recordStatementImport(s StatementImportState, c RecordStatementImport) ([]S
 	return []StatementImportEvent{recorded}, nil
 }
 
+// voidStatementImport voids the Account's latest import while none of its
+// rows are Accepted (spec stories 43d, 43f).
+func voidStatementImport(s StatementImportState, c VoidStatementImport) ([]StatementImportEvent, error) {
+	switch {
+	case !s.Recorded:
+		return nil, ErrStatementImportNotRecorded
+	case s.Voided():
+		return nil, ErrStatementImportAlreadyVoided
+	case !c.Latest:
+		return nil, ErrNotTheLatestStatementImport
+	case c.AcceptedRows > 0:
+		return nil, fmt.Errorf("%w: %d", ErrStatementImportHasAcceptedRows, c.AcceptedRows)
+	}
+
+	return []StatementImportEvent{StatementImportVoided{}}, nil
+}
+
 func evolveStatementImport(s StatementImportState, e decider.Envelope[StatementImportEvent]) StatementImportState {
+	if _, ok := e.Event.(StatementImportVoided); ok {
+		s.VoidedAt = e.Time
+
+		return s
+	}
+
 	if ev, ok := e.Event.(StatementImportRecorded); ok {
 		s = StatementImportState{
 			Recorded:       true,
@@ -320,12 +377,17 @@ type (
 	// DiscardImportedTransaction Discards a pending Imported transaction,
 	// so it never reaches the Ledger.
 	DiscardImportedTransaction struct{}
+
+	// DiscardForVoid Discards a row of a Statement import being voided:
+	// any state but Accepted. A row already Discarded stays as it is.
+	DiscardForVoid struct{}
 )
 
 func (ImportRow) isImportedTransactionCommand()                  {}
 func (AcceptImportedTransaction) isImportedTransactionCommand()  {}
 func (ReturnToPending) isImportedTransactionCommand()            {}
 func (DiscardImportedTransaction) isImportedTransactionCommand() {}
+func (DiscardForVoid) isImportedTransactionCommand()             {}
 
 type (
 	// ImportedTransactionEvent is an Imported transaction's event.
@@ -390,6 +452,8 @@ func decideImportedTransaction(s ImportedTransactionState, c ImportedTransaction
 		return returnToPending(s, c)
 	case DiscardImportedTransaction:
 		return discardImportedTransaction(s)
+	case DiscardForVoid:
+		return discardForVoid(s)
 	default:
 		return nil, nil
 	}
@@ -480,6 +544,20 @@ func discardImportedTransaction(s ImportedTransactionState) ([]ImportedTransacti
 		return nil, ErrImportedTransactionAlreadyAccepted
 	case s.State != ImportedPending:
 		return nil, fmt.Errorf("%w: it is %s", ErrImportedTransactionNotPending, s.State)
+	}
+
+	return []ImportedTransactionEvent{ImportedTransactionDiscarded{}}, nil
+}
+
+// discardForVoid Discards every non-Accepted row of a voided import.
+func discardForVoid(s ImportedTransactionState) ([]ImportedTransactionEvent, error) {
+	switch {
+	case !s.Imported:
+		return nil, ErrImportedTransactionNotImported
+	case s.State == ImportedDiscarded:
+		return nil, nil
+	case s.State == ImportedAccepted:
+		return nil, ErrImportedTransactionAlreadyAccepted
 	}
 
 	return []ImportedTransactionEvent{ImportedTransactionDiscarded{}}, nil

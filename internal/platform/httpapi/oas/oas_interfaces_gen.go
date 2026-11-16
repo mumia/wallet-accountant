@@ -92,3 +92,7 @@ type SaveCsvMappingRes interface {
 type UploadStatementImportRes interface {
 	uploadStatementImportRes()
 }
+
+type VoidStatementImportRes interface {
+	voidStatementImportRes()
+}

@@ -52,6 +52,9 @@ var (
 	rn29AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
+	rn36AllowedHeaders = map[string]string{
+		"POST": "Authorization,Idempotency-Key",
+	}
 	rn5AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
@@ -556,32 +559,90 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										return
 									}
 									switch elem[0] {
-									case '/': // Prefix: "/previews"
+									case '/': // Prefix: "/"
 
-										if l := len("/previews"); len(elem) >= l && elem[0:l] == "/previews" {
+										if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
 											elem = elem[l:]
 										} else {
 											break
 										}
 
 										if len(elem) == 0 {
-											// Leaf node.
-											switch r.Method {
-											case "POST":
-												s.handlePreviewStatementImportRequest([2]string{
-													args[0],
-													args[1],
-												}, elemIsEscaped, w, r)
-											default:
-												s.notAllowed(w, r, notAllowedParams{
-													allowedMethods: "POST",
-													allowedHeaders: rn29AllowedHeaders,
-													acceptPost:     "multipart/form-data",
-													acceptPatch:    "",
-												})
+											break
+										}
+										switch elem[0] {
+										case 'p': // Prefix: "previews"
+											origElem := elem
+											if l := len("previews"); len(elem) >= l && elem[0:l] == "previews" {
+												elem = elem[l:]
+											} else {
+												break
 											}
 
-											return
+											if len(elem) == 0 {
+												// Leaf node.
+												switch r.Method {
+												case "POST":
+													s.handlePreviewStatementImportRequest([2]string{
+														args[0],
+														args[1],
+													}, elemIsEscaped, w, r)
+												default:
+													s.notAllowed(w, r, notAllowedParams{
+														allowedMethods: "POST",
+														allowedHeaders: rn29AllowedHeaders,
+														acceptPost:     "multipart/form-data",
+														acceptPatch:    "",
+													})
+												}
+
+												return
+											}
+
+											elem = origElem
+										}
+										// Param: "statement_import_id"
+										// Match until "/"
+										idx := strings.IndexByte(elem, '/')
+										if idx < 0 {
+											idx = len(elem)
+										}
+										args[2] = elem[:idx]
+										elem = elem[idx:]
+
+										if len(elem) == 0 {
+											break
+										}
+										switch elem[0] {
+										case '/': // Prefix: "/void"
+
+											if l := len("/void"); len(elem) >= l && elem[0:l] == "/void" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch r.Method {
+												case "POST":
+													s.handleVoidStatementImportRequest([3]string{
+														args[0],
+														args[1],
+														args[2],
+													}, elemIsEscaped, w, r)
+												default:
+													s.notAllowed(w, r, notAllowedParams{
+														allowedMethods: "POST",
+														allowedHeaders: rn36AllowedHeaders,
+														acceptPost:     "",
+														acceptPatch:    "",
+													})
+												}
+
+												return
+											}
+
 										}
 
 									}
@@ -1335,29 +1396,83 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 										}
 									}
 									switch elem[0] {
-									case '/': // Prefix: "/previews"
+									case '/': // Prefix: "/"
 
-										if l := len("/previews"); len(elem) >= l && elem[0:l] == "/previews" {
+										if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
 											elem = elem[l:]
 										} else {
 											break
 										}
 
 										if len(elem) == 0 {
-											// Leaf node.
-											switch method {
-											case "POST":
-												r.name = PreviewStatementImportOperation
-												r.summary = "Preview an Account's first Statement import"
-												r.operationID = "previewStatementImport"
-												r.operationGroup = ""
-												r.pathPattern = "/households/{household_id}/connections/{connection_id}/statement-imports/previews"
-												r.args = args
-												r.count = 2
-												return r, true
-											default:
-												return
+											break
+										}
+										switch elem[0] {
+										case 'p': // Prefix: "previews"
+											origElem := elem
+											if l := len("previews"); len(elem) >= l && elem[0:l] == "previews" {
+												elem = elem[l:]
+											} else {
+												break
 											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch method {
+												case "POST":
+													r.name = PreviewStatementImportOperation
+													r.summary = "Preview an Account's first Statement import"
+													r.operationID = "previewStatementImport"
+													r.operationGroup = ""
+													r.pathPattern = "/households/{household_id}/connections/{connection_id}/statement-imports/previews"
+													r.args = args
+													r.count = 2
+													return r, true
+												default:
+													return
+												}
+											}
+
+											elem = origElem
+										}
+										// Param: "statement_import_id"
+										// Match until "/"
+										idx := strings.IndexByte(elem, '/')
+										if idx < 0 {
+											idx = len(elem)
+										}
+										args[2] = elem[:idx]
+										elem = elem[idx:]
+
+										if len(elem) == 0 {
+											break
+										}
+										switch elem[0] {
+										case '/': // Prefix: "/void"
+
+											if l := len("/void"); len(elem) >= l && elem[0:l] == "/void" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch method {
+												case "POST":
+													r.name = VoidStatementImportOperation
+													r.summary = "Void a Statement import"
+													r.operationID = "voidStatementImport"
+													r.operationGroup = ""
+													r.pathPattern = "/households/{household_id}/connections/{connection_id}/statement-imports/{statement_import_id}/void"
+													r.args = args
+													r.count = 3
+													return r, true
+												default:
+													return
+												}
+											}
+
 										}
 
 									}

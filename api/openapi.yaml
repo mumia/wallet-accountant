@@ -841,6 +841,45 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/connections/{connection_id}/statement-imports/{statement_import_id}/void:
+    post:
+      operationId: voidStatementImport
+      summary: Void a Statement import
+      description: |
+        Withdraws the Account's latest Statement import so that a corrected
+        file, or the same file with a fixed mapping, can be uploaded again
+        (ADR-0018). Every Imported transaction of the import becomes
+        Discarded and its file can be imported again. Voiding the Account's
+        only import also reverses its Opening balance Transaction, in the
+        same transaction, and the Account awaits its first Statement import
+        again: that is the only way to change an Opening balance. Only the
+        Account's latest non-voided import can be voided (409
+        `/problems/not-the-latest-statement-import`), only while none of its
+        rows are Accepted (409 `/problems/statement-import-has-accepted-rows`:
+        reverse their Transactions first), and only once (409
+        `/problems/statement-import-already-voided`).
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+        - $ref: '#/components/parameters/StatementImportID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The voided Statement import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     IdempotencyKey:
@@ -885,6 +924,14 @@ components:
       in: path
       required: true
       description: The Connection's ID
+      schema:
+        type: string
+        format: uuid
+    StatementImportID:
+      name: statement_import_id
+      in: path
+      required: true
+      description: The Statement import's ID
       schema:
         type: string
         format: uuid
@@ -1542,6 +1589,11 @@ components:
           format: date-time
           description: When the import was recorded
           example: '2026-02-01T09:30:00Z'
+        voided_at:
+          type: string
+          format: date-time
+          description: When the import was voided; absent while it isn't
+          example: '2026-02-02T10:00:00Z'
     StatementImportList:
       type: object
       description: A Connection's Statement imports

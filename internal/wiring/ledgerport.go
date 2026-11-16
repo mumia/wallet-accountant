@@ -90,6 +90,16 @@ func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b 
 	}
 }
 
+// ReverseOpeningBalance implements ingestionapp.Ledger.
+func (l ingestionLedger) ReverseOpeningBalance(ctx context.Context, tx *eventstore.Tx, account, reversal uuid.UUID) error {
+	err := l.transactions.ReverseOpeningBalance(ctx, tx, account, reversal)
+	if errors.Is(err, ledgerapp.ErrAccountNotFound) {
+		return ingestionapp.ErrAccountNotFound
+	}
+
+	return err //nolint:wrapcheck // already wrapped by the Ledger
+}
+
 // ledgerIngestion is the Ledger's Ingestion port, served by Ingestion's
 // application services.
 type ledgerIngestion struct {

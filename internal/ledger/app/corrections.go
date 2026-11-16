@@ -194,6 +194,54 @@ func (t *Transactions) Reverse(ctx context.Context, household, id uuid.UUID) (Tr
 	return out, nil
 }
 
+// ReverseOpeningBalance reverses the Account's Opening balance Transaction
+// in the caller's transaction, when Ingestion voids the Account's first
+// Statement import: the Transaction is marked reversed, a reversal with the
+// opposite Postings on the start date is recorded, linked to it, and the
+// Account's balance moves back as it goes back to awaiting its first
+// Statement import (ADR-0018; consistency map: Void Statement import). It
+// is the only way the Opening balance Transaction is reversed.
+func (t *Transactions) ReverseOpeningBalance(ctx context.Context, tx *eventstore.Tx, account, reversal uuid.UUID) error {
+	fold, found, err := t.accounts.Folds.Load(ctx, tx, account)
+	if err != nil {
+		return fmt.Errorf("load account %s: %w", account, err)
+	}
+
+	switch {
+	case !found:
+		return ErrAccountNotFound
+	case fold.State.AwaitingFirstStatementImport:
+		return fmt.Errorf("reverse the opening balance of account %s: %w", account, domain.ErrAwaitingFirstStatementImport)
+	}
+
+	opening := fold.State.OpeningBalanceTransactionID
+
+	res, err := t.transactions.Execute(ctx, tx, opening, domain.ReverseOpeningBalance{ReversalID: reversal})
+	if err != nil {
+		return fmt.Errorf("reverse opening balance transaction %s: %w", opening, err)
+	}
+
+	record := res.State.Reversal(opening)
+
+	for _, p := range record.Postings {
+		if p.AccountID != account {
+			continue
+		}
+
+		if _, err := t.accounts.Execute(ctx, tx, account, domain.ReopenOpeningBalance{
+			TransactionID: opening, ReversalID: reversal, Amount: p.Amount,
+		}); err != nil {
+			return fmt.Errorf("reopen the opening balance of account %s: %w", account, err)
+		}
+	}
+
+	if _, err := t.transactions.Execute(ctx, tx, reversal, record); err != nil {
+		return fmt.Errorf("record opening balance reversal: %w", err)
+	}
+
+	return nil
+}
+
 // detail is the Transaction as seen from its first Account Posting, named
 // with its Category.
 func (t *Transactions) detail(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.TransactionState,

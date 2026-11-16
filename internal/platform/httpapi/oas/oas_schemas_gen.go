@@ -1717,6 +1717,52 @@ func (o OptDate) Or(d time.Time) time.Time {
 	return d
 }
 
+// NewOptDateTime returns new OptDateTime with value set to v.
+func NewOptDateTime(v time.Time) OptDateTime {
+	return OptDateTime{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDateTime is optional time.Time.
+type OptDateTime struct {
+	Value time.Time
+	Set   bool
+}
+
+// IsSet returns true if OptDateTime was set.
+func (o OptDateTime) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDateTime) Reset() {
+	var v time.Time
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDateTime) SetTo(v time.Time) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDateTime) Get() (v time.Time, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDateTime) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptImportedTransactionAcceptance returns new OptImportedTransactionAcceptance with value set to v.
 func NewOptImportedTransactionAcceptance(v ImportedTransactionAcceptance) OptImportedTransactionAcceptance {
 	return OptImportedTransactionAcceptance{
@@ -2316,6 +2362,8 @@ type StatementImport struct {
 	BalanceCheck string `json:"balance_check"`
 	// When the import was recorded.
 	ImportedAt time.Time `json:"imported_at"`
+	// When the import was voided; absent while it isn't.
+	VoidedAt OptDateTime `json:"voided_at"`
 }
 
 // GetStatementImportID returns the value of StatementImportID.
@@ -2373,6 +2421,11 @@ func (s *StatementImport) GetImportedAt() time.Time {
 	return s.ImportedAt
 }
 
+// GetVoidedAt returns the value of VoidedAt.
+func (s *StatementImport) GetVoidedAt() OptDateTime {
+	return s.VoidedAt
+}
+
 // SetStatementImportID sets the value of StatementImportID.
 func (s *StatementImport) SetStatementImportID(val uuid.UUID) {
 	s.StatementImportID = val
@@ -2428,7 +2481,13 @@ func (s *StatementImport) SetImportedAt(val time.Time) {
 	s.ImportedAt = val
 }
 
+// SetVoidedAt sets the value of VoidedAt.
+func (s *StatementImport) SetVoidedAt(val OptDateTime) {
+	s.VoidedAt = val
+}
+
 func (*StatementImport) uploadStatementImportRes() {}
+func (*StatementImport) voidStatementImportRes()   {}
 
 // Problem details (RFC 9457) of a refused Statement import.
 // Ref: #/components/schemas/StatementImportConflictProblem
@@ -2873,3 +2932,15 @@ func (*UploadStatementImportNotFound) uploadStatementImportRes() {}
 type UploadStatementImportUnauthorized Problem
 
 func (*UploadStatementImportUnauthorized) uploadStatementImportRes() {}
+
+type VoidStatementImportConflict Problem
+
+func (*VoidStatementImportConflict) voidStatementImportRes() {}
+
+type VoidStatementImportNotFound Problem
+
+func (*VoidStatementImportNotFound) voidStatementImportRes() {}
+
+type VoidStatementImportUnauthorized Problem
+
+func (*VoidStatementImportUnauthorized) voidStatementImportRes() {}

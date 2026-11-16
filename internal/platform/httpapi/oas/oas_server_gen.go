@@ -240,6 +240,19 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports
 	UploadStatementImport(ctx context.Context, req *StatementImportUploadMultipart, params UploadStatementImportParams) (UploadStatementImportRes, error)
+	// VoidStatementImport implements voidStatementImport operation.
+	//
+	// Withdraws the Account's latest Statement import so that a corrected file, or the same file with a
+	// fixed mapping, can be uploaded again (ADR-0018). Every Imported transaction of the import becomes
+	// Discarded and its file can be imported again. Voiding the Account's only import also reverses its
+	// Opening balance Transaction, in the same transaction, and the Account awaits its first Statement
+	// import again: that is the only way to change an Opening balance. Only the Account's latest
+	// non-voided import can be voided (409 `/problems/not-the-latest-statement-import`), only while none
+	// of its rows are Accepted (409 `/problems/statement-import-has-accepted-rows`: reverse their
+	// Transactions first), and only once (409 `/problems/statement-import-already-voided`).
+	//
+	// POST /households/{household_id}/connections/{connection_id}/statement-imports/{statement_import_id}/void
+	VoidStatementImport(ctx context.Context, params VoidStatementImportParams) (VoidStatementImportRes, error)
 	// NewError creates *ProblemStatusCode from error returned by handler.
 	//
 	// Used for common default response.

@@ -29,4 +29,5 @@ const (
 	ReverseTransactionOperation         OperationName = "ReverseTransaction"
 	SaveCsvMappingOperation             OperationName = "SaveCsvMapping"
 	UploadStatementImportOperation      OperationName = "UploadStatementImport"
+	VoidStatementImportOperation        OperationName = "VoidStatementImport"
 )

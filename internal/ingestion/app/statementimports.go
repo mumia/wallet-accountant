@@ -18,6 +18,7 @@ import (
 const (
 	StatementImportStreamType   = "ingestion.statementimport"
 	StatementImportRecordedType = "io.walletaccountant.ingestion.statementimport.recorded.v1"
+	StatementImportVoidedType   = "io.walletaccountant.ingestion.statementimport.voided.v1"
 
 	ImportedTransactionStreamType            = "ingestion.importedtransaction"
 	TransactionImportedType                  = "io.walletaccountant.ingestion.importedtransaction.imported.v1"
@@ -43,6 +44,18 @@ var (
 	// confirming a first import of an Account that already has its Opening
 	// balance, and for a later import sent with a preview_id.
 	ErrOpeningBalanceAlreadyRecorded = errors.New("opening balance already recorded")
+	// ErrStatementImportNotFound is returned for a Statement import that is
+	// not one of the Connection's in the Household.
+	ErrStatementImportNotFound = errors.New("statement import not found")
+	// ErrNotTheLatestStatementImport is returned for voiding an import
+	// other than the Account's latest non-voided one.
+	ErrNotTheLatestStatementImport = domain.ErrNotTheLatestStatementImport
+	// ErrStatementImportHasAcceptedRows is returned for voiding an import
+	// with Accepted rows.
+	ErrStatementImportHasAcceptedRows = domain.ErrStatementImportHasAcceptedRows
+	// ErrStatementImportAlreadyVoided is returned for voiding an import
+	// twice.
+	ErrStatementImportAlreadyVoided = domain.ErrStatementImportAlreadyVoided
 )
 
 // DuplicateImportError is returned for a file already imported through the
@@ -76,6 +89,11 @@ type Ledger interface {
 	// ErrCategoryNotFound or ErrInternalCategory for a Category it can't be
 	// booked to (consistency map: Accept imported transaction).
 	BookAccepted(ctx context.Context, tx *eventstore.Tx, booking Booking) error
+	// ReverseOpeningBalance reverses the Account's Opening balance
+	// Transaction by the Transaction reversal, so the Account awaits its
+	// first Statement import again (consistency map: Void Statement
+	// import).
+	ReverseOpeningBalance(ctx context.Context, tx *eventstore.Tx, account, reversal uuid.UUID) error
 }
 
 // Booking is an Accepted Imported transaction as the Ledger books it:
@@ -101,13 +119,15 @@ type ImportedTransactionAggregate = eventstore.Aggregate[domain.ImportedTransact
 func NewStatementImportAggregate(folds eventstore.FoldStore[domain.StatementImportState]) StatementImportAggregate {
 	codec := eventstore.NewCodec[domain.StatementImportEvent](Source)
 	eventstore.Register[domain.StatementImportEvent, domain.StatementImportRecorded](codec, StatementImportRecordedType)
+	eventstore.Register[domain.StatementImportEvent, domain.StatementImportVoided](codec, StatementImportVoidedType)
 
 	return StatementImportAggregate{
-		StreamType:        StatementImportStreamType,
-		Decider:           domain.StatementImport,
-		Codec:             codec,
-		Folds:             folds,
-		FoldSchemaVersion: 1,
+		StreamType: StatementImportStreamType,
+		Decider:    domain.StatementImport,
+		Codec:      codec,
+		Folds:      folds,
+		// 2: when it was voided.
+		FoldSchemaVersion: 2,
 	}
 }
 
@@ -154,6 +174,18 @@ type StatementImportReader interface {
 	// ImportedSoFar returns what a later import of the Account is checked
 	// against.
 	ImportedSoFar(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (ImportedSoFar, error)
+	// LatestImport returns the Account's latest non-voided Statement
+	// import, if it has one.
+	LatestImport(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (uuid.UUID, bool, error)
+	// RowsOf returns every Imported transaction of the Statement import.
+	RowsOf(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID) ([]ImportRowState, error)
+}
+
+// ImportRowState is an Imported transaction of a Statement import and its
+// state.
+type ImportRowState struct {
+	ID    uuid.UUID
+	State domain.ImportedState
 }
 
 // ImportedSoFar is what an Account's Statement imports have brought in: the
@@ -365,6 +397,84 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 	}
 
 	return recorded, nil
+}
+
+// Void withdraws the Account's latest Statement import, while none of its
+// rows are Accepted, so a corrected file can be uploaded (ADR-0018): with
+// the Account's imports locked, it records the void, Discards every row
+// and, for the Account's first import, reverses the Opening balance
+// Transaction through the Ledger, all in one database transaction. The
+// voided import releases its file (consistency map: Void Statement import).
+func (s *StatementImports) Void(ctx context.Context, household, connection, id uuid.UUID) (StatementImport, error) {
+	reversal, err := sharedkernel.NewID()
+	if err != nil {
+		return StatementImport{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	var voided StatementImport
+
+	err = s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		fold, found, err := s.imports.Folds.Load(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !found || fold.State.ConnectionID != connection {
+			return ErrStatementImportNotFound
+		}
+
+		account := fold.State.AccountID
+
+		if err := s.reader.LockAccount(ctx, tx, account); err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		latest, _, err := s.reader.LatestImport(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		rows, err := s.reader.RowsOf(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		accepted := 0
+
+		for _, r := range rows {
+			if r.State == domain.ImportedAccepted {
+				accepted++
+			}
+		}
+
+		res, err := s.imports.Execute(ctx, tx, id, domain.VoidStatementImport{Latest: latest == id, AcceptedRows: accepted})
+		if err != nil {
+			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		// Each row checks its own state again, so an Accept that raced the
+		// void refuses one or the other.
+		for _, r := range rows {
+			if _, err := s.rows.Execute(ctx, tx, r.ID, domain.DiscardForVoid{}); err != nil {
+				return fmt.Errorf("discard imported transaction %s: %w", r.ID, err)
+			}
+		}
+
+		if res.State.OpeningBalance != nil {
+			if err := s.ledger.ReverseOpeningBalance(ctx, tx, account, reversal); err != nil {
+				return err //nolint:wrapcheck // the port's error
+			}
+		}
+
+		voided = StatementImport{ID: id, State: res.State}
+
+		return nil
+	})
+	if err != nil {
+		return StatementImport{}, fmt.Errorf("void statement import %s: %w", id, err)
+	}
+
+	return voided, nil
 }
 
 // List returns every Statement import of the Connection.

@@ -24,7 +24,8 @@ type StatementImportFolds struct{}
 var _ eventstore.FoldStore[domain.StatementImportState] = StatementImportFolds{}
 
 const statementImportColumns = `connection_id, account_id, file_hash, mapping_version, currency, export_balance::text,
-	rows_imported, rows_skipped, rows_ignored, rows_total::text, opening_balance::text, balance_check, recorded_at`
+	rows_imported, rows_skipped, rows_ignored, rows_total::text, opening_balance::text, balance_check, recorded_at,
+	voided_at`
 
 func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState, error) {
 	var (
@@ -32,11 +33,12 @@ func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState
 		export, total string
 		opening       *string
 		balanceCheck  string
+		voidedAt      *time.Time
 	)
 
 	dest := append([]any{
 		&s.ConnectionID, &s.AccountID, &s.FileHash, &s.MappingVersion, &s.Currency, &export,
-		&s.RowsImported, &s.RowsSkipped, &s.RowsIgnored, &total, &opening, &balanceCheck, &s.RecordedAt,
+		&s.RowsImported, &s.RowsSkipped, &s.RowsIgnored, &total, &opening, &balanceCheck, &s.RecordedAt, &voidedAt,
 	}, extra...)
 
 	if err := row.Scan(dest...); err != nil {
@@ -44,6 +46,10 @@ func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState
 	}
 
 	s.Recorded, s.BalanceCheck = true, domain.BalanceCheck(balanceCheck)
+
+	if voidedAt != nil {
+		s.VoidedAt = *voidedAt
+	}
 
 	var err error
 	if s.ExportBalance, err = sharedkernel.ParseDecimal(export); err != nil {
@@ -94,15 +100,21 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 		opening = new(s.OpeningBalance.String())
 	}
 
+	var voidedAt *time.Time
+	if s.Voided() {
+		voidedAt = &s.VoidedAt
+	}
+
 	args := []any{
 		tx.HouseholdID(), id, s.ConnectionID, s.AccountID, s.FileHash, s.MappingVersion, s.Currency,
 		s.ExportBalance.String(), s.RowsImported, s.RowsIgnored, s.RowsTotal.String(), opening, string(s.BalanceCheck),
-		s.RecordedAt, f.Version, f.SchemaVersion, s.RowsSkipped,
+		s.RecordedAt, f.Version, f.SchemaVersion, s.RowsSkipped, voidedAt,
 	}
 	q := `INSERT INTO statement_imports (household_id, id, connection_id, account_id, file_hash, mapping_version, currency,
 	          export_balance, rows_imported, rows_ignored, rows_total, opening_balance, balance_check, recorded_at,
-	          version, schema_version, rows_skipped)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17)
+	          version, schema_version, rows_skipped, voided_at)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17,
+	              $18)
 	      ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
@@ -110,8 +122,8 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 		q = `UPDATE statement_imports SET connection_id = $3, account_id = $4, file_hash = $5, mapping_version = $6,
 		         currency = $7, export_balance = $8::numeric, rows_imported = $9, rows_ignored = $10,
 		         rows_total = $11::numeric, opening_balance = $12::numeric, balance_check = $13, recorded_at = $14,
-		         version = $15, schema_version = $16, rows_skipped = $17
-		     WHERE household_id = $1 AND id = $2 AND version = $18`
+		         version = $15, schema_version = $16, rows_skipped = $17, voided_at = $18
+		     WHERE household_id = $1 AND id = $2 AND version = $19`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
@@ -161,11 +173,13 @@ func (StatementImportReader) StatementImports(ctx context.Context, tx *eventstor
 	return list, nil
 }
 
-// ImportOfFile implements app.StatementImportReader.
+// ImportOfFile implements app.StatementImportReader. A voided import has
+// released its file.
 func (StatementImportReader) ImportOfFile(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID, fileHash string) (uuid.UUID, bool, error) {
 	var id uuid.UUID
 
-	err := tx.QueryRow(ctx, `SELECT id FROM statement_imports WHERE household_id = $1 AND connection_id = $2 AND file_hash = $3`,
+	err := tx.QueryRow(ctx, `SELECT id FROM statement_imports
+		WHERE household_id = $1 AND connection_id = $2 AND file_hash = $3 AND voided_at IS NULL`,
 		tx.HouseholdID(), connection, fileHash).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, false, nil
@@ -191,8 +205,54 @@ func (StatementImportReader) LockAccount(ctx context.Context, tx *eventstore.Tx,
 	return nil
 }
 
+// LatestImport implements app.StatementImportReader. Statement import IDs
+// are UUIDv7, so the greatest is the latest.
+func (StatementImportReader) LatestImport(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+
+	err := tx.QueryRow(ctx, `SELECT id FROM statement_imports
+		WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL ORDER BY id DESC LIMIT 1`,
+		tx.HouseholdID(), account).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+
+	if err != nil {
+		return uuid.Nil, false, fmt.Errorf("find the latest statement import: %w", err)
+	}
+
+	return id, true, nil
+}
+
+// RowsOf implements app.StatementImportReader.
+func (StatementImportReader) RowsOf(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID) ([]app.ImportRowState, error) {
+	rows, err := tx.Query(ctx, `SELECT id, state FROM imported_transactions
+		WHERE household_id = $1 AND statement_import_id = $2 ORDER BY id`, tx.HouseholdID(), statementImport)
+	if err != nil {
+		return nil, fmt.Errorf("list rows of statement import: %w", err)
+	}
+
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (app.ImportRowState, error) {
+		var (
+			row   app.ImportRowState
+			state string
+		)
+
+		err := r.Scan(&row.ID, &state)
+		row.State = domain.ImportedState(state)
+
+		return row, err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list rows of statement import: %w", err)
+	}
+
+	return list, nil
+}
+
 // ImportedSoFar implements app.StatementImportReader. Every state but
-// Discarded counts, so pending, Accepted and kept rows all do.
+// Discarded counts, so pending, Accepted and kept rows all do. A voided
+// first import's Opening balance doesn't count: it was reversed.
 func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (app.ImportedSoFar, error) {
 	var (
 		soFar          app.ImportedSoFar
@@ -201,7 +261,7 @@ func (StatementImportReader) ImportedSoFar(ctx context.Context, tx *eventstore.T
 
 	err := tx.QueryRow(ctx, `SELECT
 		    (SELECT COALESCE(SUM(opening_balance), 0)::text FROM statement_imports
-		      WHERE household_id = $1 AND account_id = $2),
+		      WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL),
 		    (SELECT COALESCE(SUM(amount), 0)::text FROM imported_transactions
 		      WHERE household_id = $1 AND account_id = $2 AND state <> 'discarded')`,
 		tx.HouseholdID(), account).Scan(&opening, &total)

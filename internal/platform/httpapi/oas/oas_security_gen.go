@@ -58,6 +58,7 @@ var operationRolesBearerAuth = map[string][]string{
 	ReverseTransactionOperation:         []string{},
 	SaveCsvMappingOperation:             []string{},
 	UploadStatementImportOperation:      []string{},
+	VoidStatementImportOperation:        []string{},
 }
 
 // GetRolesForBearerAuth returns the required roles for the given operation.

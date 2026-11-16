@@ -153,6 +153,17 @@ type (
 		WasUncategorised bool
 		Uncategorised    bool
 	}
+
+	// ReopenOpeningBalance takes back the Opening balance recorded by the
+	// Transaction TransactionID, reversed by ReversalID, when the first
+	// Statement import is voided: the Account awaits its first Statement
+	// import again (ADR-0018). Amount is the reversal's Posting on the
+	// Account.
+	ReopenOpeningBalance struct {
+		TransactionID sharedkernel.ID
+		ReversalID    sharedkernel.ID
+		Amount        sharedkernel.Decimal
+	}
 )
 
 func (AddAccount) isAccountCommand()              {}
@@ -160,6 +171,7 @@ func (RecordOpeningBalance) isAccountCommand()    {}
 func (BookTransaction) isAccountCommand()         {}
 func (BookReversal) isAccountCommand()            {}
 func (RecategoriseTransaction) isAccountCommand() {}
+func (ReopenOpeningBalance) isAccountCommand()    {}
 
 type (
 	// AccountEvent is an Account's event.
@@ -208,6 +220,15 @@ type (
 		WasUncategorised bool            `json:"wasuncategorised,omitempty"`
 		Uncategorised    bool            `json:"uncategorised,omitempty"`
 	}
+
+	// OpeningBalanceReversed is recorded when voiding the first Statement
+	// import reverses the Opening balance Transaction TransactionID by
+	// ReversalID, moving the balance by Amount on the start date.
+	OpeningBalanceReversed struct {
+		TransactionID sharedkernel.ID      `json:"transactionid"`
+		ReversalID    sharedkernel.ID      `json:"reversalid"`
+		Amount        sharedkernel.Decimal `json:"amount"`
+	}
 )
 
 func (AccountAdded) isAccountEvent()             {}
@@ -215,6 +236,7 @@ func (OpeningBalanceRecorded) isAccountEvent()   {}
 func (TransactionBooked) isAccountEvent()        {}
 func (ReversalBooked) isAccountEvent()           {}
 func (TransactionRecategorised) isAccountEvent() {}
+func (OpeningBalanceReversed) isAccountEvent()   {}
 
 // Account is the Account Decider (ADR-0004, ADR-0011).
 var Account = decider.Decider[AccountState, AccountCommand, AccountEvent]{
@@ -234,6 +256,8 @@ func decideAccount(s AccountState, c AccountCommand) ([]AccountEvent, error) {
 		return bookReversal(s, c)
 	case RecategoriseTransaction:
 		return recategoriseTransaction(s, c)
+	case ReopenOpeningBalance:
+		return reopenOpeningBalance(s, c)
 	default:
 		return nil, nil
 	}
@@ -374,6 +398,20 @@ func recategoriseTransaction(s AccountState, c RecategoriseTransaction) ([]Accou
 	}}, nil
 }
 
+// reopenOpeningBalance takes back the Account's own Opening balance.
+func reopenOpeningBalance(s AccountState, c ReopenOpeningBalance) ([]AccountEvent, error) {
+	switch {
+	case !s.Added:
+		return nil, ErrAccountNotAdded
+	case s.AwaitingFirstStatementImport:
+		return nil, ErrAwaitingFirstStatementImport
+	case c.TransactionID != s.OpeningBalanceTransactionID:
+		return nil, ErrNotTheOpeningBalanceTransaction
+	}
+
+	return []AccountEvent{OpeningBalanceReversed(c)}, nil
+}
+
 func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountState {
 	switch ev := e.Event.(type) {
 	case AccountAdded:
@@ -385,6 +423,10 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 	case OpeningBalanceRecorded:
 		s.AwaitingFirstStatementImport = false
 		s.OpeningBalanceTransactionID = ev.TransactionID
+		s.Months = moved(s.Months, s.StartDate.Format(MonthLayout), ev.Amount)
+	case OpeningBalanceReversed:
+		s.AwaitingFirstStatementImport = true
+		s.OpeningBalanceTransactionID = sharedkernel.NilID
 		s.Months = moved(s.Months, s.StartDate.Format(MonthLayout), ev.Amount)
 	case TransactionBooked:
 		// The event was written with DateLayout, so it always parses.

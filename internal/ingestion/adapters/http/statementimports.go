@@ -32,6 +32,10 @@ const (
 	PreviewMismatchType               = "/problems/preview-mismatch"
 	BalanceCheckFailedType            = "/problems/balance-check-failed"
 	InvalidCursorType                 = "/problems/invalid-cursor"
+
+	NotTheLatestStatementImportType    = "/problems/not-the-latest-statement-import"
+	StatementImportHasAcceptedRowsType = "/problems/statement-import-has-accepted-rows"
+	StatementImportAlreadyVoidedType   = "/problems/statement-import-already-voided"
 )
 
 // MaxStatementFile is the largest statement file accepted, far above any
@@ -137,6 +141,34 @@ func (h *StatementImportHandler) UploadStatementImport(ctx context.Context, req 
 	}
 
 	return statementImportResponse(recorded)
+}
+
+// VoidStatementImport implements voidStatementImport.
+func (h *StatementImportHandler) VoidStatementImport(ctx context.Context, params oas.VoidStatementImportParams,
+) (oas.VoidStatementImportRes, error) {
+	voided, err := h.imports.Void(ctx, params.HouseholdID, params.ConnectionID, params.StatementImportID)
+
+	conflict := func(typ, title, detail string) (oas.VoidStatementImportRes, error) {
+		return new(oas.VoidStatementImportConflict(httpapi.Problem(http.StatusConflict, typ, title, detail))), nil
+	}
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrStatementImportNotFound):
+		return new(oas.VoidStatementImportNotFound(httpapi.NotFoundProblem())), nil
+	case errors.Is(err, app.ErrStatementImportAlreadyVoided):
+		return conflict(StatementImportAlreadyVoidedType, "Statement import already voided",
+			"The Statement import is already voided.")
+	case errors.Is(err, app.ErrNotTheLatestStatementImport):
+		return conflict(NotTheLatestStatementImportType, "Not the latest Statement import",
+			"Only the Account's latest Statement import can be voided: void every later one first.")
+	case errors.Is(err, app.ErrStatementImportHasAcceptedRows), errors.Is(err, app.ErrImportedTransactionAlreadyAccepted):
+		return conflict(StatementImportHasAcceptedRowsType, "Statement import has Accepted rows",
+			"Some of the Statement import's Imported transactions are Accepted: reverse their Transactions first.")
+	case err != nil:
+		return nil, fmt.Errorf("void statement import: %w", err)
+	}
+
+	return statementImportResponse(voided)
 }
 
 // ListStatementImports implements listStatementImports.
@@ -371,6 +403,10 @@ func statementImportResponse(i app.StatementImport) (*oas.StatementImport, error
 
 	if out.RowsTotal, err = money(s.RowsTotal, s.Currency); err != nil {
 		return nil, err
+	}
+
+	if s.Voided() {
+		out.VoidedAt = oas.NewOptDateTime(s.VoidedAt)
 	}
 
 	if s.OpeningBalance != nil {

@@ -22,6 +22,7 @@ const (
 	AccountTransactionBookedType        = "io.walletaccountant.ledger.account.transactionbooked.v1"
 	AccountReversalBookedType           = "io.walletaccountant.ledger.account.reversalbooked.v1"
 	AccountTransactionRecategorisedType = "io.walletaccountant.ledger.account.transactionrecategorised.v1"
+	AccountOpeningBalanceReversedType   = "io.walletaccountant.ledger.account.openingbalancereversed.v1"
 )
 
 // ErrAccountNotFound is returned for an Account that is not in the Household.
@@ -38,6 +39,7 @@ func NewAccountAggregate(folds eventstore.FoldStore[domain.AccountState]) Accoun
 	eventstore.Register[domain.AccountEvent, domain.TransactionBooked](codec, AccountTransactionBookedType)
 	eventstore.Register[domain.AccountEvent, domain.ReversalBooked](codec, AccountReversalBookedType)
 	eventstore.Register[domain.AccountEvent, domain.TransactionRecategorised](codec, AccountTransactionRecategorisedType)
+	eventstore.Register[domain.AccountEvent, domain.OpeningBalanceReversed](codec, AccountOpeningBalanceReversedType)
 
 	return AccountAggregate{
 		StreamType: AccountStreamType,
