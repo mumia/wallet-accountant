@@ -11,7 +11,7 @@ Every spec that adds or changes a command adds or updates its row here. Code rev
 | Create Household | Households → Ledger | Household created; creator added as member, with the User's membership index row; the three Internal Categories (Opening balance, Household transfer, Uncategorised) created | — |
 | Create Category | Ledger | Category created | — |
 | Add Account | Ledger | Account created, awaiting its first Statement import | — |
-| Save CSV mapping | Ingestion | Connection's mapping validated and saved | — |
+| Save CSV mapping | Ingestion | Connection's mapping validated as a whole and saved with a new mapping version (also when a Connection is created with its mapping) | — |
 | Upload Statement import | Ingestion → Ledger | Statement import recorded with its Export balance; new Imported transactions recorded as pending or Suspected duplicate; certain repeats skipped; Balance check run, or left waiting for Suspected duplicates. First import only: Opening balance Transaction recorded, Account balance set, Account transaction list updated | Notification to the Household when Suspected duplicates were found |
 | Keep or Discard Imported transaction | Ingestion | Imported transaction moved to pending (keep) or Discarded; a waiting Balance check run once its last Suspected duplicate is decided | — |
 | Preview first Statement import | Ingestion | Nothing recorded | — |

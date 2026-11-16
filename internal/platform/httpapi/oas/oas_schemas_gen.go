@@ -285,6 +285,133 @@ func (s *CategoryList) SetItems(val []Category) {
 
 func (*CategoryList) listCategoriesRes() {}
 
+// A Connection between an Account and a source of its transactions.
+// Ref: #/components/schemas/Connection
+type Connection struct {
+	// The Connection's ID (UUIDv7).
+	ConnectionID uuid.UUID `json:"connection_id"`
+	// The Account the Connection brings transactions into.
+	AccountID  uuid.UUID      `json:"account_id"`
+	Kind       ConnectionKind `json:"kind"`
+	CsvMapping OptCsvMapping  `json:"csv_mapping"`
+	// The mapping's version, which changes on every save; absent while the Connection has no mapping. A
+	// first Statement import's preview is tied to it.
+	CsvMappingVersion OptInt32 `json:"csv_mapping_version"`
+}
+
+// GetConnectionID returns the value of ConnectionID.
+func (s *Connection) GetConnectionID() uuid.UUID {
+	return s.ConnectionID
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *Connection) GetAccountID() uuid.UUID {
+	return s.AccountID
+}
+
+// GetKind returns the value of Kind.
+func (s *Connection) GetKind() ConnectionKind {
+	return s.Kind
+}
+
+// GetCsvMapping returns the value of CsvMapping.
+func (s *Connection) GetCsvMapping() OptCsvMapping {
+	return s.CsvMapping
+}
+
+// GetCsvMappingVersion returns the value of CsvMappingVersion.
+func (s *Connection) GetCsvMappingVersion() OptInt32 {
+	return s.CsvMappingVersion
+}
+
+// SetConnectionID sets the value of ConnectionID.
+func (s *Connection) SetConnectionID(val uuid.UUID) {
+	s.ConnectionID = val
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *Connection) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *Connection) SetKind(val ConnectionKind) {
+	s.Kind = val
+}
+
+// SetCsvMapping sets the value of CsvMapping.
+func (s *Connection) SetCsvMapping(val OptCsvMapping) {
+	s.CsvMapping = val
+}
+
+// SetCsvMappingVersion sets the value of CsvMappingVersion.
+func (s *Connection) SetCsvMappingVersion(val OptInt32) {
+	s.CsvMappingVersion = val
+}
+
+func (*Connection) createConnectionRes() {}
+func (*Connection) saveCsvMappingRes()   {}
+
+// A new Connection.
+// Ref: #/components/schemas/ConnectionCreation
+type ConnectionCreation struct {
+	Kind       ConnectionKind `json:"kind"`
+	CsvMapping OptCsvMapping  `json:"csv_mapping"`
+}
+
+// GetKind returns the value of Kind.
+func (s *ConnectionCreation) GetKind() ConnectionKind {
+	return s.Kind
+}
+
+// GetCsvMapping returns the value of CsvMapping.
+func (s *ConnectionCreation) GetCsvMapping() OptCsvMapping {
+	return s.CsvMapping
+}
+
+// SetKind sets the value of Kind.
+func (s *ConnectionCreation) SetKind(val ConnectionKind) {
+	s.Kind = val
+}
+
+// SetCsvMapping sets the value of CsvMapping.
+func (s *ConnectionCreation) SetCsvMapping(val OptCsvMapping) {
+	s.CsvMapping = val
+}
+
+type ConnectionKind string
+
+// An Account's Connections.
+// Ref: #/components/schemas/ConnectionList
+type ConnectionList struct {
+	// The Connections, in the order they were created.
+	Items []Connection `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *ConnectionList) GetItems() []Connection {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *ConnectionList) SetItems(val []Connection) {
+	s.Items = val
+}
+
+func (*ConnectionList) listConnectionsRes() {}
+
+type CreateConnectionNotFound Problem
+
+func (*CreateConnectionNotFound) createConnectionRes() {}
+
+type CreateConnectionUnauthorized Problem
+
+func (*CreateConnectionUnauthorized) createConnectionRes() {}
+
+type CreateConnectionUnprocessableEntity Problem
+
+func (*CreateConnectionUnprocessableEntity) createConnectionRes() {}
+
 type CreateHouseholdForbidden Problem
 
 func (*CreateHouseholdForbidden) createHouseholdRes() {}
@@ -308,6 +435,255 @@ func (*CreateRegistrationUnauthorized) createRegistrationRes() {}
 type CreateRegistrationUnprocessableEntity Problem
 
 func (*CreateRegistrationUnprocessableEntity) createRegistrationRes() {}
+
+// A column, by its name in the header row or by its position counted from 1; exactly one of the two.
+// Ref: #/components/schemas/CsvColumn
+type CsvColumn struct {
+	// The column's name in the header row, ignoring case and surrounding spaces.
+	Header OptString `json:"header"`
+	// The column's position, counted from 1.
+	Position OptInt32 `json:"position"`
+}
+
+// GetHeader returns the value of Header.
+func (s *CsvColumn) GetHeader() OptString {
+	return s.Header
+}
+
+// GetPosition returns the value of Position.
+func (s *CsvColumn) GetPosition() OptInt32 {
+	return s.Position
+}
+
+// SetHeader sets the value of Header.
+func (s *CsvColumn) SetHeader(val OptString) {
+	s.Header = val
+}
+
+// SetPosition sets the value of Position.
+func (s *CsvColumn) SetPosition(val OptInt32) {
+	s.Position = val
+}
+
+// Which column holds each field.
+// Ref: #/components/schemas/CsvColumns
+type CsvColumns struct {
+	BookingDate       OptCsvColumn `json:"booking_date"`
+	Description       OptCsvColumn `json:"description"`
+	Amount            OptCsvColumn `json:"amount"`
+	Debit             OptCsvColumn `json:"debit"`
+	Credit            OptCsvColumn `json:"credit"`
+	TransactionDate   OptCsvColumn `json:"transaction_date"`
+	ValueDate         OptCsvColumn `json:"value_date"`
+	Payee             OptCsvColumn `json:"payee"`
+	BankTransactionID OptCsvColumn `json:"bank_transaction_id"`
+}
+
+// GetBookingDate returns the value of BookingDate.
+func (s *CsvColumns) GetBookingDate() OptCsvColumn {
+	return s.BookingDate
+}
+
+// GetDescription returns the value of Description.
+func (s *CsvColumns) GetDescription() OptCsvColumn {
+	return s.Description
+}
+
+// GetAmount returns the value of Amount.
+func (s *CsvColumns) GetAmount() OptCsvColumn {
+	return s.Amount
+}
+
+// GetDebit returns the value of Debit.
+func (s *CsvColumns) GetDebit() OptCsvColumn {
+	return s.Debit
+}
+
+// GetCredit returns the value of Credit.
+func (s *CsvColumns) GetCredit() OptCsvColumn {
+	return s.Credit
+}
+
+// GetTransactionDate returns the value of TransactionDate.
+func (s *CsvColumns) GetTransactionDate() OptCsvColumn {
+	return s.TransactionDate
+}
+
+// GetValueDate returns the value of ValueDate.
+func (s *CsvColumns) GetValueDate() OptCsvColumn {
+	return s.ValueDate
+}
+
+// GetPayee returns the value of Payee.
+func (s *CsvColumns) GetPayee() OptCsvColumn {
+	return s.Payee
+}
+
+// GetBankTransactionID returns the value of BankTransactionID.
+func (s *CsvColumns) GetBankTransactionID() OptCsvColumn {
+	return s.BankTransactionID
+}
+
+// SetBookingDate sets the value of BookingDate.
+func (s *CsvColumns) SetBookingDate(val OptCsvColumn) {
+	s.BookingDate = val
+}
+
+// SetDescription sets the value of Description.
+func (s *CsvColumns) SetDescription(val OptCsvColumn) {
+	s.Description = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *CsvColumns) SetAmount(val OptCsvColumn) {
+	s.Amount = val
+}
+
+// SetDebit sets the value of Debit.
+func (s *CsvColumns) SetDebit(val OptCsvColumn) {
+	s.Debit = val
+}
+
+// SetCredit sets the value of Credit.
+func (s *CsvColumns) SetCredit(val OptCsvColumn) {
+	s.Credit = val
+}
+
+// SetTransactionDate sets the value of TransactionDate.
+func (s *CsvColumns) SetTransactionDate(val OptCsvColumn) {
+	s.TransactionDate = val
+}
+
+// SetValueDate sets the value of ValueDate.
+func (s *CsvColumns) SetValueDate(val OptCsvColumn) {
+	s.ValueDate = val
+}
+
+// SetPayee sets the value of Payee.
+func (s *CsvColumns) SetPayee(val OptCsvColumn) {
+	s.Payee = val
+}
+
+// SetBankTransactionID sets the value of BankTransactionID.
+func (s *CsvColumns) SetBankTransactionID(val OptCsvColumn) {
+	s.BankTransactionID = val
+}
+
+// How a bank lays out its statement CSV. Booking date, description and the amount (one signed column,
+// or debit and credit columns) are required; Transaction date (defaulting to the Booking date), Value
+// date, payee and bank transaction ID are optional. Every field is validated together when the mapping
+// is saved, so the properties the mapping needs are checked there rather than by the schema.
+// Ref: #/components/schemas/CsvMapping
+type CsvMapping struct {
+	// The one character between columns.
+	Delimiter OptString `json:"delimiter"`
+	// Whether the first line after the skipped ones names the columns.
+	HasHeaderRow OptBool `json:"has_header_row"`
+	// How many lines to skip before the header row or the first row.
+	SkipLeadingLines OptInt32 `json:"skip_leading_lines"`
+	// How dates are written: one of `YYYY-MM-DD`, `YYYY/MM/DD`, `YYYYMMDD`, `DD/MM/YYYY`, `DD-MM-YYYY`,
+	// `DD.MM.YYYY`, `MM/DD/YYYY`, `MM-DD-YYYY`, `DD/MM/YY` or `MM/DD/YY`.
+	DateFormat OptString `json:"date_format"`
+	// The decimal separator, `.` or `,`.
+	DecimalSeparator OptString `json:"decimal_separator"`
+	// The thousands separator, if any; empty, `.`, `,`, a space or `'`.
+	ThousandsSeparator OptString `json:"thousands_separator"`
+	// One signed amount column, or separate debit (money out) and credit (money in) columns.
+	AmountLayout OptString `json:"amount_layout"`
+	// For a signed amount, whether a positive amount is money in or money out; some banks invert the sign.
+	PositiveAmountMeans OptString     `json:"positive_amount_means"`
+	Columns             OptCsvColumns `json:"columns"`
+}
+
+// GetDelimiter returns the value of Delimiter.
+func (s *CsvMapping) GetDelimiter() OptString {
+	return s.Delimiter
+}
+
+// GetHasHeaderRow returns the value of HasHeaderRow.
+func (s *CsvMapping) GetHasHeaderRow() OptBool {
+	return s.HasHeaderRow
+}
+
+// GetSkipLeadingLines returns the value of SkipLeadingLines.
+func (s *CsvMapping) GetSkipLeadingLines() OptInt32 {
+	return s.SkipLeadingLines
+}
+
+// GetDateFormat returns the value of DateFormat.
+func (s *CsvMapping) GetDateFormat() OptString {
+	return s.DateFormat
+}
+
+// GetDecimalSeparator returns the value of DecimalSeparator.
+func (s *CsvMapping) GetDecimalSeparator() OptString {
+	return s.DecimalSeparator
+}
+
+// GetThousandsSeparator returns the value of ThousandsSeparator.
+func (s *CsvMapping) GetThousandsSeparator() OptString {
+	return s.ThousandsSeparator
+}
+
+// GetAmountLayout returns the value of AmountLayout.
+func (s *CsvMapping) GetAmountLayout() OptString {
+	return s.AmountLayout
+}
+
+// GetPositiveAmountMeans returns the value of PositiveAmountMeans.
+func (s *CsvMapping) GetPositiveAmountMeans() OptString {
+	return s.PositiveAmountMeans
+}
+
+// GetColumns returns the value of Columns.
+func (s *CsvMapping) GetColumns() OptCsvColumns {
+	return s.Columns
+}
+
+// SetDelimiter sets the value of Delimiter.
+func (s *CsvMapping) SetDelimiter(val OptString) {
+	s.Delimiter = val
+}
+
+// SetHasHeaderRow sets the value of HasHeaderRow.
+func (s *CsvMapping) SetHasHeaderRow(val OptBool) {
+	s.HasHeaderRow = val
+}
+
+// SetSkipLeadingLines sets the value of SkipLeadingLines.
+func (s *CsvMapping) SetSkipLeadingLines(val OptInt32) {
+	s.SkipLeadingLines = val
+}
+
+// SetDateFormat sets the value of DateFormat.
+func (s *CsvMapping) SetDateFormat(val OptString) {
+	s.DateFormat = val
+}
+
+// SetDecimalSeparator sets the value of DecimalSeparator.
+func (s *CsvMapping) SetDecimalSeparator(val OptString) {
+	s.DecimalSeparator = val
+}
+
+// SetThousandsSeparator sets the value of ThousandsSeparator.
+func (s *CsvMapping) SetThousandsSeparator(val OptString) {
+	s.ThousandsSeparator = val
+}
+
+// SetAmountLayout sets the value of AmountLayout.
+func (s *CsvMapping) SetAmountLayout(val OptString) {
+	s.AmountLayout = val
+}
+
+// SetPositiveAmountMeans sets the value of PositiveAmountMeans.
+func (s *CsvMapping) SetPositiveAmountMeans(val OptString) {
+	s.PositiveAmountMeans = val
+}
+
+// SetColumns sets the value of Columns.
+func (s *CsvMapping) SetColumns(val OptCsvColumns) {
+	s.Columns = val
+}
 
 type CurrencyCode string
 
@@ -441,6 +817,14 @@ type ListCategoriesUnauthorized Problem
 
 func (*ListCategoriesUnauthorized) listCategoriesRes() {}
 
+type ListConnectionsNotFound Problem
+
+func (*ListConnectionsNotFound) listConnectionsRes() {}
+
+type ListConnectionsUnauthorized Problem
+
+func (*ListConnectionsUnauthorized) listConnectionsRes() {}
+
 type ListHouseholdsForbidden Problem
 
 func (*ListHouseholdsForbidden) listHouseholdsRes() {}
@@ -508,6 +892,236 @@ func (s *Money) SetAmount(val decimal.Decimal) {
 // SetCurrency sets the value of Currency.
 func (s *Money) SetCurrency(val CurrencyCode) {
 	s.Currency = val
+}
+
+// NewOptBool returns new OptBool with value set to v.
+func NewOptBool(v bool) OptBool {
+	return OptBool{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptBool is optional bool.
+type OptBool struct {
+	Value bool
+	Set   bool
+}
+
+// IsSet returns true if OptBool was set.
+func (o OptBool) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptBool) Reset() {
+	var v bool
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptBool) SetTo(v bool) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptBool) Get() (v bool, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptBool) Or(d bool) bool {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptCsvColumn returns new OptCsvColumn with value set to v.
+func NewOptCsvColumn(v CsvColumn) OptCsvColumn {
+	return OptCsvColumn{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptCsvColumn is optional CsvColumn.
+type OptCsvColumn struct {
+	Value CsvColumn
+	Set   bool
+}
+
+// IsSet returns true if OptCsvColumn was set.
+func (o OptCsvColumn) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptCsvColumn) Reset() {
+	var v CsvColumn
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptCsvColumn) SetTo(v CsvColumn) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptCsvColumn) Get() (v CsvColumn, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptCsvColumn) Or(d CsvColumn) CsvColumn {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptCsvColumns returns new OptCsvColumns with value set to v.
+func NewOptCsvColumns(v CsvColumns) OptCsvColumns {
+	return OptCsvColumns{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptCsvColumns is optional CsvColumns.
+type OptCsvColumns struct {
+	Value CsvColumns
+	Set   bool
+}
+
+// IsSet returns true if OptCsvColumns was set.
+func (o OptCsvColumns) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptCsvColumns) Reset() {
+	var v CsvColumns
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptCsvColumns) SetTo(v CsvColumns) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptCsvColumns) Get() (v CsvColumns, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptCsvColumns) Or(d CsvColumns) CsvColumns {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptCsvMapping returns new OptCsvMapping with value set to v.
+func NewOptCsvMapping(v CsvMapping) OptCsvMapping {
+	return OptCsvMapping{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptCsvMapping is optional CsvMapping.
+type OptCsvMapping struct {
+	Value CsvMapping
+	Set   bool
+}
+
+// IsSet returns true if OptCsvMapping was set.
+func (o OptCsvMapping) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptCsvMapping) Reset() {
+	var v CsvMapping
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptCsvMapping) SetTo(v CsvMapping) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptCsvMapping) Get() (v CsvMapping, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptCsvMapping) Or(d CsvMapping) CsvMapping {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptInt32 returns new OptInt32 with value set to v.
+func NewOptInt32(v int32) OptInt32 {
+	return OptInt32{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt32 is optional int32.
+type OptInt32 struct {
+	Value int32
+	Set   bool
+}
+
+// IsSet returns true if OptInt32 was set.
+func (o OptInt32) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt32) Reset() {
+	var v int32
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt32) SetTo(v int32) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt32) Get() (v int32, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt32) Or(d int32) int32 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
 }
 
 // NewOptMoney returns new OptMoney with value set to v.
@@ -755,3 +1369,15 @@ func (s *Registration) GetInvitationCode() string {
 func (s *Registration) SetInvitationCode(val string) {
 	s.InvitationCode = val
 }
+
+type SaveCsvMappingNotFound Problem
+
+func (*SaveCsvMappingNotFound) saveCsvMappingRes() {}
+
+type SaveCsvMappingUnauthorized Problem
+
+func (*SaveCsvMappingUnauthorized) saveCsvMappingRes() {}
+
+type SaveCsvMappingUnprocessableEntity Problem
+
+func (*SaveCsvMappingUnprocessableEntity) saveCsvMappingRes() {}

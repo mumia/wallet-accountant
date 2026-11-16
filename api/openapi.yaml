@@ -27,6 +27,8 @@ tags:
     description: What money was received for or spent on (ADR-0004)
   - name: Accounts
     description: Places where money is held or owed (ADR-0004)
+  - name: Connections
+    description: Links between an Account and an outside source of its transactions
 paths:
   /me:
     get:
@@ -274,6 +276,103 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/connections:
+    post:
+      operationId: createConnection
+      summary: Create a Connection for an Account
+      description: |
+        Creates a statement file import Connection for the Account,
+        optionally with the CSV mapping of the bank's statement files. Live
+        bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
+        422 with the problem type `/problems/invalid-connection`. An invalid
+        mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is
+        created.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionCreation'
+      responses:
+        '201':
+          description: The new Connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listConnections
+      summary: An Account's Connections
+      description: Lists every Connection of the Account, in the order they were created.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+      responses:
+        '200':
+          description: The Account's Connections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping:
+    put:
+      operationId: saveCsvMapping
+      summary: Save a Connection's CSV mapping
+      description: |
+        Replaces the Connection's CSV mapping. The mapping is validated as a
+        whole: a missing required field, an unknown date format, the same
+        column used twice or any other problem gets 422 with the problem type
+        `/problems/invalid-csv-mapping`, whose detail lists every problem.
+        Every save gives the mapping a new `csv_mapping_version`.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/ConnectionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CsvMapping'
+      responses:
+        '200':
+          description: The Connection with its new mapping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     IdempotencyKey:
@@ -302,6 +401,14 @@ components:
       in: path
       required: true
       description: The Account's ID
+      schema:
+        type: string
+        format: uuid
+    ConnectionID:
+      name: connection_id
+      in: path
+      required: true
+      description: The Connection's ID
       schema:
         type: string
         format: uuid
@@ -534,6 +641,151 @@ components:
         - LOAN
         - CRYPTO_WALLET
       example: BANK_ACCOUNT
+    ConnectionKind:
+      type: string
+      description: Where the Connection's transactions come from. `BANK_FEED` is not supported yet and is refused.
+      x-extensible-enum:
+        - STATEMENT_FILE_IMPORT
+      example: STATEMENT_FILE_IMPORT
+    ConnectionCreation:
+      type: object
+      description: A new Connection
+      required:
+        - kind
+      properties:
+        kind:
+          $ref: '#/components/schemas/ConnectionKind'
+        csv_mapping:
+          $ref: '#/components/schemas/CsvMapping'
+    Connection:
+      type: object
+      description: A Connection between an Account and a source of its transactions
+      required:
+        - connection_id
+        - account_id
+        - kind
+      properties:
+        connection_id:
+          type: string
+          format: uuid
+          description: The Connection's ID (UUIDv7)
+        account_id:
+          type: string
+          format: uuid
+          description: The Account the Connection brings transactions into
+        kind:
+          $ref: '#/components/schemas/ConnectionKind'
+        csv_mapping:
+          $ref: '#/components/schemas/CsvMapping'
+        csv_mapping_version:
+          type: integer
+          format: int32
+          description: |
+            The mapping's version, which changes on every save; absent while
+            the Connection has no mapping. A first Statement import's preview
+            is tied to it.
+          example: 1
+    ConnectionList:
+      type: object
+      description: An Account's Connections
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Connections, in the order they were created
+          items:
+            $ref: '#/components/schemas/Connection'
+    CsvMapping:
+      type: object
+      description: |
+        How a bank lays out its statement CSV. Booking date, description and
+        the amount (one signed column, or debit and credit columns) are
+        required; Transaction date (defaulting to the Booking date), Value
+        date, payee and bank transaction ID are optional. Every field is
+        validated together when the mapping is saved, so the properties the
+        mapping needs are checked there rather than by the schema.
+      properties:
+        delimiter:
+          type: string
+          description: The one character between columns
+          example: ;
+        has_header_row:
+          type: boolean
+          description: Whether the first line after the skipped ones names the columns
+          default: false
+        skip_leading_lines:
+          type: integer
+          format: int32
+          description: How many lines to skip before the header row or the first row
+          default: 0
+        date_format:
+          type: string
+          description: |
+            How dates are written: one of `YYYY-MM-DD`, `YYYY/MM/DD`,
+            `YYYYMMDD`, `DD/MM/YYYY`, `DD-MM-YYYY`, `DD.MM.YYYY`,
+            `MM/DD/YYYY`, `MM-DD-YYYY`, `DD/MM/YY` or `MM/DD/YY`
+          example: DD/MM/YYYY
+        decimal_separator:
+          type: string
+          description: The decimal separator, `.` or `,`
+          example: ','
+        thousands_separator:
+          type: string
+          description: The thousands separator, if any; empty, `.`, `,`, a space or `'`
+          default: ''
+          example: .
+        amount_layout:
+          type: string
+          description: One signed amount column, or separate debit (money out) and credit (money in) columns
+          x-extensible-enum:
+            - SIGNED
+            - DEBIT_CREDIT
+          example: SIGNED
+        positive_amount_means:
+          type: string
+          description: For a signed amount, whether a positive amount is money in or money out; some banks invert the sign
+          x-extensible-enum:
+            - MONEY_IN
+            - MONEY_OUT
+          example: MONEY_IN
+        columns:
+          $ref: '#/components/schemas/CsvColumns'
+    CsvColumns:
+      type: object
+      description: Which column holds each field
+      properties:
+        booking_date:
+          $ref: '#/components/schemas/CsvColumn'
+        description:
+          $ref: '#/components/schemas/CsvColumn'
+        amount:
+          $ref: '#/components/schemas/CsvColumn'
+        debit:
+          $ref: '#/components/schemas/CsvColumn'
+        credit:
+          $ref: '#/components/schemas/CsvColumn'
+        transaction_date:
+          $ref: '#/components/schemas/CsvColumn'
+        value_date:
+          $ref: '#/components/schemas/CsvColumn'
+        payee:
+          $ref: '#/components/schemas/CsvColumn'
+        bank_transaction_id:
+          $ref: '#/components/schemas/CsvColumn'
+    CsvColumn:
+      type: object
+      description: A column, by its name in the header row or by its position counted from 1; exactly one of the two
+      properties:
+        header:
+          type: string
+          description: The column's name in the header row, ignoring case and surrounding spaces
+          example: Amount
+        position:
+          type: integer
+          format: int32
+          description: The column's position, counted from 1
+          example: 3
     Money:
       type: object
       description: |
