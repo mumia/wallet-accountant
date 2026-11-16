@@ -4,7 +4,7 @@
 
 **Blocked by:** 10 (Recategorise, reverse Transactions and Discard pending Imported transactions), 11 (Later imports: Balance check and certain repeats)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Suspected duplicate: same bank transaction ID with a different Booking date or amount; or, without a bank transaction ID, same Account, Booking date, amount and normalised description as a row from an earlier import. Never compared within the same file
 - [ ] Each Suspected duplicate records the earlier Imported transaction it resembles, and the list (`state=suspected_duplicate`) shows both
