@@ -13,7 +13,12 @@ internal/<context>/
     app/                        command and query handlers, port interfaces
     adapters/{http,postgres,…}/ ogen handlers, sqlc repositories, Watermill handlers
 internal/sharedkernel/          Money, currencies, IDs, Match
+    decider/                    the Decider contract aggregates implement; decidertest/ for given/when/then tests
 internal/platform/              event store, Decider runtime, codec, Watermill wiring, config
+    eventstore/                 event store, CloudEvents codec, Decider runtime, rebuild; eventstoretest/ for tests
+    forwarding/                 Watermill SchemaAdapter, handler middleware, Drain for tests
+    database/migrations/        golang-migrate migrations, run as wa_owner by the migrate run mode
+    database/databasetest/      a fresh migrated testcontainers database per test, with the three role URLs
     httpapi/                    problem+json errors, bearer authentication, request telemetry
     httpapi/oas/                the ogen server generated from api/openapi.yaml (`make generate`)
     authn/                      the Authenticator port; oidc/ verifies JWTs, authntest/ is for tests
@@ -43,7 +48,7 @@ All aggregate and event IDs are UUIDv7. The application generates them, never th
 
 ## Configuration and observability
 
-- Configuration comes only from environment variables: `WA_DATABASE_URL`, `WA_OIDC_ISSUER` and `WA_OIDC_AUDIENCE` (required), `WA_HTTP_ADDR` (default `:8080`), `WA_SHUTDOWN_TIMEOUT` (default `10s`), and the standard `OTEL_*` variables. The run mode is the binary's only argument (default `all`).
+- Configuration comes only from environment variables: `WA_DATABASE_URL` (as `wa_app`), `WA_OIDC_ISSUER` and `WA_OIDC_AUDIENCE` (required), `WA_READER_DATABASE_URL` (as `wa_event_store_reader`; needed by `worker`, `all` and `rebuild`), `WA_OWNER_DATABASE_URL` (as `wa_owner`; needed by `migrate`, which also sets the passwords of `wa_app` and `wa_event_store_reader` to those in their URLs), `WA_HTTP_ADDR` (default `:8080`), `WA_SHUTDOWN_TIMEOUT` (default `10s`), and the standard `OTEL_*` variables. The run mode is the binary's only argument (default `all`).
 - Logs use `log/slog` with JSON output.
 - Logs, traces and metrics are exported over OTLP by default. Logs also go to stdout as JSON; slog reaches OTLP through the OpenTelemetry slog bridge.
 - Telemetry goes to an OpenTelemetry Collector, which forwards it to the Grafana stack: Tempo for traces, Prometheus for metrics, Loki for logs, Grafana to view them (ADR-0016). Development uses the all-in-one `otel-lgtm` image from `compose.dev.yaml`; self-hosting runs the collector and enables the backends with the `observability` profile (`make up-observability`).

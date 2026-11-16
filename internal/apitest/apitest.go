@@ -1,7 +1,8 @@
 // Package apitest is the HTTP test harness. It runs the real application
-// in-process in the api run mode, against PostgreSQL started with
-// testcontainers-go, with only the Authenticator swapped for authntest and
-// telemetry captured in memory.
+// in-process in the all run mode (API and worker), against a fresh database
+// in PostgreSQL started with testcontainers-go, migrated as wa_owner and
+// used as wa_app and wa_event_store_reader like production. Only the
+// Authenticator is swapped for authntest, and telemetry is captured in memory.
 package apitest
 
 import (
@@ -18,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -25,6 +27,8 @@ import (
 	"github.com/mumia/wallet-accountant/internal/platform/authn"
 	"github.com/mumia/wallet-accountant/internal/platform/authn/authntest"
 	"github.com/mumia/wallet-accountant/internal/platform/config"
+	"github.com/mumia/wallet-accountant/internal/platform/database/databasetest"
+	"github.com/mumia/wallet-accountant/internal/platform/forwarding"
 	"github.com/mumia/wallet-accountant/internal/platform/telemetry"
 	"github.com/mumia/wallet-accountant/internal/wiring"
 )
@@ -33,6 +37,7 @@ import (
 type App struct {
 	baseURL string
 	auth    *authntest.Authenticator
+	reader  *pgxpool.Pool
 
 	// Logs holds every JSON log record written to stdout.
 	Logs *Buffer
@@ -75,20 +80,32 @@ func Start(t testing.TB) *App {
 
 	app.baseURL = "http://" + ln.Addr().String()
 
+	urls := databasetest.New(t)
 	cfg := config.Config{
-		HTTPAddr:        ln.Addr().String(),
-		DatabaseURL:     databaseURL(t),
-		ShutdownTimeout: 5 * time.Second,
+		HTTPAddr:          ln.Addr().String(),
+		DatabaseURL:       urls.App,
+		ReaderDatabaseURL: urls.Reader,
+		ShutdownTimeout:   5 * time.Second,
+	}
+
+	app.reader, err = pgxpool.New(ctx, urls.Reader)
+	if err != nil {
+		t.Fatalf("reader pool: %v", err)
 	}
 
 	done := make(chan error, 1)
 
 	go func() {
-		done <- wiring.Run(ctx, wiring.ModeAPI, cfg, tel, wiring.Options{Authenticator: app.auth, Listener: ln})
+		done <- wiring.Run(ctx, wiring.ModeAll, cfg, tel, wiring.Options{
+			Authenticator: app.auth,
+			Listener:      ln,
+			PollInterval:  10 * time.Millisecond,
+		})
 	}()
 
 	t.Cleanup(func() {
 		cancel()
+		app.reader.Close()
 
 		if err := <-done; err != nil {
 			t.Errorf("app stopped with an error: %v", err)
@@ -98,6 +115,19 @@ func Start(t testing.TB) *App {
 	})
 
 	return app
+}
+
+// Drain waits until every deferred event handler has handled every event
+// recorded so far, so deferred effects can be asserted without sleeping.
+func (a *App) Drain(t testing.TB) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	if err := forwarding.Drain(ctx, a.reader, wiring.ConsumerGroups()...); err != nil {
+		t.Fatalf("drain events: %v", err)
+	}
 }
 
 // TokenFor returns a bearer token that authenticates as the OIDC identity.

@@ -17,22 +17,26 @@ func TestFromEnvReadsEveryVariable(t *testing.T) {
 	t.Parallel()
 
 	cfg, err := config.FromEnv(env(map[string]string{
-		"WA_HTTP_ADDR":        ":9090",
-		"WA_DATABASE_URL":     "postgres://wa_app@db/wallet_accountant",
-		"WA_OIDC_ISSUER":      "http://localhost:8081",
-		"WA_OIDC_AUDIENCE":    "wallet-accountant",
-		"WA_SHUTDOWN_TIMEOUT": "3s",
+		"WA_HTTP_ADDR":           ":9090",
+		"WA_DATABASE_URL":        "postgres://wa_app@db/wallet_accountant",
+		"WA_READER_DATABASE_URL": "postgres://wa_event_store_reader@db/wallet_accountant",
+		"WA_OWNER_DATABASE_URL":  "postgres://wa_owner@db/wallet_accountant",
+		"WA_OIDC_ISSUER":         "http://localhost:8081",
+		"WA_OIDC_AUDIENCE":       "wallet-accountant",
+		"WA_SHUTDOWN_TIMEOUT":    "3s",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	want := config.Config{
-		HTTPAddr:        ":9090",
-		DatabaseURL:     "postgres://wa_app@db/wallet_accountant",
-		OIDCIssuer:      "http://localhost:8081",
-		OIDCAudience:    "wallet-accountant",
-		ShutdownTimeout: 3 * time.Second,
+		HTTPAddr:          ":9090",
+		DatabaseURL:       "postgres://wa_app@db/wallet_accountant",
+		ReaderDatabaseURL: "postgres://wa_event_store_reader@db/wallet_accountant",
+		OwnerDatabaseURL:  "postgres://wa_owner@db/wallet_accountant",
+		OIDCIssuer:        "http://localhost:8081",
+		OIDCAudience:      "wallet-accountant",
+		ShutdownTimeout:   3 * time.Second,
 	}
 	if cfg != want {
 		t.Fatalf("config = %+v, want %+v", cfg, want)

@@ -13,8 +13,16 @@ import (
 type Config struct {
 	// HTTPAddr is the address the api run mode listens on (WA_HTTP_ADDR).
 	HTTPAddr string
-	// DatabaseURL is the PostgreSQL connection string (WA_DATABASE_URL).
+	// DatabaseURL is the PostgreSQL connection string of wa_app
+	// (WA_DATABASE_URL).
 	DatabaseURL string
+	// ReaderDatabaseURL is the connection string of wa_event_store_reader
+	// (WA_READER_DATABASE_URL), which the worker, all and rebuild run modes
+	// need.
+	ReaderDatabaseURL string
+	// OwnerDatabaseURL is the connection string of wa_owner
+	// (WA_OWNER_DATABASE_URL), which only the migrate run mode needs.
+	OwnerDatabaseURL string
 	// OIDCIssuer is the OpenID Connect issuer whose tokens are accepted
 	// (WA_OIDC_ISSUER).
 	OIDCIssuer string
@@ -36,11 +44,13 @@ var ErrMissing = errors.New("required environment variable is not set")
 // FromEnv reads the configuration through getenv, normally os.Getenv.
 func FromEnv(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		HTTPAddr:        getenv("WA_HTTP_ADDR"),
-		DatabaseURL:     getenv("WA_DATABASE_URL"),
-		OIDCIssuer:      getenv("WA_OIDC_ISSUER"),
-		OIDCAudience:    getenv("WA_OIDC_AUDIENCE"),
-		ShutdownTimeout: defaultShutdownTimeout,
+		HTTPAddr:          getenv("WA_HTTP_ADDR"),
+		DatabaseURL:       getenv("WA_DATABASE_URL"),
+		ReaderDatabaseURL: getenv("WA_READER_DATABASE_URL"),
+		OwnerDatabaseURL:  getenv("WA_OWNER_DATABASE_URL"),
+		OIDCIssuer:        getenv("WA_OIDC_ISSUER"),
+		OIDCAudience:      getenv("WA_OIDC_AUDIENCE"),
+		ShutdownTimeout:   defaultShutdownTimeout,
 	}
 	if cfg.HTTPAddr == "" {
 		cfg.HTTPAddr = defaultHTTPAddr

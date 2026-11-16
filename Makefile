@@ -8,13 +8,15 @@ VACUUM        := go tool vacuum lint --ruleset api/zalando-ruleset.yaml --no-ban
 # Development configuration (compose.dev.yaml). Override any of them on the
 # command line or in the environment.
 export WA_HTTP_ADDR                 ?= :8080
-export WA_DATABASE_URL              ?= postgres://wallet_accountant:wallet_accountant@localhost:5432/wallet_accountant?sslmode=disable
+export WA_DATABASE_URL              ?= postgres://wa_app:wa_app@localhost:5432/wallet_accountant?sslmode=disable
+export WA_READER_DATABASE_URL       ?= postgres://wa_event_store_reader:wa_event_store_reader@localhost:5432/wallet_accountant?sslmode=disable
+export WA_OWNER_DATABASE_URL        ?= postgres://wa_owner:wa_owner@localhost:5432/wallet_accountant?sslmode=disable
 export WA_OIDC_ISSUER               ?= http://localhost:8081
 export WA_OIDC_AUDIENCE             ?= wallet-accountant
 export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
-.PHONY: help dev-up dev-down run run-api grafana generate lint lint-go lint-api build test test-integration
+.PHONY: help dev-up dev-down run run-api run-worker migrate rebuild grafana generate lint lint-go lint-api build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
@@ -32,6 +34,15 @@ run: ## Run the app in all mode against the dev dependencies
 
 run-api: ## Run the api run mode against the dev dependencies
 	go run ./cmd/wallet-accountant api
+
+run-worker: ## Run the worker run mode (event forwarding) against the dev dependencies
+	go run ./cmd/wallet-accountant worker
+
+migrate: ## Run the migrate run mode against the dev database
+	go run ./cmd/wallet-accountant migrate
+
+rebuild: ## Rebuild every fold from the event store in the dev database
+	go run ./cmd/wallet-accountant rebuild
 
 grafana: ## Open the local Grafana UI
 	@open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "Grafana: http://localhost:3000"

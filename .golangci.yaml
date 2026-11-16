@@ -45,6 +45,7 @@ linters:
             - $gostd
             - github.com/google/uuid
             - github.com/shopspring/decimal
+            - github.com/mumia/wallet-accountant/internal/sharedkernel
         platform-knows-no-context:
           files:
             - "**/internal/platform/**"

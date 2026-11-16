@@ -20,6 +20,9 @@ import (
 	"github.com/mumia/wallet-accountant/internal/platform/authn/oidc"
 	"github.com/mumia/wallet-accountant/internal/platform/config"
 	"github.com/mumia/wallet-accountant/internal/platform/database"
+	"github.com/mumia/wallet-accountant/internal/platform/database/migrations"
+	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
+	"github.com/mumia/wallet-accountant/internal/platform/forwarding"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi"
 	"github.com/mumia/wallet-accountant/internal/platform/telemetry"
 )
@@ -45,6 +48,9 @@ var (
 	ErrUnknownMode = errors.New("unknown run mode")
 	// ErrModeNotAvailable is returned for a run mode that is not built yet.
 	ErrModeNotAvailable = errors.New("run mode is not available yet")
+	// ErrMissingDatabaseURL is returned when a run mode needs a connection
+	// string that is not configured.
+	ErrMissingDatabaseURL = errors.New("database URL is not configured")
 )
 
 // ParseMode returns the run mode called name.
@@ -63,6 +69,9 @@ type Options struct {
 	Authenticator authn.Authenticator
 	// Listener replaces listening on cfg.HTTPAddr.
 	Listener net.Listener
+	// PollInterval replaces how often the worker looks for new events when
+	// none is pending (default 1s).
+	PollInterval time.Duration
 }
 
 // Run runs the binary in mode until ctx is cancelled or the mode finishes.
@@ -71,14 +80,18 @@ func Run(ctx context.Context, mode Mode, cfg config.Config, tel *telemetry.Telem
 	case ModeAPI:
 		return runAPI(ctx, cfg, tel, opts)
 	case ModeWorker:
-		return runWorker(ctx, tel)
+		return runWorker(ctx, cfg, tel, opts)
 	case ModeAll:
 		g, ctx := errgroup.WithContext(ctx)
 		g.Go(func() error { return runAPI(ctx, cfg, tel, opts) })
-		g.Go(func() error { return runWorker(ctx, tel) })
+		g.Go(func() error { return runWorker(ctx, cfg, tel, opts) })
 
 		return g.Wait() //nolint:wrapcheck // the run modes' errors are already wrapped
-	case ModeMigrate, ModeRebuild, ModeBootstrap:
+	case ModeMigrate:
+		return runMigrate(ctx, cfg, tel)
+	case ModeRebuild:
+		return runRebuild(ctx, cfg, tel)
+	case ModeBootstrap:
 		return fmt.Errorf("%w: %s", ErrModeNotAvailable, mode)
 	default:
 		return fmt.Errorf("%w %q", ErrUnknownMode, mode)
@@ -88,6 +101,10 @@ func Run(ctx context.Context, mode Mode, cfg config.Config, tel *telemetry.Telem
 func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, opts Options) error {
 	pool, err := database.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil // stopped while starting
+		}
+
 		return err //nolint:wrapcheck // already wrapped by database
 	}
 	defer pool.Close()
@@ -143,12 +160,87 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 	return nil
 }
 
-// runWorker will forward events to deferred handlers. No handler exists yet,
-// so it waits until it is stopped.
-func runWorker(ctx context.Context, tel *telemetry.Telemetry) error {
-	tel.Logger.InfoContext(ctx, "worker started")
-	<-ctx.Done()
+// runWorker forwards events to every deferred handler until it is stopped.
+func runWorker(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, opts Options) error {
+	if cfg.ReaderDatabaseURL == "" {
+		return fmt.Errorf("%w: WA_READER_DATABASE_URL (worker)", ErrMissingDatabaseURL)
+	}
+
+	reader, err := database.Open(ctx, cfg.ReaderDatabaseURL)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil // stopped while starting
+		}
+
+		return err //nolint:wrapcheck // already wrapped by database
+	}
+	defer reader.Close()
+
+	tel.Logger.InfoContext(ctx, "worker started", "handlers", len(handlers()))
+
+	err = forwarding.Run(ctx, forwarding.Config{
+		Reader:         reader,
+		Handlers:       handlers(),
+		Logger:         tel.Logger,
+		TracerProvider: tel.TracerProvider,
+		PollInterval:   opts.PollInterval,
+		ResendInterval: opts.PollInterval,
+		CloseTimeout:   cfg.ShutdownTimeout,
+	})
+	if err != nil {
+		return err //nolint:wrapcheck // already wrapped by forwarding
+	}
+
 	tel.Logger.InfoContext(ctx, "worker stopped")
+
+	return nil
+}
+
+// runMigrate applies the migrations as wa_owner and sets the passwords of
+// wa_app and wa_event_store_reader to those in their connection strings.
+func runMigrate(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry) error {
+	if cfg.OwnerDatabaseURL == "" {
+		return fmt.Errorf("%w: WA_OWNER_DATABASE_URL (migrate)", ErrMissingDatabaseURL)
+	}
+
+	logins := []string{cfg.DatabaseURL}
+	if cfg.ReaderDatabaseURL != "" {
+		logins = append(logins, cfg.ReaderDatabaseURL)
+	}
+
+	if err := migrations.Up(ctx, cfg.OwnerDatabaseURL, logins...); err != nil {
+		return err //nolint:wrapcheck // already wrapped by migrations
+	}
+
+	tel.Logger.InfoContext(ctx, "migrations applied")
+
+	return nil
+}
+
+// runRebuild rebuilds every registered fold from the event store.
+func runRebuild(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry) error {
+	if cfg.ReaderDatabaseURL == "" {
+		return fmt.Errorf("%w: WA_READER_DATABASE_URL (rebuild)", ErrMissingDatabaseURL)
+	}
+
+	reader, err := database.Open(ctx, cfg.ReaderDatabaseURL)
+	if err != nil {
+		return err //nolint:wrapcheck // already wrapped by database
+	}
+	defer reader.Close()
+
+	app, err := database.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err //nolint:wrapcheck // already wrapped by database
+	}
+	defer app.Close()
+
+	targets := rebuildTargets()
+	if err := eventstore.Rebuild(ctx, reader, eventstore.NewStore(app), targets...); err != nil {
+		return err //nolint:wrapcheck // already wrapped by eventstore
+	}
+
+	tel.Logger.InfoContext(ctx, "folds rebuilt", "aggregates", len(targets))
 
 	return nil
 }
