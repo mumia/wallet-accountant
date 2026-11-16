@@ -37,6 +37,18 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+type CreateRegistrationConflict Problem
+
+func (*CreateRegistrationConflict) createRegistrationRes() {}
+
+type CreateRegistrationUnauthorized Problem
+
+func (*CreateRegistrationUnauthorized) createRegistrationRes() {}
+
+type CreateRegistrationUnprocessableEntity Problem
+
+func (*CreateRegistrationUnprocessableEntity) createRegistrationRes() {}
+
 type GetMeForbidden Problem
 
 func (*GetMeForbidden) getMeRes() {}
@@ -74,7 +86,8 @@ func (s *Me) SetIsInstanceAdministrator(val bool) {
 	s.IsInstanceAdministrator = val
 }
 
-func (*Me) getMeRes() {}
+func (*Me) createRegistrationRes() {}
+func (*Me) getMeRes()              {}
 
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
@@ -211,4 +224,21 @@ func (s *ProblemStatusCode) SetStatusCode(val int) {
 // SetResponse sets the value of Response.
 func (s *ProblemStatusCode) SetResponse(val Problem) {
 	s.Response = val
+}
+
+// An Invitation code to redeem.
+// Ref: #/components/schemas/Registration
+type Registration struct {
+	// The Invitation code, exactly as it was handed out.
+	InvitationCode string `json:"invitation_code"`
+}
+
+// GetInvitationCode returns the value of InvitationCode.
+func (s *Registration) GetInvitationCode() string {
+	return s.InvitationCode
+}
+
+// SetInvitationCode sets the value of InvitationCode.
+func (s *Registration) SetInvitationCode(val string) {
+	s.InvitationCode = val
 }

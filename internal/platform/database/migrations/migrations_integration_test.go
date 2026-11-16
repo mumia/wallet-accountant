@@ -112,6 +112,92 @@ func TestReaderSeesEveryEventButWritesNothing(t *testing.T) {
 	})
 }
 
+func TestUsersAndInvitationsOnlyInInstanceScope(t *testing.T) {
+	t.Parallel()
+	urls := databasetest.New(t)
+	ctx := context.Background()
+	invitation, user := uuid.New(), uuid.New()
+
+	writes := map[string]func(pgx.Tx) error{
+		"invitations": func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO invitations (id, role, code_hash, expires_at, version, schema_version)
+				VALUES ($1, 'user', $2, now(), 1, 1)`, invitation, uuid.NewString())
+
+			return err
+		},
+		"invitation_codes": func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO invitation_codes (code_hash, invitation_id) VALUES ($1, $2)`,
+				uuid.NewString(), invitation)
+
+			return err
+		},
+		"users": func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO users (id, oidc_issuer, oidc_subject, invitation_id, is_instance_administrator, version, schema_version)
+				VALUES ($1, 'https://issuer.example', $2, $3, false, 1, 1)`, user, uuid.NewString(), invitation)
+
+			return err
+		},
+		"user_identities": func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO user_identities (oidc_issuer, oidc_subject, user_id)
+				VALUES ('https://issuer.example', $1, $2)`, uuid.NewString(), user)
+
+			return err
+		},
+	}
+	tables := []string{"invitations", "invitation_codes", "users", "user_identities"}
+
+	inScope(t, urls.App, "", func(tx pgx.Tx) {
+		for _, table := range tables {
+			if err := writes[table](tx); err != nil {
+				t.Fatalf("instance scope writing %s: %v", table, err)
+			}
+		}
+
+		if _, err := tx.Exec(ctx, "RELEASE SAVEPOINT probe; SAVEPOINT probe"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	inScope(t, urls.App, uuid.NewString(), func(tx pgx.Tx) {
+		for _, table := range tables {
+			var n int
+			if err := tx.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil {
+				t.Fatalf("count %s: %v", table, err)
+			}
+
+			if n != 0 {
+				t.Errorf("a Household sees %d rows of %s, want 0", n, table)
+			}
+
+			if _, err := tx.Exec(ctx, "SAVEPOINT w"); err != nil {
+				t.Fatal(err)
+			}
+
+			err := writes[table](tx)
+			if err == nil || !strings.Contains(err.Error(), "row-level security") {
+				t.Errorf("a Household writing %s: err = %v, want a row-level security violation", table, err)
+			}
+
+			if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT w"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	inScope(t, urls.App, "", func(tx pgx.Tx) {
+		for _, table := range tables {
+			var n int
+			if err := tx.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil {
+				t.Fatalf("count %s: %v", table, err)
+			}
+
+			if n != 1 {
+				t.Errorf("instance scope sees %d rows of %s, want 1", n, table)
+			}
+		}
+	})
+}
+
 // inScope runs fn in a committed transaction on url with app.household_id
 // set to household ("" for instance scope).
 func inScope(t *testing.T, url, household string, fn func(pgx.Tx)) {

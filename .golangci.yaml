@@ -37,6 +37,13 @@ linters:
           allow:
             - $gostd
             - github.com/mumia/wallet-accountant/internal/sharedkernel
+            # A domain's external tests (package domain_test) import the
+            # domain they test. The per-context rules below still deny
+            # importing another context's domain.
+            - github.com/mumia/wallet-accountant/internal/households/domain
+            - github.com/mumia/wallet-accountant/internal/ledger/domain
+            - github.com/mumia/wallet-accountant/internal/ingestion/domain
+            - github.com/mumia/wallet-accountant/internal/planning/domain
         sharedkernel:
           list-mode: strict
           files:

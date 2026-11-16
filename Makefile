@@ -16,7 +16,7 @@ export WA_OIDC_AUDIENCE             ?= wallet-accountant
 export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
-.PHONY: help dev-up dev-down run run-api run-worker migrate rebuild grafana generate lint lint-go lint-api build test test-integration
+.PHONY: help dev-up dev-down run run-api run-worker migrate rebuild dev-bootstrap grafana generate lint lint-go lint-api build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
@@ -43,6 +43,9 @@ migrate: ## Run the migrate run mode against the dev database
 
 rebuild: ## Rebuild every fold from the event store in the dev database
 	go run ./cmd/wallet-accountant rebuild
+
+dev-bootstrap: ## Print the bootstrap Invitation code for the first Instance administrator (dev database)
+	go run ./cmd/wallet-accountant bootstrap
 
 grafana: ## Open the local Grafana UI
 	@open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "Grafana: http://localhost:3000"

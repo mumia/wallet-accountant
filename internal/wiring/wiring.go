@@ -7,15 +7,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"slices"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	householdshttp "github.com/mumia/wallet-accountant/internal/households/adapters/http"
-	householdsapp "github.com/mumia/wallet-accountant/internal/households/app"
 	"github.com/mumia/wallet-accountant/internal/platform/authn"
 	"github.com/mumia/wallet-accountant/internal/platform/authn/oidc"
 	"github.com/mumia/wallet-accountant/internal/platform/config"
@@ -46,8 +47,6 @@ var Modes = []Mode{ModeAPI, ModeWorker, ModeAll, ModeMigrate, ModeRebuild, ModeB
 var (
 	// ErrUnknownMode is returned by ParseMode for a name that is not a run mode.
 	ErrUnknownMode = errors.New("unknown run mode")
-	// ErrModeNotAvailable is returned for a run mode that is not built yet.
-	ErrModeNotAvailable = errors.New("run mode is not available yet")
 	// ErrMissingDatabaseURL is returned when a run mode needs a connection
 	// string that is not configured.
 	ErrMissingDatabaseURL = errors.New("database URL is not configured")
@@ -72,6 +71,9 @@ type Options struct {
 	// PollInterval replaces how often the worker looks for new events when
 	// none is pending (default 1s).
 	PollInterval time.Duration
+	// Stdout replaces os.Stdout, where the bootstrap run mode prints the
+	// Invitation code.
+	Stdout io.Writer
 }
 
 // Run runs the binary in mode until ctx is cancelled or the mode finishes.
@@ -92,7 +94,7 @@ func Run(ctx context.Context, mode Mode, cfg config.Config, tel *telemetry.Telem
 	case ModeRebuild:
 		return runRebuild(ctx, cfg, tel)
 	case ModeBootstrap:
-		return fmt.Errorf("%w: %s", ErrModeNotAvailable, mode)
+		return runBootstrap(ctx, cfg, tel, opts)
 	default:
 		return fmt.Errorf("%w %q", ErrUnknownMode, mode)
 	}
@@ -115,7 +117,7 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 	}
 
 	handler, err := httpapi.NewHandler(apiHandler{
-		Handler: householdshttp.NewHandler(householdsapp.NewUsers()),
+		Handler: householdshttp.NewHandler(NewUsers(pool)),
 		Errors:  httpapi.Errors{Logger: tel.Logger},
 	}, auth, tel)
 	if err != nil {
@@ -241,6 +243,38 @@ func runRebuild(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry
 	}
 
 	tel.Logger.InfoContext(ctx, "folds rebuilt", "aggregates", len(targets))
+
+	return nil
+}
+
+// runBootstrap issues the bootstrap Invitation, or reissues it with a new
+// code while it is unredeemed, and prints the code with fmt. The code is
+// never logged, so it can't reach telemetry (ADR-0017).
+func runBootstrap(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, opts Options) error {
+	pool, err := database.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err //nolint:wrapcheck // already wrapped by database
+	}
+	defer pool.Close()
+
+	code, expiresAt, err := NewUsers(pool).IssueBootstrapInvitation(ctx)
+	if err != nil {
+		return fmt.Errorf("bootstrap: %w", err)
+	}
+
+	tel.Logger.InfoContext(ctx, "bootstrap Invitation issued", "expires_at", expiresAt)
+
+	out := opts.Stdout
+	if out == nil {
+		out = os.Stdout
+	}
+
+	_, err = fmt.Fprintf(out, "Bootstrap Invitation code (valid until %s, single use; any earlier code no longer works):\n\n    %s\n\n"+
+		"Sign in, then redeem it with POST /registrations to become the Instance administrator.\n",
+		expiresAt.UTC().Format(time.RFC3339), code)
+	if err != nil {
+		return fmt.Errorf("print bootstrap code: %w", err)
+	}
 
 	return nil
 }

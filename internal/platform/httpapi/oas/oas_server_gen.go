@@ -8,6 +8,14 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CreateRegistration implements createRegistration operation.
+	//
+	// Redeems an Invitation code, making the signed-in identity a User with the role the Invitation grants
+	// (ADR-0017). An unknown, expired, superseded or already used code gets 422 with one generic problem,
+	// so codes can't be probed. An identity that is already a User gets 409.
+	//
+	// POST /registrations
+	CreateRegistration(ctx context.Context, req *Registration) (CreateRegistrationRes, error)
 	// GetMe implements getMe operation.
 	//
 	// Returns the User the bearer token belongs to, and whether they are Instance administrator. An

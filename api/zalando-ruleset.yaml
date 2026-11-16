@@ -204,6 +204,10 @@ rules:
           - '415'
           - '416'
           - '417'
+          # Not in Zalando's list, but the spec uses it for a well-formed
+          # request that can't be carried out (an invalid Invitation code,
+          # an Idempotency-Key reused with another body).
+          - '422'
           - '423'
           - '426'
           - '428'

@@ -46,6 +46,38 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Problem'
+  /registrations:
+    post:
+      operationId: createRegistration
+      summary: Redeem an Invitation
+      description: |
+        Redeems an Invitation code, making the signed-in identity a User with
+        the role the Invitation grants (ADR-0017). An unknown, expired,
+        superseded or already used code gets 422 with one generic problem, so
+        codes can't be probed. An identity that is already a User gets 409.
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Registration'
+      responses:
+        '201':
+          description: The new User
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     bearer_auth:
@@ -62,6 +94,18 @@ components:
             $ref: '#/components/schemas/Problem'
     Forbidden:
       description: The caller may not do this, for example because it is not registered yet
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: The request conflicts with the current state, for example the caller is already registered
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: The request is well-formed but can't be carried out, for example an invalid Invitation code
       content:
         application/problem+json:
           schema:
@@ -87,6 +131,17 @@ components:
         is_instance_administrator:
           type: boolean
           description: Whether the User controls who is admitted to the instance
+    Registration:
+      type: object
+      description: An Invitation code to redeem
+      required:
+        - invitation_code
+      properties:
+        invitation_code:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: The Invitation code, exactly as it was handed out
     Problem:
       type: object
       description: Problem details (RFC 9457)

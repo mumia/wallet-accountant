@@ -24,6 +24,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	householdsapp "github.com/mumia/wallet-accountant/internal/households/app"
 	"github.com/mumia/wallet-accountant/internal/platform/authn"
 	"github.com/mumia/wallet-accountant/internal/platform/authn/authntest"
 	"github.com/mumia/wallet-accountant/internal/platform/config"
@@ -38,6 +39,9 @@ type App struct {
 	baseURL string
 	auth    *authntest.Authenticator
 	reader  *pgxpool.Pool
+	users   *householdsapp.Users
+	cfg     config.Config
+	tel     *telemetry.Telemetry
 
 	// Logs holds every JSON log record written to stdout.
 	Logs *Buffer
@@ -88,10 +92,19 @@ func Start(t testing.TB) *App {
 		ShutdownTimeout:   5 * time.Second,
 	}
 
+	app.cfg, app.tel = cfg, tel
+
 	app.reader, err = pgxpool.New(ctx, urls.Reader)
 	if err != nil {
 		t.Fatalf("reader pool: %v", err)
 	}
+
+	appPool, err := pgxpool.New(ctx, urls.App)
+	if err != nil {
+		t.Fatalf("app pool: %v", err)
+	}
+
+	app.users = wiring.NewUsers(appPool)
 
 	done := make(chan error, 1)
 
@@ -106,6 +119,7 @@ func Start(t testing.TB) *App {
 	t.Cleanup(func() {
 		cancel()
 		app.reader.Close()
+		appPool.Close()
 
 		if err := <-done; err != nil {
 			t.Errorf("app stopped with an error: %v", err)

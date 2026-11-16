@@ -18,3 +18,17 @@
 - [ ] HTTP tests: every invalid-code case, double redemption, concurrent redemption of one code
 - [ ] Integration test: `bootstrap` is refused once an Instance administrator exists, a rerun replaces the earlier code, and the code appears in no log record
 - [ ] Consistency map rows for Issue bootstrap Invitation and Redeem Invitation match the code
+
+## Comments
+
+Implementation notes (implementer agent):
+
+- **Where things live.** Deciders in `internal/households/domain` (`invitation.go`, `user.go`); the service `app.Users` (`Me`, `Register`, `IssueBootstrapInvitation`, `IssueInvitation`) and the aggregates' codecs and event types in `internal/households/app`; fold stores and lookups in `internal/households/adapters/postgres`; tables in migration `000002_users_and_invitations`. `wiring.NewUsers(pool)` builds the service; both aggregates are registered as rebuild targets.
+- **Roles.** An Invitation grants `instance_administrator` or `user` (no instance role). Seeded test Invitations grant `user`. The bootstrap Invitation's fixed ID is `00000000-0000-7000-8000-000000000001`.
+- **Codes.** 32 bytes from `crypto/rand`, base64url (43 characters); the SHA-256 of the code string is stored hex-encoded. The Decider compares hashes in constant time. A reissue replaces the lookup row, so a superseded code is simply unknown.
+- **One generic error.** Every invalid code gets 422 with the problem type `/problems/invalid-invitation` and the same title and detail; an already registered caller gets 409 `/problems/already-registered`. The identity lookup row's primary key is the backstop for one identity redeeming two codes at once: its upsert affects no row for another User, and the fold store returns `app.ErrAlreadyRegistered`.
+- **422 in the Zalando ruleset.** Zalando's list of standard status codes has no 422, so `api/zalando-ruleset.yaml` now allows it, with a comment. The spec uses 422 here and for Idempotency-Key mismatches (ticket 04).
+- **Shared kernel ID.** depguard lets a domain import only the standard library and the shared kernel, so `internal/sharedkernel/id.go` adds `ID` (an alias of `uuid.UUID`), `NilID`, `NewID` and `MustParseID`. The `domain` depguard rule also matched the domain's own external tests (`package domain_test`), which must import the domain they test, so the four context domains are now allowed; the per-context rules still deny cross-context imports.
+- **Bootstrap.** `bootstrap` needs only `WA_DATABASE_URL` (as `wa_app`). It prints the code with `fmt` to `Options.Stdout` (default `os.Stdout`) and logs only "bootstrap Invitation issued" with the expiry. Once redeemed, it fails with `app.ErrBootstrapRefused`. `make dev-bootstrap` runs it; `make bootstrap` (Compose) is left to ticket 17. `ErrModeNotAvailable` is gone, since every run mode now exists.
+- **Harness.** `apitest.App` gained `SeedInvitation`, `SeedInvitationWith(role, expiresAt)` (an expiry in the past gives an expired code), `Register(issuer, subject)` (returns a token), `RunBootstrap` (returns the printed code), `Rebuild`, `Post` and `Response.AssertJSON`.
+- **Tests outside the agreed seams.** One PostgreSQL-level test (the spec's required exception) shows that the four Users and Invitations tables can't be read or written while a Household is set. Mutation checks done by hand: removing the identity backstop fails the two-codes race test, and logging the code fails the bootstrap test.
