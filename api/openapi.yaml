@@ -21,6 +21,10 @@ security:
 tags:
   - name: Users
     description: The signed-in identity and its registration
+  - name: Households
+    description: Households, the only ownership and privacy boundary (ADR-0003)
+  - name: Categories
+    description: What money was received for or spent on (ADR-0004)
 paths:
   /me:
     get:
@@ -57,6 +61,8 @@ paths:
         codes can't be probed. An identity that is already a User gets 409.
       tags:
         - Users
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -78,7 +84,134 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         default:
           $ref: '#/components/responses/Problem'
+  /households:
+    post:
+      operationId: createHousehold
+      summary: Create a Household
+      description: |
+        Creates a Household with a name and a Base currency. The caller
+        becomes its first member, and its Internal Categories (Opening
+        balance, Household transfer, Uncategorised) are created with it.
+        An unregistered caller gets 403 with the problem type
+        `/problems/registration-required`.
+      tags:
+        - Households
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdCreation'
+      responses:
+        '201':
+          description: The new Household
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listHouseholds
+      summary: The caller's Households
+      description: |
+        Lists the Households the caller is a member of. An unregistered
+        caller gets 403 with the problem type `/problems/registration-required`.
+      tags:
+        - Households
+      responses:
+        '200':
+          description: The caller's Households
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}:
+    get:
+      operationId: getHousehold
+      summary: A Household
+      description: |
+        Returns a Household the caller is a member of. Any other Household,
+        and every Household for an unregistered caller, is 404: a 403 would
+        confirm that it exists.
+      tags:
+        - Households
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/categories:
+    get:
+      operationId: listCategories
+      summary: The Household's Categories
+      description: |
+        Lists every Category of the Household, Internal Categories included.
+        The tree is given by each Category's `parent_id`.
+      tags:
+        - Categories
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household's Categories
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        A key the client chooses for one request, such as a UUID. Sending the
+        request again with the same key and body returns the stored response
+        without repeating it; the same key with a different body gets 422.
+        Keys are scoped to the caller.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    HouseholdID:
+      name: household_id
+      in: path
+      required: true
+      description: The Household's ID
+      schema:
+        type: string
+        format: uuid
   securitySchemes:
     bearer_auth:
       type: http
@@ -106,6 +239,12 @@ components:
             $ref: '#/components/schemas/Problem'
     UnprocessableEntity:
       description: The request is well-formed but can't be carried out, for example an invalid Invitation code
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: The resource doesn't exist, or the caller may not know it does
       content:
         application/problem+json:
           schema:
@@ -142,6 +281,94 @@ components:
           minLength: 1
           maxLength: 256
           description: The Invitation code, exactly as it was handed out
+    HouseholdCreation:
+      type: object
+      description: A new Household
+      required:
+        - name
+        - base_currency
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The Household's name
+          example: Home
+        base_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+    Household:
+      type: object
+      description: A Household
+      required:
+        - household_id
+        - name
+        - base_currency
+      properties:
+        household_id:
+          type: string
+          format: uuid
+          description: The Household's ID (UUIDv7)
+        name:
+          type: string
+          description: The Household's name
+          example: Home
+        base_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+    HouseholdList:
+      type: object
+      description: The caller's Households
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Households, in the order they were created
+          items:
+            $ref: '#/components/schemas/Household'
+    Category:
+      type: object
+      description: A Category
+      required:
+        - category_id
+        - name
+        - kind
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: The Category's ID (UUIDv7)
+        name:
+          type: string
+          description: The Category's name
+          example: Uncategorised
+        kind:
+          type: string
+          description: What the Category is for; Internal Categories belong to the system
+          x-extensible-enum:
+            - INCOME
+            - EXPENSE
+            - INTERNAL
+          example: INTERNAL
+        parent_id:
+          type: string
+          format: uuid
+          description: The parent Category's ID; absent for a root Category
+    CategoryList:
+      type: object
+      description: A Household's Categories
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: Every Category of the Household
+          items:
+            $ref: '#/components/schemas/Category'
+    CurrencyCode:
+      type: string
+      description: A currency code, such as an ISO 4217 code
+      pattern: '^[A-Z]{3,5}$'
+      example: EUR
     Problem:
       type: object
       description: Problem details (RFC 9457)

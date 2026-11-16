@@ -94,6 +94,19 @@ func (a *App) Post(t testing.TB, path, token string, body any) *Response {
 	return a.Do(t, http.MethodPost, path, token, bytes.NewReader(raw))
 }
 
+// PostWithKey sends body as JSON in a POST request with the Idempotency-Key
+// header set to key.
+func (a *App) PostWithKey(t testing.TB, path, token, key string, body any) *Response {
+	t.Helper()
+
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return a.DoWithHeader(t, http.MethodPost, path, token, http.Header{"Idempotency-Key": {key}}, bytes.NewReader(raw))
+}
+
 // AssertJSON checks that the response is application/json with the given
 // status, and decodes its body into v.
 func (r *Response) AssertJSON(t testing.TB, status int, v any) {

@@ -37,6 +37,90 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// A Category.
+// Ref: #/components/schemas/Category
+type Category struct {
+	// The Category's ID (UUIDv7).
+	CategoryID uuid.UUID `json:"category_id"`
+	// The Category's name.
+	Name string `json:"name"`
+	// What the Category is for; Internal Categories belong to the system.
+	Kind string `json:"kind"`
+	// The parent Category's ID; absent for a root Category.
+	ParentID OptUUID `json:"parent_id"`
+}
+
+// GetCategoryID returns the value of CategoryID.
+func (s *Category) GetCategoryID() uuid.UUID {
+	return s.CategoryID
+}
+
+// GetName returns the value of Name.
+func (s *Category) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *Category) GetKind() string {
+	return s.Kind
+}
+
+// GetParentID returns the value of ParentID.
+func (s *Category) GetParentID() OptUUID {
+	return s.ParentID
+}
+
+// SetCategoryID sets the value of CategoryID.
+func (s *Category) SetCategoryID(val uuid.UUID) {
+	s.CategoryID = val
+}
+
+// SetName sets the value of Name.
+func (s *Category) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *Category) SetKind(val string) {
+	s.Kind = val
+}
+
+// SetParentID sets the value of ParentID.
+func (s *Category) SetParentID(val OptUUID) {
+	s.ParentID = val
+}
+
+// A Household's Categories.
+// Ref: #/components/schemas/CategoryList
+type CategoryList struct {
+	// Every Category of the Household.
+	Items []Category `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *CategoryList) GetItems() []Category {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *CategoryList) SetItems(val []Category) {
+	s.Items = val
+}
+
+func (*CategoryList) listCategoriesRes() {}
+
+type CreateHouseholdForbidden Problem
+
+func (*CreateHouseholdForbidden) createHouseholdRes() {}
+
+type CreateHouseholdUnauthorized Problem
+
+func (*CreateHouseholdUnauthorized) createHouseholdRes() {}
+
+type CreateHouseholdUnprocessableEntity Problem
+
+func (*CreateHouseholdUnprocessableEntity) createHouseholdRes() {}
+
 type CreateRegistrationConflict Problem
 
 func (*CreateRegistrationConflict) createRegistrationRes() {}
@@ -49,6 +133,16 @@ type CreateRegistrationUnprocessableEntity Problem
 
 func (*CreateRegistrationUnprocessableEntity) createRegistrationRes() {}
 
+type CurrencyCode string
+
+type GetHouseholdNotFound Problem
+
+func (*GetHouseholdNotFound) getHouseholdRes() {}
+
+type GetHouseholdUnauthorized Problem
+
+func (*GetHouseholdUnauthorized) getHouseholdRes() {}
+
 type GetMeForbidden Problem
 
 func (*GetMeForbidden) getMeRes() {}
@@ -56,6 +150,112 @@ func (*GetMeForbidden) getMeRes() {}
 type GetMeUnauthorized Problem
 
 func (*GetMeUnauthorized) getMeRes() {}
+
+// A Household.
+// Ref: #/components/schemas/Household
+type Household struct {
+	// The Household's ID (UUIDv7).
+	HouseholdID uuid.UUID `json:"household_id"`
+	// The Household's name.
+	Name         string       `json:"name"`
+	BaseCurrency CurrencyCode `json:"base_currency"`
+}
+
+// GetHouseholdID returns the value of HouseholdID.
+func (s *Household) GetHouseholdID() uuid.UUID {
+	return s.HouseholdID
+}
+
+// GetName returns the value of Name.
+func (s *Household) GetName() string {
+	return s.Name
+}
+
+// GetBaseCurrency returns the value of BaseCurrency.
+func (s *Household) GetBaseCurrency() CurrencyCode {
+	return s.BaseCurrency
+}
+
+// SetHouseholdID sets the value of HouseholdID.
+func (s *Household) SetHouseholdID(val uuid.UUID) {
+	s.HouseholdID = val
+}
+
+// SetName sets the value of Name.
+func (s *Household) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseCurrency sets the value of BaseCurrency.
+func (s *Household) SetBaseCurrency(val CurrencyCode) {
+	s.BaseCurrency = val
+}
+
+func (*Household) createHouseholdRes() {}
+func (*Household) getHouseholdRes()    {}
+
+// A new Household.
+// Ref: #/components/schemas/HouseholdCreation
+type HouseholdCreation struct {
+	// The Household's name.
+	Name         string       `json:"name"`
+	BaseCurrency CurrencyCode `json:"base_currency"`
+}
+
+// GetName returns the value of Name.
+func (s *HouseholdCreation) GetName() string {
+	return s.Name
+}
+
+// GetBaseCurrency returns the value of BaseCurrency.
+func (s *HouseholdCreation) GetBaseCurrency() CurrencyCode {
+	return s.BaseCurrency
+}
+
+// SetName sets the value of Name.
+func (s *HouseholdCreation) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseCurrency sets the value of BaseCurrency.
+func (s *HouseholdCreation) SetBaseCurrency(val CurrencyCode) {
+	s.BaseCurrency = val
+}
+
+// The caller's Households.
+// Ref: #/components/schemas/HouseholdList
+type HouseholdList struct {
+	// The Households, in the order they were created.
+	Items []Household `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *HouseholdList) GetItems() []Household {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *HouseholdList) SetItems(val []Household) {
+	s.Items = val
+}
+
+func (*HouseholdList) listHouseholdsRes() {}
+
+type ListCategoriesNotFound Problem
+
+func (*ListCategoriesNotFound) listCategoriesRes() {}
+
+type ListCategoriesUnauthorized Problem
+
+func (*ListCategoriesUnauthorized) listCategoriesRes() {}
+
+type ListHouseholdsForbidden Problem
+
+func (*ListHouseholdsForbidden) listHouseholdsRes() {}
+
+type ListHouseholdsUnauthorized Problem
+
+func (*ListHouseholdsUnauthorized) listHouseholdsRes() {}
 
 // The signed-in User.
 // Ref: #/components/schemas/Me
@@ -129,6 +329,52 @@ func (o OptString) Get() (v string, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptString) Or(d string) string {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptUUID returns new OptUUID with value set to v.
+func NewOptUUID(v uuid.UUID) OptUUID {
+	return OptUUID{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptUUID is optional uuid.UUID.
+type OptUUID struct {
+	Value uuid.UUID
+	Set   bool
+}
+
+// IsSet returns true if OptUUID was set.
+func (o OptUUID) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptUUID) Reset() {
+	var v uuid.UUID
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptUUID) SetTo(v uuid.UUID) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptUUID) Get() (v uuid.UUID, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 	if v, ok := o.Get(); ok {
 		return v
 	}

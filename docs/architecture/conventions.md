@@ -18,8 +18,8 @@ internal/platform/              event store, Decider runtime, codec, Watermill w
     eventstore/                 event store, CloudEvents codec, Decider runtime, rebuild; eventstoretest/ for tests
     forwarding/                 Watermill SchemaAdapter, handler middleware, Drain for tests
     database/migrations/        golang-migrate migrations, run as wa_owner by the migrate run mode
-    database/databasetest/      a fresh migrated testcontainers database per test, with the three role URLs
-    httpapi/                    problem+json errors, bearer authentication, request telemetry
+    database/databasetest/      a fresh migrated testcontainers database per test, with the three role URLs; row-level security assertions
+    httpapi/                    problem+json errors, bearer authentication, Idempotency-Key, request telemetry
     httpapi/oas/                the ogen server generated from api/openapi.yaml (`make generate`)
     authn/                      the Authenticator port; oidc/ verifies JWTs, authntest/ is for tests
     telemetry/                  slog, traces and metrics (ADR-0016)
@@ -38,7 +38,7 @@ All aggregate and event IDs are UUIDv7. The application generates them, never th
 
 ## Idempotency
 
-- POST endpoints accept an `Idempotency-Key` header, following the Zalando guidelines.
+- POST endpoints accept an `Idempotency-Key` header, following the Zalando guidelines. An HTTP middleware in `platform/httpapi` honours it on every POST, so a new endpoint only declares the `IdempotencyKey` parameter in `api/openapi.yaml` (a unit test checks every POST does). Keys belong to the caller's OIDC identity and are reserved before the request runs, so a concurrent retry gets 409 instead of running twice. A 2xx response is stored and replayed for the same key and body; the same key with another body gets 422; any other response releases the key. A response holding a Household's data is stored in that Household's scope: the Household in the path, or the one a handler names with `httpapi.ResponseBelongsTo`.
 - A Statement import is deduplicated by a hash of the file. An Imported transaction is deduplicated by the bank's own transaction ID when the bank provides one.
 - Watermill delivers events at least once, and commits the handler's transaction even when a message is not acked (ADR-0011). Every event handler wraps each attempt in a `SAVEPOINT`, rolls back to it before a Nack, and records `(consumer_group, event_id)` in a processed-events table in the same transaction, skipping events it has already recorded.
 
@@ -47,7 +47,8 @@ All aggregate and event IDs are UUIDv7. The application generates them, never th
 - Deciders: pure given/when/then tests. Given these past events, when this command, then these new events or this error.
 - Anything that touches PostgreSQL: integration tests against a real database through testcontainers-go.
 - HTTP: contract tests generated from `api/openapi.yaml`.
-- Household isolation: tests confirm that both the query filters and the row-level security policies (ADR-0014) block access to another Household's data.
+- Household isolation: tests confirm that both the query filters and the row-level security policies (ADR-0014) block access to another Household's data. HTTP tests show another Household's resources answer 404. Every migration that adds a Household-scoped table adds a `databasetest.AssertHouseholdIsolation` test for it, and every instance-level table an `AssertInstanceScopeOnly` test; both bypass the query filters.
+- Household-scoped requests run through Households' `InHousehold`: one transaction as `wa_app` that resolves the caller's User in instance scope, sets `app.household_id` from the path, and answers 404 to non-members and unregistered callers.
 
 ## Configuration and observability
 

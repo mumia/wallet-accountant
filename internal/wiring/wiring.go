@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	householdshttp "github.com/mumia/wallet-accountant/internal/households/adapters/http"
+	ledgerhttp "github.com/mumia/wallet-accountant/internal/ledger/adapters/http"
 	"github.com/mumia/wallet-accountant/internal/platform/authn"
 	"github.com/mumia/wallet-accountant/internal/platform/authn/oidc"
 	"github.com/mumia/wallet-accountant/internal/platform/config"
@@ -116,10 +117,13 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 		auth = oidc.New(cfg.OIDCIssuer, cfg.OIDCAudience)
 	}
 
+	contexts := NewContexts(pool)
+
 	handler, err := httpapi.NewHandler(apiHandler{
-		Handler: householdshttp.NewHandler(NewUsers(pool)),
-		Errors:  httpapi.Errors{Logger: tel.Logger},
-	}, auth, tel)
+		Handler:       householdshttp.NewHandler(contexts.Users, contexts.Households),
+		ledgerHandler: ledgerhttp.NewHandler(contexts.Categories),
+		Errors:        httpapi.Errors{Logger: tel.Logger},
+	}, auth, pool, tel)
 	if err != nil {
 		return err //nolint:wrapcheck // already wrapped by httpapi
 	}
@@ -283,5 +287,10 @@ func runBootstrap(ctx context.Context, cfg config.Config, tel *telemetry.Telemet
 // problem+json error hooks.
 type apiHandler struct {
 	*householdshttp.Handler
+	*ledgerHandler
 	httpapi.Errors
 }
+
+// ledgerHandler is the Ledger HTTP adapter, renamed so it can be embedded
+// beside the Households one.
+type ledgerHandler = ledgerhttp.Handler
