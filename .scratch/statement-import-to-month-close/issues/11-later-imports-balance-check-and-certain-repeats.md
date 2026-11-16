@@ -4,7 +4,7 @@
 
 **Blocked by:** 08 (First Statement import: preview, confirm and Opening balance)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Later uploads refuse `preview_id`
 - [ ] Balance check: Opening balance + every non-Discarded Imported transaction of the Account (pending, Accepted, kept, and this file's new rows) = Export balance. Ledger Transactions aren't used

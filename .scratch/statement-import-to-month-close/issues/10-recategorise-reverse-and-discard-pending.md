@@ -4,7 +4,7 @@
 
 **Blocked by:** 09 (Accept Imported transactions)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `PATCH …/transactions/{transaction_id}` sets the Category of the non-Account side and emits an event; the Uncategorised count updates
 - [ ] `POST …/transactions/{transaction_id}/reverse` emits `reversed` and records a reversing Transaction with opposite Postings, the same Booking date and a link to the original; both appear in the Account's list

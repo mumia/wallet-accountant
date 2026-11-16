@@ -4,7 +4,7 @@
 
 **Blocked by:** 05 (Categories), 08 (First Statement import: preview, confirm and Opening balance)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `POST …/imported-transactions/{imported_transaction_id}/accept` with optional `category_id`
 - [ ] The Ingestion application service calls a Ledger `app` port in the same database transaction, running the Imported transaction, Transaction and Account Deciders, each with its own version check, retrying on conflict
