@@ -4,7 +4,7 @@
 
 **Blocked by:** 14 (Void Statement import), 15 (Month status and Month close)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Any Transaction booked into, recategorised within or reversed in a closed month sets that month's flag
 - [ ] Voiding an import whose rows touch a closed month flags it (including the Opening balance reversal)
