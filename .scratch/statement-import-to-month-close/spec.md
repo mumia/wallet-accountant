@@ -40,7 +40,7 @@ A User creates a Household with a Base currency, adds an Account with its start 
 
 ### Accounts
 
-15. As a User, I want to add an Account with a name, a kind (bank account, credit card, loan, cash or crypto wallet) and an Account currency, so that it mirrors a real place where money is held or owed.
+15. As a User, I want to add an Account with a name, a kind (bank account, credit card, loan or crypto wallet) and an Account currency, so that it mirrors a real place where money is held or owed.
 16. As a User, I want to give an Account a start date, so that its history begins where my books begin.
 17. As a User, I want the Account's Opening balance worked out from its first Statement import (the Export balance minus the sum of the file's rows on or after the start date) and recorded as a Transaction against the Opening balance Internal Category, so that nobody types it and it agrees with the bank from day one.
 17a. As a User, I want an Account to show that it is awaiting its first Statement import, with no balance, until that import arrives, so that I never see a made-up balance.
@@ -245,6 +245,7 @@ Added to `docs/architecture/consistency.md`: Create Household, Create Category, 
 ## Out of Scope
 
 - Manual Transactions entered by hand, and therefore Matching manual entries to Imported transactions. Only Accept exists in this slice.
+- Cash Accounts. Adding an Account with the cash kind is refused (see Further Notes).
 - Rules and Category suggestions learned from past transactions. The User picks the Category or leaves it Uncategorised.
 - Transfers between Accounts, split Transactions with several Categories, and Household transfers.
 - Foreign-currency rows, Bank rate and Reference rate.
@@ -261,5 +262,5 @@ Added to `docs/architecture/consistency.md`: Create Household, Create Category, 
 ## Further Notes
 
 - Postponed decisions this slice doesn't settle: bank aggregator, other statement formats, Zitadel configuration details, Household roles.
-- **Open question: cash Accounts.** An Account gets its Opening balance only from a Statement import, and gaps are closed only by correcting entries. A cash Account has no statement file, and a counted difference (cash lost) is a real event, not a wrong entry. As written, a cash Account can be added but never gets a balance. Options: keep cash Accounts out of this slice, bring manual Transactions in, or give cash Accounts their own way to set an Opening balance.
+- **Cash Accounts are left out of this slice.** An Account gets its Opening balance only from a Statement import, and gaps are closed only by correcting entries. A cash Account has no statement file, and a counted difference (cash lost) is a real event, not a wrong entry, so it could be added but would never get a balance or close. A later slice decides how cash Accounts work: by bringing in manual Transactions, or by giving cash Accounts their own way to set an Opening balance.
 - `docs/architecture/conventions.md` still says the telemetry backend is undecided. ADR-0016 has decided it (OpenTelemetry Collector and the Grafana stack), so that line should be updated in this slice.
