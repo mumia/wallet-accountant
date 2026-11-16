@@ -4,7 +4,7 @@
 
 **Blocked by:** 10 (Recategorise, reverse Transactions and Discard pending Imported transactions), 11 (Later imports: Balance check and certain repeats)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `POST …/statement-imports/{statement_import_id}/void` emits `voided`
 - [ ] Allowed only for the Account's latest non-voided import, and only while none of its rows are Accepted
