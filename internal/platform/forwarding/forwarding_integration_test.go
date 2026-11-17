@@ -476,6 +476,65 @@ func TestAnEventRedeliveredAfterAShutdownChangesNothing(t *testing.T) {
 	}
 }
 
+// When Watermill gives up on an attempt (shutdown or ack deadline) it ends
+// the subscriber transaction while the handler may still be using it: one
+// pgx connection in two goroutines, which crashed pgx ("concurrent map read
+// and map write", "close of closed channel"). The transaction must stay the
+// handler's until the attempt returns.
+func TestAHandlerKeepsItsTransactionUntilTheAttemptReturns(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+
+	entered := make(chan struct{})
+
+	var (
+		mu   sync.Mutex
+		errs []error
+	)
+
+	stop := e.start(t, forwarding.Handler{Name: "lingering", Handle: func(ctx context.Context, tx pgx.Tx, ev eventstore.CloudEvent) error {
+		if err := writeEffect(ctx, tx, "lingering", ev); err != nil {
+			return err
+		}
+
+		close(entered)
+		<-ctx.Done() // Watermill has given up on this attempt
+
+		// Still the handler's transaction: it must not be ended underneath.
+		for range 20 {
+			if _, err := tx.Exec(context.WithoutCancel(ctx), `SELECT 1`); err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+
+				break
+			}
+		}
+
+		return ctx.Err()
+	}})
+
+	id := e.add(t, t.Context(), uuid.New())
+
+	<-entered
+	stop()
+
+	mu.Lock()
+	if len(errs) > 0 {
+		t.Errorf("the transaction was ended while the handler used it: %v", errs)
+	}
+	mu.Unlock()
+
+	rec := &recorder{group: "lingering"}
+	e.start(t, rec.handler())
+	e.add(t, t.Context(), uuid.New())
+	e.drain(t, "lingering")
+
+	if n := e.effects(t, "lingering")[id]; n != 1 {
+		t.Errorf("effects = %d, want exactly 1 across the shutdown", n)
+	}
+}
+
 func TestAnEventRedeliveredAfterItsWritesWereCommittedUnackedChangesNothing(t *testing.T) {
 	t.Parallel()
 	e := setup(t)

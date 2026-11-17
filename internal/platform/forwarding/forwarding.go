@@ -8,10 +8,12 @@ package forwarding
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -81,7 +83,7 @@ func Run(ctx context.Context, cfg Config) error {
 	tracer := cfg.TracerProvider.Tracer("github.com/mumia/wallet-accountant/internal/platform/forwarding")
 
 	for _, h := range cfg.Handlers {
-		sub, err := wsql.NewSubscriber(wsql.BeginnerFromPgx(cfg.Reader), wsql.SubscriberConfig{
+		sub, err := wsql.NewSubscriber(guardedBeginner{wsql.BeginnerFromPgx(cfg.Reader)}, wsql.SubscriberConfig{
 			ConsumerGroup:  h.Name,
 			SchemaAdapter:  eventStoreSchema{},
 			OffsetsAdapter: offsets,
@@ -165,12 +167,16 @@ func middleware(h Handler, tracer trace.Tracer, logger *slog.Logger) message.NoP
 			return errNoTransaction
 		}
 
-		pgxTx, ok := wtx.(*wsql.PgxTx)
+		guarded, ok := wtx.(*guardedTx)
 		if !ok {
-			return fmt.Errorf("%w: not a pgx transaction", errNoTransaction)
+			return fmt.Errorf("%w: not a guarded pgx transaction", errNoTransaction)
 		}
 
-		tx := pgxTx.Tx
+		// The subscriber can't end the transaction while the attempt uses it.
+		guarded.mu.Lock()
+		defer guarded.mu.Unlock()
+
+		tx := guarded.pgx
 
 		if _, err := tx.Exec(ctx, `SAVEPOINT handler_attempt`); err != nil {
 			return fail(ctx, span, logger, h, ev, fmt.Errorf("savepoint: %w", err))
@@ -193,6 +199,66 @@ func middleware(h Handler, tracer trace.Tracer, logger *slog.Logger) message.NoP
 
 		return nil
 	}
+}
+
+// guardedBeginner begins subscriber transactions that one attempt at a time
+// can hold. Watermill hands its transaction to the handler's goroutine, but
+// stops waiting for the handler on shutdown or at the ack deadline and then
+// commits or rolls back at once, while the handler may still be running
+// queries: a pgx connection used by two goroutines, which corrupts it. Every
+// use by the subscriber (including Commit and Rollback) waits for the
+// running attempt to return, so its writes are committed or rolled back
+// whole, as ADR-0011 expects.
+type guardedBeginner struct {
+	wsql.Beginner
+}
+
+func (b guardedBeginner) BeginTx(ctx context.Context, opts *sql.TxOptions) (wsql.Tx, error) {
+	tx, err := b.Beginner.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // Watermill wraps it
+	}
+
+	pgxTx, ok := tx.(*wsql.PgxTx)
+	if !ok {
+		return nil, fmt.Errorf("forwarding: %T is not a pgx transaction", tx)
+	}
+
+	return &guardedTx{tx: tx, pgx: pgxTx.Tx}, nil
+}
+
+type guardedTx struct {
+	mu  sync.Mutex
+	tx  wsql.Tx
+	pgx pgx.Tx
+}
+
+func (t *guardedTx) ExecContext(ctx context.Context, query string, args ...any) (wsql.Result, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.tx.ExecContext(ctx, query, args...) //nolint:wrapcheck // Watermill wraps it
+}
+
+func (t *guardedTx) QueryContext(ctx context.Context, query string, args ...any) (wsql.Rows, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.tx.QueryContext(ctx, query, args...) //nolint:wrapcheck // Watermill wraps it
+}
+
+func (t *guardedTx) Commit() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.tx.Commit() //nolint:wrapcheck // Watermill wraps it
+}
+
+func (t *guardedTx) Rollback() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.tx.Rollback() //nolint:wrapcheck // Watermill wraps it
 }
 
 func attempt(ctx context.Context, tx pgx.Tx, h Handler, ev eventstore.CloudEvent) error {

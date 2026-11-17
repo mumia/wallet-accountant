@@ -37,6 +37,7 @@ import (
 // App is a running application.
 type App struct {
 	baseURL string
+	client  *http.Client
 	auth    *authntest.Authenticator
 	reader  *pgxpool.Pool
 	users   *householdsapp.Users
@@ -58,6 +59,8 @@ func Start(t testing.TB) *App {
 	t.Helper()
 
 	app := &App{
+		// Its own connections, so stopping the app can close them.
+		client:   &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()},
 		auth:     authntest.New(),
 		Logs:     &Buffer{},
 		OTLPLogs: &LogRecorder{},
@@ -117,6 +120,10 @@ func Start(t testing.TB) *App {
 	}()
 
 	t.Cleanup(func() {
+		// Parallel requests can leave the client a connection it dialled but
+		// never used. The server waits 5s before treating such a connection
+		// as idle, as long as its shutdown timeout, so close them first.
+		app.client.CloseIdleConnections()
 		cancel()
 		app.reader.Close()
 		appPool.Close()
@@ -180,7 +187,7 @@ func (a *App) DoWithHeader(t testing.TB, method, path, token string, header http
 		}
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := a.client.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
