@@ -1,0 +1,32 @@
+# `make smoke` against the self-hosted Compose stack (Zitadel included). Too
+# slow for pull requests, so it runs nightly and on demand.
+name: Smoke
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SMOKE_PROJECT: wallet-accountant-smoke
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make smoke
+      # smoke.sh removes its project on exit; this covers a cancelled or timed-out job.
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -p "$SMOKE_PROJECT" down -v --remove-orphans || true

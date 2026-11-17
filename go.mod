@@ -2,6 +2,8 @@ module github.com/mumia/wallet-accountant
 
 go 1.27.0
 
+toolchain go1.27.4
+
 tool (
 	github.com/daveshanley/vacuum
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
