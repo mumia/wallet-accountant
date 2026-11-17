@@ -1,0 +1,42 @@
+info:
+  name: Reverse a Transaction
+  type: http
+  seq: 3
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/transactions/:transaction_id/reverse'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: transaction_id
+      value: '{{transaction_id}}'
+      type: path
+      description: The Transaction's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  auth: inherit
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.status === 201) {
+          bru.setVar("transaction_id", res.body.transaction_id);
+        }
+docs: |-
+  Reverses a mistaken Transaction without editing or deleting it
+  (ADR-0018): a reversing Transaction is recorded with the opposite
+  Postings, the same Booking date and a link to the original, and both
+  appear in the Account's Transaction list. Neither counts as
+  Uncategorised any more. When an Accept recorded the Transaction, its
+  Imported transaction goes back to pending in the same transaction,
+  to be Accepted again or Discarded. A Transaction already reversed
+  gets 409 `/problems/transaction-already-reversed`; a reversal gets
+  422 `/problems/transaction-is-a-reversal`, and the Opening balance
+  Transaction 422 `/problems/opening-balance-transaction` (only
+  voiding the first Statement import changes it).
+
+  Operation `reverseTransaction`.

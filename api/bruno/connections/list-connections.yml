@@ -1,0 +1,21 @@
+info:
+  name: An Account's Connections
+  type: http
+  seq: 2
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/connections'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+  auth: inherit
+docs: |-
+  Lists every Connection of the Account, in the order they were created.
+
+  Operation `listConnections`.

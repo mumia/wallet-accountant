@@ -1,0 +1,9 @@
+info:
+  name: Transactions
+  type: folder
+  seq: 6
+request:
+  auth: inherit
+docs:
+  content: An Account's Transactions as a single-entry list (ADR-0001)
+  type: text/markdown

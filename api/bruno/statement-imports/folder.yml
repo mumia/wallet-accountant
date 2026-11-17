@@ -1,0 +1,9 @@
+info:
+  name: Statement imports
+  type: folder
+  seq: 7
+request:
+  auth: inherit
+docs:
+  content: Uploads of a bank statement file through a Connection (ADR-0018)
+  type: text/markdown

@@ -1,0 +1,25 @@
+info:
+  name: Redeem an Invitation
+  type: http
+  seq: 2
+http:
+  method: POST
+  url: '{{baseUrl}}/registrations'
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "invitation_code": "string"
+      }
+  auth: inherit
+docs: |-
+  Redeems an Invitation code, making the signed-in identity a User with
+  the role the Invitation grants (ADR-0017). An unknown, expired,
+  superseded or already used code gets 422 with one generic problem, so
+  codes can't be probed. An identity that is already a User gets 409.
+
+  Operation `createRegistration`.

@@ -1,0 +1,45 @@
+info:
+  name: Accept a pending Imported transaction
+  type: http
+  seq: 2
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/imported-transactions/:imported_transaction_id/accept'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: imported_transaction_id
+      value: '{{imported_transaction_id}}'
+      type: path
+      description: The Imported transaction's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "category_id": "00000000-0000-0000-0000-000000000000"
+      }
+  auth: inherit
+docs: |-
+  Accepts a pending Imported transaction: a balanced Ledger Transaction
+  is recorded in the same transaction, with exactly the row's amount,
+  dates, description and payee, between the Account and `category_id`.
+  Without `category_id`, or with the Uncategorised Category, the other
+  side waits in Uncategorised. The Account's balance and its
+  Transaction list reflect it immediately. An Imported transaction
+  already Accepted gets 409
+  `/problems/imported-transaction-already-accepted`, and a Discarded
+  one 409 `/problems/imported-transaction-discarded`; a Suspected
+  duplicate, not yet kept, gets 409
+  `/problems/imported-transaction-suspected-duplicate`; any other Internal
+  Category gets 422 `/problems/internal-category`, and a Category that
+  isn't one of the Household's gets 422 `/problems/invalid-category`.
+  Retrying with the same Idempotency-Key and body returns the original
+  result and never books twice.
+
+  Operation `acceptImportedTransaction`.

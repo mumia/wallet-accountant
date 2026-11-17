@@ -1,0 +1,9 @@
+info:
+  name: Accounts
+  type: folder
+  seq: 4
+request:
+  auth: inherit
+docs:
+  content: Places where money is held or owed (ADR-0004)
+  type: text/markdown

@@ -1,0 +1,75 @@
+info:
+  name: Upload a statement file
+  type: http
+  seq: 2
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/connections/:connection_id/statement-imports'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: connection_id
+      value: '{{connection_id}}'
+      type: path
+      description: The Connection's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: multipart-form
+    data:
+      - name: file
+        type: file
+        value: []
+        description: The statement file, as the bank exported it
+      - name: export_balance
+        type: text
+        value: "1234.56"
+        description: An exact decimal written with `.` as the decimal separator and no thousands separator
+      - name: preview_id
+        type: text
+        value: string
+        description: The preview's ID; required for the Account's first Statement import
+        disabled: true
+  auth: inherit
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.status === 201) {
+          bru.setVar("statement_import_id", res.body.statement_import_id);
+        }
+docs: |-
+  Imports a statement file through the Connection: every row booked on
+  or after the Account's start date becomes a pending Imported
+  transaction, and the rows before it are ignored and counted. The
+  first import of an Account needs the `preview_id` of its preview
+  (422 `/problems/preview-required` without it). It is recomputed from
+  the uploaded file, its Export balance and the Connection's current
+  mapping version, and a difference gets 422
+  `/problems/preview-mismatch`. The first import also records the
+  Opening balance Transaction on the start date, in the same
+  transaction; an Account that got its Opening balance since the
+  preview gets 409 `/problems/opening-balance-already-recorded`. A file
+  with an unreadable row is refused whole (422
+  `/problems/unreadable-statement-file`), and a file already imported
+  through the Connection gets 409 `/problems/duplicate-statement-import`.
+
+  A later import takes its Export balance once and no `preview_id`
+  (409 `/problems/opening-balance-already-recorded` with one). A row
+  whose bank transaction ID, Booking date and amount all equal those of
+  an earlier Imported transaction of the Account is skipped as a
+  certain repeat and counted. The import then runs its Balance check
+  (ADR-0018): the Account's Opening balance plus every non-Discarded
+  Imported transaction, the new rows included, must equal the Export
+  balance. Otherwise the whole import is refused with 422
+  `/problems/balance-check-failed`, giving the expected balance, the
+  Export balance and the difference, and nothing is recorded. Amounts, an empty
+  file and a Connection without a mapping are refused as by the
+  preview. Retrying with the same Idempotency-Key and the same file and
+  fields returns the original result, however the form is rebuilt.
+
+  Operation `uploadStatementImport`.

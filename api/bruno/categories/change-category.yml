@@ -1,0 +1,36 @@
+info:
+  name: Rename or move a Category
+  type: http
+  seq: 3
+http:
+  method: PATCH
+  url: '{{baseUrl}}/households/:household_id/categories/:category_id'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: category_id
+      value: '{{category_id}}'
+      type: path
+      description: The Category's ID
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Espresso",
+        "parent_id": "00000000-0000-0000-0000-000000000000"
+      }
+  auth: inherit
+docs: |-
+  Renames the Category when `name` is given, and moves it when
+  `parent_id` is given: under that Category, or to the root when it is
+  `null`. A Category keeps its kind, so it can only move under a parent
+  of the same kind, and never under itself or one of its
+  sub-Categories. Internal Categories can't be renamed or moved, and
+  nothing can be moved under one (422, `/problems/internal-category`).
+  A name already used by a sibling in the place the Category ends up
+  gets 409 (`/problems/category-name-taken`); any other refusal is 422
+  (`/problems/invalid-category`).
+
+  Operation `changeCategory`.

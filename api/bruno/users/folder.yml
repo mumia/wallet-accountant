@@ -1,0 +1,9 @@
+info:
+  name: Users
+  type: folder
+  seq: 1
+request:
+  auth: inherit
+docs:
+  content: The signed-in identity and its registration
+  type: text/markdown

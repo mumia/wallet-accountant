@@ -1,0 +1,13 @@
+info:
+  name: The caller's Households
+  type: http
+  seq: 2
+http:
+  method: GET
+  url: '{{baseUrl}}/households'
+  auth: inherit
+docs: |-
+  Lists the Households the caller is a member of. An unregistered
+  caller gets 403 with the problem type `/problems/registration-required`.
+
+  Operation `listHouseholds`.

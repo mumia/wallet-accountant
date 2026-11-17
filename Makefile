@@ -24,7 +24,7 @@ export WA_OIDC_AUDIENCE             ?= wallet-accountant
 export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
-.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana generate lint lint-go lint-api build test test-integration
+.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
@@ -59,9 +59,13 @@ smoke: ## From scratch, run up and bootstrap in a separate Compose project and r
 
 ## Development
 
-dev-up: ## Start PostgreSQL, Zitadel (with the wallet-accountant project) and otel-lgtm
+dev-up: ## Start PostgreSQL, Zitadel (with the wallet-accountant project), Swagger UI and otel-lgtm
 	$(COMPOSE_DEV) up -d --wait
 	$(COMPOSE_DEV) run --rm zitadel-setup
+	@# The Bruno collection reads the client ID Zitadel generated from api/bruno/.env.
+	@client_id=$$($(COMPOSE_DEV) run --rm --no-deps -T --entrypoint cat zitadel-setup /zitadel-setup/api-clients-client-id.txt) && \
+		printf 'WA_OAUTH_CLIENT_ID=%s\n' "$$client_id" > api/bruno/.env && \
+		echo "api/bruno/.env: WA_OAUTH_CLIENT_ID=$$client_id"
 
 dev-down: ## Stop the development dependencies (the volumes are kept)
 	$(COMPOSE_DEV) down
@@ -91,9 +95,12 @@ dev-bootstrap: ## Print the bootstrap Invitation code for the first Instance adm
 grafana: ## Open the local Grafana UI
 	@open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "Grafana: http://localhost:3000"
 
+swagger: ## Open Swagger UI on api/openapi.yaml (dev-up starts it)
+	@open http://localhost:8082 2>/dev/null || xdg-open http://localhost:8082 2>/dev/null || echo "Swagger UI: http://localhost:8082"
+
 ## Build and quality
 
-generate: ## Regenerate code from api/openapi.yaml (ogen)
+generate: ## Regenerate the ogen server and the Bruno collection (api/bruno) from api/openapi.yaml
 	go generate ./...
 
 lint: lint-go lint-api ## Run golangci-lint (with depguard) and vacuum with the Zalando ruleset

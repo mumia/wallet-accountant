@@ -1,0 +1,80 @@
+info:
+  name: Save a Connection's CSV mapping
+  type: http
+  seq: 3
+http:
+  method: PUT
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/connections/:connection_id/csv-mapping'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+    - name: connection_id
+      value: '{{connection_id}}'
+      type: path
+      description: The Connection's ID
+  body:
+    type: json
+    data: |-
+      {
+        "delimiter": ";",
+        "has_header_row": false,
+        "skip_leading_lines": 0,
+        "date_format": "DD/MM/YYYY",
+        "decimal_separator": ",",
+        "thousands_separator": ".",
+        "amount_layout": "SIGNED",
+        "positive_amount_means": "MONEY_IN",
+        "columns": {
+          "booking_date": {
+            "header": "Amount",
+            "position": 3
+          },
+          "description": {
+            "header": "Amount",
+            "position": 3
+          },
+          "amount": {
+            "header": "Amount",
+            "position": 3
+          },
+          "debit": {
+            "header": "Amount",
+            "position": 3
+          },
+          "credit": {
+            "header": "Amount",
+            "position": 3
+          },
+          "transaction_date": {
+            "header": "Amount",
+            "position": 3
+          },
+          "value_date": {
+            "header": "Amount",
+            "position": 3
+          },
+          "payee": {
+            "header": "Amount",
+            "position": 3
+          },
+          "bank_transaction_id": {
+            "header": "Amount",
+            "position": 3
+          }
+        }
+      }
+  auth: inherit
+docs: |-
+  Replaces the Connection's CSV mapping. The mapping is validated as a
+  whole: a missing required field, an unknown date format, the same
+  column used twice or any other problem gets 422 with the problem type
+  `/problems/invalid-csv-mapping`, whose detail lists every problem.
+  Every save gives the mapping a new `csv_mapping_version`.
+
+  Operation `saveCsvMapping`.

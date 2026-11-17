@@ -8,6 +8,7 @@ Decisions that every bounded context follows but that are not surprising enough 
 cmd/wallet-accountant/          main and run modes (ADR-0009)
 api/openapi.yaml                the contract (ADR-0008)
 api/zalando-ruleset.yaml        the JavaScript-free Zalando ruleset vacuum lints the contract with (ADR-0012)
+api/bruno/                      the Bruno collection (OpenCollection YAML) generated from the contract (`make generate`)
 internal/<context>/
     domain/                     Deciders, events, value objects; imports only the standard library and sharedkernel
     app/                        command and query handlers, port interfaces
@@ -25,6 +26,7 @@ internal/platform/              event store, Decider runtime, codec, Watermill w
     telemetry/                  slog, traces and metrics (ADR-0016)
 internal/wiring/                composition root: builds every context and runs a run mode
 internal/apitest/               HTTP test harness: the real app in-process against testcontainers PostgreSQL
+internal/tools/opencollection/  writes api/bruno from api/openapi.yaml
 compose.dev.yaml                development dependencies; deploy/dev/ holds their files
 compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secrets generator, PostgreSQL init,
                                 collector, Tempo and Grafana configuration, and the smoke check
@@ -65,7 +67,7 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | Target | What it does |
 |---|---|
 | **Development** (`compose.dev.yaml`; the app runs on the host) | |
-| `make dev-up` / `make dev-down` | Start or stop PostgreSQL, Zitadel and `otel-lgtm`. `dev-up` also creates the Zitadel project `wallet-accountant` (`deploy/zitadel/setup-project.sh`) |
+| `make dev-up` / `make dev-down` | Start or stop PostgreSQL, Zitadel, Swagger UI and `otel-lgtm`. `dev-up` also creates the Zitadel project `wallet-accountant` and its public application `api-clients` (`deploy/zitadel/setup-project.sh`), and writes that application's client ID to `api/bruno/.env` |
 | `make dev-reset` | Delete the dev database and Zitadel data, then `dev-up` and `migrate`. Needed when the database roles change |
 | `make run` | Run the app in `all` mode against the dev dependencies |
 | `make run-api` / `make run-worker` | Run a single run mode |
@@ -73,6 +75,7 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make rebuild` | Run the `rebuild` run mode against the dev database |
 | `make dev-bootstrap` | Run the `bootstrap` run mode against the dev database |
 | `make grafana` | Open the local Grafana UI |
+| `make swagger` | Open Swagger UI on `api/openapi.yaml` (http://localhost:8082) |
 | **Self-hosted** (`compose.yaml`; everything in Docker) | |
 | `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`), and every `make up` makes sure the Zitadel project with the ID `OIDC_AUDIENCE` exists (`deploy/zitadel/setup-project.sh`) |
 | `make up-observability` | Same as `make up`, plus Tempo, Prometheus, Loki and Grafana |
@@ -81,7 +84,7 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make compose-rebuild` | Run the `rebuild` run mode against the self-hosted database |
 | `make smoke` | From nothing, `make up` and `make bootstrap` in a separate Compose project on other ports, redeem the code as a real Zitadel identity, check the code reached no log, then remove everything. `SMOKE_UP=up-observability` also checks Tempo, Prometheus and Loki through Grafana, and that the code is not in Loki |
 | **Build and quality** | |
-| `make generate` | Regenerate code from `api/openapi.yaml` (ogen) and SQL queries (sqlc) |
+| `make generate` | Regenerate code from `api/openapi.yaml` (ogen), the Bruno collection in `api/bruno`, and SQL queries (sqlc) |
 | `make lint` | Run golangci-lint (including depguard) and vacuum with the Zalando ruleset |
 | `make test` | Run the Decider and other unit tests |
 | `make test-integration` | Run the integration tests against PostgreSQL through testcontainers-go |

@@ -1,0 +1,30 @@
+info:
+  name: Keep a Suspected duplicate
+  type: http
+  seq: 3
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/imported-transactions/:imported_transaction_id/keep'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: imported_transaction_id
+      value: '{{imported_transaction_id}}'
+      type: path
+      description: The Imported transaction's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  auth: inherit
+docs: |-
+  Keeps a Suspected duplicate as a real transaction: it becomes
+  pending, to be Accepted or Discarded like any other row, and still
+  shows what it resembled. Deciding the last Suspected duplicate of a
+  Statement import runs its waiting Balance check, recorded as passed
+  or failed. An Imported transaction that isn't a Suspected duplicate
+  gets 409 `/problems/imported-transaction-not-suspected-duplicate`.
+
+  Operation `keepImportedTransaction`.

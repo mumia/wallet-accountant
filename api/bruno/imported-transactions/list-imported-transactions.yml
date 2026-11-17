@@ -1,0 +1,48 @@
+info:
+  name: An Account's Imported transactions
+  type: http
+  seq: 1
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/imported-transactions'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+    - name: state
+      value: PENDING
+      type: query
+      description: Only Imported transactions in this state
+      disabled: true
+    - name: booking_month
+      value: 2026-01
+      type: query
+      description: Only this Booking month, written YYYY-MM
+      disabled: true
+    - name: cursor
+      value: ""
+      type: query
+      description: Where the page starts, the `next_cursor` of the previous page; absent for the first page
+      disabled: true
+    - name: limit
+      value: "50"
+      type: query
+      description: The most items a page holds
+      disabled: true
+  auth: inherit
+docs: |-
+  Lists the Account's Imported transactions, sorted by Booking date and
+  then in the order they were imported (a file's rows in line order),
+  paged with a cursor.
+  `state` keeps only those in one state (`PENDING`: waiting for
+  review; `SUSPECTED_DUPLICATE`: only looks like an earlier Imported
+  transaction, shown in `resembles`, and waits to be kept or
+  Discarded; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to
+  reach the Ledger) and `booking_month` only one Booking month.
+
+  Operation `listImportedTransactions`.

@@ -1,0 +1,59 @@
+info:
+  name: Preview an Account's first Statement import
+  type: http
+  seq: 1
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/connections/:connection_id/statement-imports/previews'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: connection_id
+      value: '{{connection_id}}'
+      type: path
+      description: The Connection's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: multipart-form
+    data:
+      - name: file
+        type: file
+        value: []
+        description: The statement file, as the bank exported it
+      - name: export_balance
+        type: text
+        value: "1234.56"
+        description: An exact decimal written with `.` as the decimal separator and no thousands separator
+      - name: export_balance_confirmation
+        type: text
+        value: "1234.56"
+        description: An exact decimal written with `.` as the decimal separator and no thousands separator
+  auth: inherit
+docs: |-
+  Reads a statement file with the Connection's CSV mapping and shows
+  the Opening balance the Account's first Statement import would
+  record (ADR-0018): the Export balance minus the total of the rows
+  booked on or after the start date. Records nothing. The Export
+  balance is typed twice; entries that differ get 422
+  `/problems/export-balance-mismatch`. A file with an unreadable row is
+  refused whole with 422 `/problems/unreadable-statement-file`, listing
+  every line and its reason. A file already imported through the
+  Connection gets 409 `/problems/duplicate-statement-import`, naming
+  the earlier import; an Account that already has its Opening balance
+  gets 409 `/problems/opening-balance-already-recorded`. Confirm the
+  import by uploading the same file and Export balance with the
+  returned `preview_id`.
+
+  Every amount is in the Account currency and may have no more decimal
+  places than it has: an Export balance with more gets 422
+  `/problems/invalid-export-balance`, and a row with more is an
+  unreadable row. A file with no rows at all gets 422
+  `/problems/empty-statement-file`, and a Connection without a CSV
+  mapping gets 422 `/problems/csv-mapping-required`.
+
+  Operation `previewStatementImport`.

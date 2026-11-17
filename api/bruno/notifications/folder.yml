@@ -1,0 +1,9 @@
+info:
+  name: Notifications
+  type: folder
+  seq: 10
+request:
+  auth: inherit
+docs:
+  content: Household-level messages every member sees
+  type: text/markdown

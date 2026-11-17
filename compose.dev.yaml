@@ -72,8 +72,11 @@ services:
       - zitadel-setup:/zitadel-setup
 
   # Creates the project with the ID wallet-accountant, the app's default
-  # WA_OIDC_AUDIENCE (deploy/zitadel/setup-project.sh). `make dev-up` runs it
-  # after `up --wait`, which would count its exit as a failure.
+  # WA_OIDC_AUDIENCE, and the public application api-clients that the Bruno
+  # collection signs in with (deploy/zitadel/setup-project.sh). Zitadel
+  # generates the application's client ID; it goes to the volume, where
+  # `make dev-up` reads it into api/bruno/.env. `make dev-up` runs this
+  # service after `up --wait`, which would count its exit as a failure.
   zitadel-setup:
     profiles: [setup]
     image: curlimages/curl:8.17.0
@@ -84,12 +87,28 @@ services:
       ZITADEL_HOST: localhost:8081
       PROJECT_ID: wallet-accountant
       PAT_FILE: /zitadel-setup/pat.txt
+      CLIENT_APP_NAME: api-clients
+      CLIENT_ID_FILE: /zitadel-setup/api-clients-client-id.txt
     volumes:
-      - zitadel-setup:/zitadel-setup:ro
+      - zitadel-setup:/zitadel-setup
       - ./deploy/zitadel/setup-project.sh:/setup-project.sh:ro
     depends_on:
       zitadel:
         condition: service_healthy
+
+  # Swagger UI on http://localhost:8082, for reading api/openapi.yaml. It only
+  # shows the contract (submitting is off: the API sends no CORS headers for a
+  # page on another origin). Requests go through the Bruno collection in
+  # api/bruno, which signs in to Zitadel.
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.34.1
+    environment:
+      SWAGGER_JSON: /api/openapi.yaml
+      SUPPORTED_SUBMIT_METHODS: "[]"
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./api/openapi.yaml:/api/openapi.yaml:ro
 
   otel-lgtm:
     image: grafana/otel-lgtm:0.39.0
