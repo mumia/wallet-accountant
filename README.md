@@ -6,15 +6,17 @@ Your accountant in your wallet
 Needs Go (see `go.mod`) and Docker. Every tool is pinned in `go.mod` and run with `go tool`.
 
 ```sh
-make dev-up    # PostgreSQL, Zitadel (http://localhost:8081) and otel-lgtm (Grafana on http://localhost:3000)
+make dev-up    # PostgreSQL, Zitadel (http://localhost:8081), Swagger UI (http://localhost:8082) and otel-lgtm (Grafana on http://localhost:3000)
 make migrate   # apply the database migrations
 make run       # the app on http://localhost:8080
 make lint test test-integration
 ```
 
+Swagger UI shows the contract, `api/openapi.yaml`. To send requests, open `api/bruno` in Bruno 3: it signs in to Zitadel by itself (see `api/bruno/README.md`).
+
 CI (`.github/workflows/ci.yaml`) runs the same lint, generate, tidy, test, integration test, image build and govulncheck checks on every pull request; the list is in `docs/architecture/conventions.md`.
 
-`make dev-up` also creates the Zitadel project `wallet-accountant`, the audience the app expects. When a change alters the database roles or the migrations, or you just want a clean slate, `make dev-reset` deletes the dev database and Zitadel data, starts the dependencies again and migrates.
+`make dev-up` also creates the Zitadel project `wallet-accountant`, the audience the app expects, and in it the public application `api-clients` that the Bruno collection signs in with. When a change alters the database roles or the migrations, or you just want a clean slate, `make dev-reset` deletes the dev database and Zitadel data, starts the dependencies again and migrates.
 
 ## Self-hosting
 

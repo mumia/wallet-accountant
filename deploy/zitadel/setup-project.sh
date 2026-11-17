@@ -41,3 +41,46 @@ case $status in
 409) echo "zitadel-setup: project $PROJECT_ID exists" ;;
 *) echo "zitadel-setup: creating project $PROJECT_ID answered $status: $(cat /tmp/out)" >&2; exit 1 ;;
 esac
+
+
+# With CLIENT_APP_NAME set, also makes sure the project has a public OIDC
+# application of that name, for API clients that sign a person in with the
+# authorization code flow and PKCE, such as the Bruno collection in api/bruno.
+# Zitadel generates its client ID, so it is written to CLIENT_ID_FILE when set.
+# The application is found by name rather than by a fixed ID, because Zitadel
+# never gives a deleted application's ID out again.
+[ -n "${CLIENT_APP_NAME:-}" ] || exit 0
+
+status=$(call /zitadel.application.v2.ApplicationService/ListApplications "{\"filters\":[
+	{\"projectIdFilter\":{\"projectId\":\"$PROJECT_ID\"}},
+	{\"nameFilter\":{\"name\":\"$CLIENT_APP_NAME\",\"method\":\"TEXT_FILTER_METHOD_EQUALS\"}}
+]}")
+[ "$status" = 200 ] || { echo "zitadel-setup: listing applications answered $status: $(cat /tmp/out)" >&2; exit 1; }
+
+if grep -q '"clientId"' /tmp/out; then
+	echo "zitadel-setup: application $CLIENT_APP_NAME exists"
+else
+	status=$(call /zitadel.application.v2.ApplicationService/CreateApplication "{
+		\"projectId\":\"$PROJECT_ID\",
+		\"name\":\"$CLIENT_APP_NAME\",
+		\"oidcConfiguration\":{
+			\"redirectUris\":[\"https://oauth.usebruno.com/callback\",\"http://localhost/oauth/callback\"],
+			\"responseTypes\":[\"OIDC_RESPONSE_TYPE_CODE\"],
+			\"grantTypes\":[\"OIDC_GRANT_TYPE_AUTHORIZATION_CODE\",\"OIDC_GRANT_TYPE_REFRESH_TOKEN\"],
+			\"applicationType\":\"OIDC_APP_TYPE_NATIVE\",
+			\"authMethodType\":\"OIDC_AUTH_METHOD_TYPE_NONE\",
+			\"accessTokenType\":\"OIDC_TOKEN_TYPE_JWT\",
+			\"skipNativeAppSuccessPage\":true,
+			\"version\":\"OIDC_VERSION_1_0\"
+		}
+	}")
+	[ "$status" = 200 ] || { echo "zitadel-setup: creating application $CLIENT_APP_NAME answered $status: $(cat /tmp/out)" >&2; exit 1; }
+	echo "zitadel-setup: created application $CLIENT_APP_NAME"
+fi
+
+client_id=$(grep -o '"clientId":"[^"]*"' /tmp/out | head -n 1 | cut -d '"' -f 4)
+[ -n "$client_id" ] || { echo "zitadel-setup: no client ID in $(cat /tmp/out)" >&2; exit 1; }
+echo "zitadel-setup: application $CLIENT_APP_NAME has the client ID $client_id"
+if [ -n "${CLIENT_ID_FILE:-}" ]; then
+	printf '%s\n' "$client_id" >"$CLIENT_ID_FILE"
+fi

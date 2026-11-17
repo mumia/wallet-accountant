@@ -1,0 +1,19 @@
+info:
+  name: A Household
+  type: http
+  seq: 3
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+  auth: inherit
+docs: |-
+  Returns a Household the caller is a member of. Any other Household,
+  and every Household for an unregistered caller, is 404: a 403 would
+  confirm that it exists.
+
+  Operation `getHousehold`.

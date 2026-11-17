@@ -1,0 +1,42 @@
+info:
+  name: Add an Account
+  type: http
+  seq: 1
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/accounts'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Main",
+        "kind": "BANK_ACCOUNT",
+        "currency": "EUR",
+        "start_date": "2026-01-01"
+      }
+  auth: inherit
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.status === 201) {
+          bru.setVar("account_id", res.body.account_id);
+        }
+docs: |-
+  Adds an Account with a name, a kind, an Account currency and a start
+  date. The new Account awaits its first Statement import and has no
+  balance: its Opening balance is worked out from that import, never
+  typed (ADR-0018). Cash Accounts are not supported yet; a `CASH` or
+  unknown kind, an unknown currency or a blank name gets 422 with the
+  problem type `/problems/invalid-account`.
+
+  Operation `addAccount`.

@@ -1,0 +1,15 @@
+info:
+  name: The signed-in User
+  type: http
+  seq: 1
+http:
+  method: GET
+  url: '{{baseUrl}}/me'
+  auth: inherit
+docs: |-
+  Returns the User the bearer token belongs to, and whether they are
+  Instance administrator. An identity that has signed in but not
+  redeemed an Invitation is not a User yet and gets 403 with the
+  problem type `/problems/registration-required` (ADR-0017).
+
+  Operation `getMe`.

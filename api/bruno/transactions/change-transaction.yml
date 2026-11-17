@@ -1,0 +1,37 @@
+info:
+  name: Set a Transaction's Category
+  type: http
+  seq: 2
+http:
+  method: PATCH
+  url: '{{baseUrl}}/households/:household_id/transactions/:transaction_id'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: transaction_id
+      value: '{{transaction_id}}'
+      type: path
+      description: The Transaction's ID
+  body:
+    type: json
+    data: |-
+      {
+        "category_id": "00000000-0000-0000-0000-000000000000"
+      }
+  auth: inherit
+docs: |-
+  Sets the Category on the non-Account side of the Transaction, for
+  example to categorise one Accepted into Uncategorised or to correct
+  a wrong Category. Its amount never changes. The Account's
+  Uncategorised count and Transaction list reflect it immediately. The
+  Category rules are Accept's: the Uncategorised Category is allowed,
+  any other Internal Category gets 422 `/problems/internal-category`,
+  and a Category that isn't one of the Household's gets 422
+  `/problems/invalid-category`. A reversed Transaction gets 409
+  `/problems/transaction-reversed`; a reversal gets 422
+  `/problems/transaction-is-a-reversal`, and the Opening balance
+  Transaction 422 `/problems/opening-balance-transaction`.
+
+  Operation `changeTransaction`.

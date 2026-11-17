@@ -1,0 +1,40 @@
+info:
+  name: Void a Statement import
+  type: http
+  seq: 4
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/connections/:connection_id/statement-imports/:statement_import_id/void'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: connection_id
+      value: '{{connection_id}}'
+      type: path
+      description: The Connection's ID
+    - name: statement_import_id
+      value: '{{statement_import_id}}'
+      type: path
+      description: The Statement import's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  auth: inherit
+docs: |-
+  Withdraws the Account's latest Statement import so that a corrected
+  file, or the same file with a fixed mapping, can be uploaded again
+  (ADR-0018). Every Imported transaction of the import becomes
+  Discarded and its file can be imported again. Voiding the Account's
+  only import also reverses its Opening balance Transaction, in the
+  same transaction, and the Account awaits its first Statement import
+  again: that is the only way to change an Opening balance. Only the
+  Account's latest non-voided import can be voided (409
+  `/problems/not-the-latest-statement-import`), only while none of its
+  rows are Accepted (409 `/problems/statement-import-has-accepted-rows`:
+  reverse their Transactions first), and only once (409
+  `/problems/statement-import-already-voided`).
+
+  Operation `voidStatementImport`.

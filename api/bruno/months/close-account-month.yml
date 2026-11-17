@@ -1,0 +1,55 @@
+info:
+  name: Close an Account's month
+  type: http
+  seq: 2
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/months/:booking_month/close'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+    - name: booking_month
+      value: '{{booking_month}}'
+      type: path
+      description: The Booking month, written YYYY-MM
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "statement_balance": {
+          "amount": 1234.56,
+          "currency": "EUR"
+        }
+      }
+  auth: inherit
+docs: |-
+  Closes the Booking month with the Statement balance, the closing
+  balance on the bank statement. The close is refused with 422
+  `/problems/month-close-refused`, listing every failed condition in
+  `reasons` at once, while any Imported transaction booked in the month
+  is pending or an undecided Suspected duplicate, any Transaction booked
+  in it is in Uncategorised, a Statement import with rows in or before
+  the month has its Balance check waiting or failed (voided imports
+  don't count), or the computed closing balance differs from the
+  Statement balance (both amounts and the difference are given). Nothing
+  is ever booked to make the balances meet: a gap is closed by
+  correcting the entry that is wrong (ADR-0018). A month already closed
+  gets 409 `/problems/month-already-closed`, and an Account awaiting its
+  first Statement import 409
+  `/problems/account-awaiting-first-statement-import`. A Statement
+  balance in another currency than the Account's, or with more decimal
+  places than it has, a month before the Account's start date, or a month
+  that hasn't started yet gets
+  422 `/problems/invalid-month-close`.
+
+  Operation `closeAccountMonth`.

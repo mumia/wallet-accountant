@@ -1,0 +1,34 @@
+info:
+  name: Create a Household
+  type: http
+  seq: 1
+http:
+  method: POST
+  url: '{{baseUrl}}/households'
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Home",
+        "base_currency": "EUR"
+      }
+  auth: inherit
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.status === 201) {
+          bru.setVar("household_id", res.body.household_id);
+        }
+docs: |-
+  Creates a Household with a name and a Base currency. The caller
+  becomes its first member, and its Internal Categories (Opening
+  balance, Household transfer, Uncategorised) are created with it.
+  An unregistered caller gets 403 with the problem type
+  `/problems/registration-required`.
+
+  Operation `createHousehold`.

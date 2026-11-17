@@ -1,0 +1,33 @@
+info:
+  name: An Account's month status
+  type: http
+  seq: 1
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/months/:booking_month'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+    - name: booking_month
+      value: '{{booking_month}}'
+      type: path
+      description: The Booking month, written YYYY-MM
+  auth: inherit
+docs: |-
+  Returns one Booking month of the Account (months are decided by
+  Booking date): whether it is `OPEN` or `CLOSED`, the Statement
+  balance it closed with, the computed closing balance (the Opening
+  balance plus every month up to this one; absent while the Account
+  awaits its first Statement import), how many of its Imported
+  transactions are pending or undecided Suspected duplicates, how many
+  of its Transactions are in Uncategorised, and whether it changed
+  after it closed. It is always current: it is read in the request's
+  own transaction.
+
+  Operation `getAccountMonth`.

@@ -1,0 +1,9 @@
+info:
+  name: Imported transactions
+  type: folder
+  seq: 8
+request:
+  auth: inherit
+docs:
+  content: Rows brought in by Statement imports, waiting for review
+  type: text/markdown

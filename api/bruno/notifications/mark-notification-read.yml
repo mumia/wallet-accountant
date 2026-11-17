@@ -1,0 +1,27 @@
+info:
+  name: Mark a Notification read
+  type: http
+  seq: 2
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/notifications/:notification_id/read'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: notification_id
+      value: '{{notification_id}}'
+      type: path
+      description: The Notification's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  auth: inherit
+docs: |-
+  Marks the Notification read for the caller only; every other member
+  still sees it unread until they mark it read too. Marking it read
+  again changes nothing.
+
+  Operation `markNotificationRead`.

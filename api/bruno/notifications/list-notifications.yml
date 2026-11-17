@@ -1,0 +1,21 @@
+info:
+  name: The Household's Notifications
+  type: http
+  seq: 1
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id/notifications'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+  auth: inherit
+docs: |-
+  Lists every Notification of the Household, newest first, with
+  whether the caller has marked it read. Notifications are raised a
+  little after what caused them, by a deferred handler (ADR-0013): a
+  Statement import with Suspected duplicates raises a
+  `SUSPECTED_DUPLICATES_FOUND` one linking to the import.
+
+  Operation `listNotifications`.

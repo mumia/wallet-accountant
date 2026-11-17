@@ -1,0 +1,91 @@
+info:
+  name: Create a Connection for an Account
+  type: http
+  seq: 1
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/connections'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "kind": "STATEMENT_FILE_IMPORT",
+        "csv_mapping": {
+          "delimiter": ";",
+          "has_header_row": false,
+          "skip_leading_lines": 0,
+          "date_format": "DD/MM/YYYY",
+          "decimal_separator": ",",
+          "thousands_separator": ".",
+          "amount_layout": "SIGNED",
+          "positive_amount_means": "MONEY_IN",
+          "columns": {
+            "booking_date": {
+              "header": "Amount",
+              "position": 3
+            },
+            "description": {
+              "header": "Amount",
+              "position": 3
+            },
+            "amount": {
+              "header": "Amount",
+              "position": 3
+            },
+            "debit": {
+              "header": "Amount",
+              "position": 3
+            },
+            "credit": {
+              "header": "Amount",
+              "position": 3
+            },
+            "transaction_date": {
+              "header": "Amount",
+              "position": 3
+            },
+            "value_date": {
+              "header": "Amount",
+              "position": 3
+            },
+            "payee": {
+              "header": "Amount",
+              "position": 3
+            },
+            "bank_transaction_id": {
+              "header": "Amount",
+              "position": 3
+            }
+          }
+        }
+      }
+  auth: inherit
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.status === 201) {
+          bru.setVar("connection_id", res.body.connection_id);
+        }
+docs: |-
+  Creates a statement file import Connection for the Account,
+  optionally with the CSV mapping of the bank's statement files. Live
+  bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
+  422 with the problem type `/problems/invalid-connection`. An invalid
+  mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is
+  created.
+
+  Operation `createConnection`.
