@@ -12,6 +12,8 @@ make run       # the app on http://localhost:8080
 make lint test test-integration
 ```
 
+CI (`.github/workflows/ci.yaml`) runs the same lint, generate, tidy, test, integration test, image build and govulncheck checks on every pull request; the list is in `docs/architecture/conventions.md`.
+
 `make dev-up` also creates the Zitadel project `wallet-accountant`, the audience the app expects. When a change alters the database roles or the migrations, or you just want a clean slate, `make dev-reset` deletes the dev database and Zitadel data, starts the dependencies again and migrates.
 
 ## Self-hosting

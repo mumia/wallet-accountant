@@ -86,3 +86,19 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make test` | Run the Decider and other unit tests |
 | `make test-integration` | Run the integration tests against PostgreSQL through testcontainers-go |
 | `make build` / `make docker-build` | Build the binary or the container image |
+
+## CI
+
+GitHub Actions runs `.github/workflows/ci.yaml` on every pull request and on pushes to `main`. The jobs run in parallel, and each mirrors a local command:
+
+| Job | Local command |
+|---|---|
+| `lint` | `make lint` |
+| `generated` | `make generate`, then `git diff --exit-code`: commit the regenerated code |
+| `tidy` | `go mod tidy`, then `git diff --exit-code go.mod go.sum` |
+| `test` | `make test` |
+| `test-integration` | `make test-integration` (Docker only; no dev stack) |
+| `docker-build` | `make docker-build` |
+| `govulncheck` | `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` |
+
+`.github/workflows/smoke.yaml` runs `make smoke` nightly and on demand, outside pull request checks because it is slow. Actions are pinned to commit SHAs, and Dependabot proposes weekly updates for them and for Go modules. The Go version comes from the `toolchain` line in `go.mod`.
