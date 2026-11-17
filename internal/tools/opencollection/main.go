@@ -5,12 +5,12 @@
 // The collection signs in to the instance's OpenID Connect provider with the
 // authorization code flow and PKCE, and every request inherits that. There is
 // one folder per tag and one request per operation, with path parameters
-// taken from environment variables of the same name, a fresh Idempotency-Key
+// taken from collection variables of the same name, a fresh Idempotency-Key
 // on every POST, and a request body built from the schema's examples. A
 // request that creates a resource stores the new ID in the variable that
 // names it, so the next request can use it.
 //
-// It owns opencollection.yml, environments/ and the tag folders: anything
+// It owns opencollection.yml and the tag folders: anything
 // changed there in Bruno is overwritten on the next run.
 package main
 
@@ -76,11 +76,15 @@ func run(specPath, out string) error {
 
 // clean removes the generated YAML files, so an operation or a tag removed
 // from the contract leaves no request behind. Files it does not own, such as
-// .env, .gitignore and README.md, stay.
+// .env, .gitignore, README.md and the environments Bruno saves, stay.
 func clean(out string) error {
 	err := filepath.WalkDir(out, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+
+		if d.IsDir() && path == filepath.Join(out, "environments") {
+			return filepath.SkipDir
 		}
 
 		if !d.IsDir() && filepath.Ext(path) == ".yml" {
@@ -271,8 +275,9 @@ type info struct {
 }
 
 type requestDefaults struct {
-	Headers []keyValue `yaml:"headers,omitempty"`
-	Auth    any        `yaml:"auth"`
+	Headers   []keyValue `yaml:"headers,omitempty"`
+	Auth      any        `yaml:"auth"`
+	Variables []keyValue `yaml:"variables,omitempty"`
 }
 
 type docs struct {
@@ -375,11 +380,6 @@ type script struct {
 	Code string `yaml:"code"`
 }
 
-type environment struct {
-	Name      string     `yaml:"name"`
-	Variables []keyValue `yaml:"variables"`
-}
-
 func collection(doc *document) (map[string][]byte, error) {
 	files := map[string][]byte{}
 	add := func(name string, v any) error {
@@ -397,17 +397,14 @@ func collection(doc *document) (map[string][]byte, error) {
 		OpenCollection: "1.0.0",
 		Info:           info{Name: doc.Info.Title},
 		Request: requestDefaults{
-			Headers: []keyValue{{Name: "Accept", Value: "application/json"}},
-			Auth:    signIn(),
+			Headers:   []keyValue{{Name: "Accept", Value: "application/json"}},
+			Auth:      signIn(),
+			Variables: variables(doc),
 		},
 		Docs:       &docs{Content: collectionDocs(doc), Type: "text/markdown"},
 		Extensions: map[string]any{},
 	}
 	if err := add("opencollection.yml", r); err != nil {
-		return nil, err
-	}
-
-	if err := add("environments/local.yml", localEnvironment(doc)); err != nil {
 		return nil, err
 	}
 
@@ -486,35 +483,35 @@ This collection is generated from api/openapi.yaml by ` + "`make generate`" + ` 
 change the contract, not the requests. See README.md in this directory for signing in.`
 }
 
-func localEnvironment(doc *document) environment {
+// variables are the collection's variables, set for the development setup,
+// so requests work without choosing an environment. An environment's
+// variables take precedence over them, to point the collection elsewhere.
+func variables(doc *document) []keyValue {
 	baseURL := "http://localhost:8080"
 	if len(doc.Servers) > 0 {
 		baseURL = doc.Servers[0].URL
 	}
 
-	env := environment{
-		Name: "local",
-		Variables: []keyValue{
-			{Name: "baseUrl", Value: baseURL, Description: "The API (make run)"},
-			{Name: "authUrl", Value: "http://localhost:8081", Description: "The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel from make dev-up)"},
-			{
-				Name: "clientId", Value: "{{process.env.WA_OAUTH_CLIENT_ID}}",
-				Description: "The client ID of the Zitadel application api-clients; make dev-up writes it to .env",
-			},
+	vars := []keyValue{
+		{Name: "baseUrl", Value: baseURL, Description: "The API (make run)"},
+		{Name: "authUrl", Value: "http://localhost:8081", Description: "The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel from make dev-up)"},
+		{
+			Name: "clientId", Value: "{{process.env.WA_OAUTH_CLIENT_ID}}",
+			Description: "The client ID of the Zitadel application api-clients; make dev-up writes it to .env",
 		},
 	}
 
 	for _, p := range pathParameters(doc) {
-		env.Variables = append(env.Variables, keyValue{
+		vars = append(vars, keyValue{
 			Name: p.Name, Value: example(p.Schema), Description: p.Description,
 		})
 	}
 
-	return env
+	return vars
 }
 
 // pathParameters returns every path parameter of the contract once, in the
-// order they first appear. Each is an environment variable.
+// order they first appear. Each is a collection variable.
 func pathParameters(doc *document) []parameter {
 	var params []parameter
 
