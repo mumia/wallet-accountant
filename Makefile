@@ -24,7 +24,7 @@ export WA_OIDC_AUDIENCE             ?= wallet-accountant
 export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
-.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down run run-api run-worker migrate rebuild dev-bootstrap grafana generate lint lint-go lint-api build test test-integration
+.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana generate lint lint-go lint-api build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
@@ -59,11 +59,16 @@ smoke: ## From scratch, run up and bootstrap in a separate Compose project and r
 
 ## Development
 
-dev-up: ## Start PostgreSQL, Zitadel and otel-lgtm
+dev-up: ## Start PostgreSQL, Zitadel (with the wallet-accountant project) and otel-lgtm
 	$(COMPOSE_DEV) up -d --wait
+	$(COMPOSE_DEV) run --rm zitadel-setup
 
-dev-down: ## Stop the development dependencies
+dev-down: ## Stop the development dependencies (the volumes are kept)
 	$(COMPOSE_DEV) down
+
+dev-reset: ## Delete the dev database and Zitadel data, then run dev-up and migrate
+	$(COMPOSE_DEV) --profile setup down -v --remove-orphans
+	$(MAKE) --no-print-directory dev-up migrate
 
 run: ## Run the app in all mode against the dev dependencies
 	go run ./cmd/wallet-accountant all

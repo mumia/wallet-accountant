@@ -35,8 +35,9 @@ GRAFANA_ADMIN_PASSWORD=$(secret 12)
 # machine in browsers and curl.
 #AUTH_DOMAIN=auth.localhost
 #AUTH_PORT=8081
-# The audience tokens must carry: the ID of the Zitadel project (or client)
-# that Wallet Accountant's users sign in to.
+# The audience tokens must carry: the ID of the Zitadel project that Wallet
+# Accountant's users sign in to. zitadel-setup creates the project with this
+# ID on the first \`make up\`.
 #OIDC_AUDIENCE=wallet-accountant
 #APP_PORT=8080
 #GRAFANA_PORT=3000

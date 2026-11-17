@@ -28,6 +28,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      zitadel-setup:
+        condition: service_completed_successfully
       otel-collector:
         condition: service_started
 
@@ -85,6 +87,14 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:?run make up, which writes .env}
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      # A machine administrator whose token zitadel-setup uses to create the
+      # project with a fixed ID. Zitadel writes the token on its first start only.
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: wa-setup
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: wa-setup
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel-setup/pat.txt
+    volumes:
+      - zitadel-setup:/zitadel-setup
     ports:
       - "${AUTH_PORT:-8081}:${AUTH_PORT:-8081}"
     networks:
@@ -101,6 +111,37 @@ services:
       start_period: 30s
     depends_on:
       postgres:
+        condition: service_healthy
+      zitadel-setup-volume:
+        condition: service_completed_successfully
+
+  # Zitadel runs as uid 1000 and must be able to write its token to the volume.
+  zitadel-setup-volume:
+    image: curlimages/curl:8.17.0
+    restart: "no"
+    user: "0"
+    entrypoint: ["chown", "1000:1000", "/zitadel-setup"]
+    volumes:
+      - zitadel-setup:/zitadel-setup
+
+  # Creates the project with the ID OIDC_AUDIENCE, so the app's audience
+  # needs no manual step (deploy/zitadel/setup-project.sh).
+  zitadel-setup:
+    image: curlimages/curl:8.17.0
+    restart: "no"
+    user: "1000:1000"
+    entrypoint: ["sh", "/setup-project.sh"]
+    environment:
+      # curl resolves *.localhost to itself, so reach the service by name.
+      ZITADEL_URL: http://zitadel:${AUTH_PORT:-8081}
+      ZITADEL_HOST: ${AUTH_DOMAIN:-auth.localhost}:${AUTH_PORT:-8081}
+      PROJECT_ID: ${OIDC_AUDIENCE:-wallet-accountant}
+      PAT_FILE: /zitadel-setup/pat.txt
+    volumes:
+      - zitadel-setup:/zitadel-setup:ro
+      - ./deploy/zitadel/setup-project.sh:/setup-project.sh:ro
+    depends_on:
+      zitadel:
         condition: service_healthy
 
   otel-collector:
@@ -158,6 +199,7 @@ services:
 
 volumes:
   postgres:
+  zitadel-setup:
   tempo:
   prometheus:
   loki:

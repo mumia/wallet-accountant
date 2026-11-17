@@ -1,7 +1,8 @@
 #!/bin/sh
 # Smoke check of the self-hosted Compose stack (`make smoke`): from nothing,
 # `make up`, then `make bootstrap`, then redeem the printed code as a real
-# Zitadel identity, check the code reached no log, and `make compose-rebuild`.
+# Zitadel identity signed in to the project zitadel-setup created, check the
+# code reached no log, and `make compose-rebuild`.
 #
 # It runs as a separate Compose project on its own ports, with fresh secrets,
 # and removes it (volumes included) when it ends, so it never touches the
@@ -63,14 +64,14 @@ if docker compose --env-file "$ENV_FILE" logs --no-color 2>&1 | grep -qF "$code"
 	fail "the Invitation code appears in the container logs"
 fi
 
-step "set up a Zitadel project and a signed-in identity"
+step "sign in to the project zitadel-setup created"
 pat=$(cat "$SMOKE_DIR/pat.txt")
 zitadel() { # method path [json]
 	body=${3:-'{}'}
 	curl -fsS -X "$1" "$ZITADEL$2" -H "Authorization: Bearer $pat" \
 		-H 'Content-Type: application/json' -d "$body"
 }
-project=$(zitadel POST /management/v1/projects '{"name":"wallet-accountant"}' | jq -er .id)
+project=wallet-accountant
 user=$(zitadel POST /management/v1/users/machine \
 	'{"userName":"smoke-user","name":"Smoke User","accessTokenType":"ACCESS_TOKEN_TYPE_JWT"}' | jq -er .userId)
 secret=$(zitadel PUT "/management/v1/users/$user/secret")
@@ -79,10 +80,6 @@ client_secret=$(printf '%s' "$secret" | jq -er .clientSecret)
 token=$(curl -fsS "$ZITADEL/oauth/v2/token" -u "$client_id:$client_secret" \
 	-d grant_type=client_credentials \
 	--data-urlencode "scope=openid urn:zitadel:iam:org:project:id:$project:aud" | jq -er .access_token)
-
-step "point the app at the project's audience"
-echo "OIDC_AUDIENCE=$project" >>"$ENV_FILE"
-docker compose --env-file "$ENV_FILE" up -d --no-deps --wait app
 
 status() { # method path [json] -> HTTP status
 	curl -sS -o "$SMOKE_DIR/body" -w '%{http_code}' -X "$1" "$APP$2" \

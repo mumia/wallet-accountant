@@ -65,7 +65,8 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | Target | What it does |
 |---|---|
 | **Development** (`compose.dev.yaml`; the app runs on the host) | |
-| `make dev-up` / `make dev-down` | Start or stop PostgreSQL, Zitadel and `otel-lgtm` |
+| `make dev-up` / `make dev-down` | Start or stop PostgreSQL, Zitadel and `otel-lgtm`. `dev-up` also creates the Zitadel project `wallet-accountant` (`deploy/zitadel/setup-project.sh`) |
+| `make dev-reset` | Delete the dev database and Zitadel data, then `dev-up` and `migrate`. Needed when the database roles change |
 | `make run` | Run the app in `all` mode against the dev dependencies |
 | `make run-api` / `make run-worker` | Run a single run mode |
 | `make migrate` | Run the `migrate` run mode against the dev database |
@@ -73,7 +74,7 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make dev-bootstrap` | Run the `bootstrap` run mode against the dev database |
 | `make grafana` | Open the local Grafana UI |
 | **Self-hosted** (`compose.yaml`; everything in Docker) | |
-| `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`) |
+| `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`), and every `make up` makes sure the Zitadel project with the ID `OIDC_AUDIENCE` exists (`deploy/zitadel/setup-project.sh`) |
 | `make up-observability` | Same as `make up`, plus Tempo, Prometheus, Loki and Grafana |
 | `make logs` | Follow the app's logs |
 | `make bootstrap` | Run the `bootstrap` run mode once and print the first Instance administrator Invitation code (ADR-0017) |

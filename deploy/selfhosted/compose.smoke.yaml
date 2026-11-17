@@ -1,12 +1,13 @@
-# Added to compose.yaml by smoke.sh only: the first Zitadel instance also gets
-# a machine user with a personal access token, written to SMOKE_DIR, so the
-# smoke check can set up a project and a signed-in identity through the API.
+# Added to compose.yaml by smoke.sh only: Zitadel writes the setup machine
+# user's personal access token to SMOKE_DIR instead of a volume, so the smoke
+# check can also use it to set up a signed-in identity through the API.
 services:
-  zitadel:
-    environment:
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: smoke-admin
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: smoke-admin
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
-      ZITADEL_FIRSTINSTANCE_PATPATH: /smoke/pat.txt
+  zitadel-setup-volume:
     volumes:
-      - ${SMOKE_DIR:?}:/smoke
+      - ${SMOKE_DIR:?}:/zitadel-setup
+  zitadel:
+    volumes:
+      - ${SMOKE_DIR:?}:/zitadel-setup
+  zitadel-setup:
+    volumes:
+      - ${SMOKE_DIR:?}:/zitadel-setup:ro
