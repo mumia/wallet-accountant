@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info: {title: t, version: "1"}
+paths:
+  /myAccounts/{accountId}:
+    get:
+      operationId: getIt
+      parameters:
+        - {name: accountId, in: path, required: true, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accountName: {type: string}

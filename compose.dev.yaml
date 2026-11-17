@@ -1,0 +1,103 @@
+# Development dependencies (ADR-0016). The app runs on the host: `make dev-up`
+# then `make run`. `make dev-reset` starts them again with empty data.
+name: wallet-accountant-dev
+
+services:
+  postgres:
+    image: postgres:18.7-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ./deploy/dev/postgres-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.19.2
+    command: start-from-init --masterkey "MasterkeyNeedsToHave32Characters" --tlsMode disabled
+    environment:
+      ZITADEL_EXTERNALDOMAIN: localhost
+      ZITADEL_EXTERNALPORT: 8081
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # The bundled v1 login UI, so no separate login container is needed.
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: Password1!
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      # A machine administrator whose token zitadel-setup uses to create the
+      # project with a fixed ID. Zitadel writes the token on its first start only.
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: wa-setup
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: wa-setup
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel-setup/pat.txt
+    volumes:
+      - zitadel-setup:/zitadel-setup
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zitadel-setup-volume:
+        condition: service_completed_successfully
+
+  # Zitadel runs as uid 1000 and must be able to write its token to the volume.
+  zitadel-setup-volume:
+    image: curlimages/curl:8.17.0
+    user: "0"
+    entrypoint: ["chown", "1000:1000", "/zitadel-setup"]
+    volumes:
+      - zitadel-setup:/zitadel-setup
+
+  # Creates the project with the ID wallet-accountant, the app's default
+  # WA_OIDC_AUDIENCE (deploy/zitadel/setup-project.sh). `make dev-up` runs it
+  # after `up --wait`, which would count its exit as a failure.
+  zitadel-setup:
+    profiles: [setup]
+    image: curlimages/curl:8.17.0
+    user: "1000:1000"
+    entrypoint: ["sh", "/setup-project.sh"]
+    environment:
+      ZITADEL_URL: http://zitadel:8080
+      ZITADEL_HOST: localhost:8081
+      PROJECT_ID: wallet-accountant
+      PAT_FILE: /zitadel-setup/pat.txt
+    volumes:
+      - zitadel-setup:/zitadel-setup:ro
+      - ./deploy/zitadel/setup-project.sh:/setup-project.sh:ro
+    depends_on:
+      zitadel:
+        condition: service_healthy
+
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.39.0
+    ports:
+      - "3000:3000" # Grafana
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+
+volumes:
+  postgres:
+  zitadel-setup:

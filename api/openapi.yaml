@@ -1,0 +1,2470 @@
+openapi: 3.0.3
+info:
+  title: Wallet Accountant API
+  version: 0.1.0
+  description: |
+    Wallet Accountant tracks where a Household's money goes and how that
+    compares to what it planned. This document is the contract between the
+    backend and the frontend (ADR-0008). Every error is returned as
+    `application/problem+json` (RFC 9457).
+  contact:
+    name: Wallet Accountant maintainers
+    url: https://github.com/mumia/wallet-accountant
+    email: wallet-accountant@users.noreply.github.com
+  x-api-id: 0b9c5a2e-6f0e-4d8a-9a51-3f3c2d7e8b41
+  x-audience: external-partner
+servers:
+  - url: http://localhost:8080
+    description: Local development (`make run`)
+security:
+  - bearer_auth: []
+tags:
+  - name: Users
+    description: The signed-in identity and its registration
+  - name: Households
+    description: Households, the only ownership and privacy boundary (ADR-0003)
+  - name: Categories
+    description: What money was received for or spent on (ADR-0004)
+  - name: Accounts
+    description: Places where money is held or owed (ADR-0004)
+  - name: Connections
+    description: Links between an Account and an outside source of its transactions
+  - name: Transactions
+    description: An Account's Transactions as a single-entry list (ADR-0001)
+  - name: Statement imports
+    description: Uploads of a bank statement file through a Connection (ADR-0018)
+  - name: Imported transactions
+    description: Rows brought in by Statement imports, waiting for review
+  - name: Months
+    description: An Account's Booking months, their status and Month close (ADR-0018)
+  - name: Notifications
+    description: Household-level messages every member sees
+paths:
+  /me:
+    get:
+      operationId: getMe
+      summary: The signed-in User
+      description: |
+        Returns the User the bearer token belongs to, and whether they are
+        Instance administrator. An identity that has signed in but not
+        redeemed an Invitation is not a User yet and gets 403 with the
+        problem type `/problems/registration-required` (ADR-0017).
+      tags:
+        - Users
+      responses:
+        '200':
+          description: The signed-in User
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Problem'
+  /registrations:
+    post:
+      operationId: createRegistration
+      summary: Redeem an Invitation
+      description: |
+        Redeems an Invitation code, making the signed-in identity a User with
+        the role the Invitation grants (ADR-0017). An unknown, expired,
+        superseded or already used code gets 422 with one generic problem, so
+        codes can't be probed. An identity that is already a User gets 409.
+      tags:
+        - Users
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Registration'
+      responses:
+        '201':
+          description: The new User
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households:
+    post:
+      operationId: createHousehold
+      summary: Create a Household
+      description: |
+        Creates a Household with a name and a Base currency. The caller
+        becomes its first member, and its Internal Categories (Opening
+        balance, Household transfer, Uncategorised) are created with it.
+        An unregistered caller gets 403 with the problem type
+        `/problems/registration-required`.
+      tags:
+        - Households
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdCreation'
+      responses:
+        '201':
+          description: The new Household
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listHouseholds
+      summary: The caller's Households
+      description: |
+        Lists the Households the caller is a member of. An unregistered
+        caller gets 403 with the problem type `/problems/registration-required`.
+      tags:
+        - Households
+      responses:
+        '200':
+          description: The caller's Households
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}:
+    get:
+      operationId: getHousehold
+      summary: A Household
+      description: |
+        Returns a Household the caller is a member of. Any other Household,
+        and every Household for an unregistered caller, is 404: a 403 would
+        confirm that it exists.
+      tags:
+        - Households
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/categories:
+    post:
+      operationId: createCategory
+      summary: Create a Category
+      description: |
+        Creates an Income or Expense Category, at the root or under
+        `parent_id`. A sub-Category takes its parent's kind, so `kind` may be
+        left out; a different kind is refused. Internal Categories belong to
+        the system: creating one, or a Category under one, gets 422 with the
+        problem type `/problems/internal-category`. A name already used by a
+        sibling (ignoring case and surrounding spaces) gets 409 with the
+        problem type `/problems/category-name-taken`. Any other refusal is
+        422 with the problem type `/problems/invalid-category`.
+      tags:
+        - Categories
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreation'
+      responses:
+        '201':
+          description: The new Category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listCategories
+      summary: The Household's Category tree
+      description: |
+        Lists every Category of the Household as a tree, Internal Categories
+        included: the root Categories, each with its sub-Categories in
+        `children`. Siblings are sorted by name.
+      tags:
+        - Categories
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household's Category tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTree'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/categories/{category_id}:
+    patch:
+      operationId: changeCategory
+      summary: Rename or move a Category
+      description: |
+        Renames the Category when `name` is given, and moves it when
+        `parent_id` is given: under that Category, or to the root when it is
+        `null`. A Category keeps its kind, so it can only move under a parent
+        of the same kind, and never under itself or one of its
+        sub-Categories. Internal Categories can't be renamed or moved, and
+        nothing can be moved under one (422, `/problems/internal-category`).
+        A name already used by a sibling in the place the Category ends up
+        gets 409 (`/problems/category-name-taken`); any other refusal is 422
+        (`/problems/invalid-category`).
+      tags:
+        - Categories
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/CategoryID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryChange'
+      responses:
+        '200':
+          description: The Category as changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts:
+    post:
+      operationId: addAccount
+      summary: Add an Account
+      description: |
+        Adds an Account with a name, a kind, an Account currency and a start
+        date. The new Account awaits its first Statement import and has no
+        balance: its Opening balance is worked out from that import, never
+        typed (ADR-0018). Cash Accounts are not supported yet; a `CASH` or
+        unknown kind, an unknown currency or a blank name gets 422 with the
+        problem type `/problems/invalid-account`.
+      tags:
+        - Accounts
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreation'
+      responses:
+        '201':
+          description: The new Account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listAccounts
+      summary: The Household's Accounts
+      description: Lists every Account of the Household, in the order they were added.
+      tags:
+        - Accounts
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household's Accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}:
+    get:
+      operationId: getAccount
+      summary: An Account
+      description: |
+        Returns an Account of the Household with its current balance, or
+        that it is awaiting its first Statement import.
+      tags:
+        - Accounts
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+      responses:
+        '200':
+          description: The Account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/connections:
+    post:
+      operationId: createConnection
+      summary: Create a Connection for an Account
+      description: |
+        Creates a statement file import Connection for the Account,
+        optionally with the CSV mapping of the bank's statement files. Live
+        bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
+        422 with the problem type `/problems/invalid-connection`. An invalid
+        mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is
+        created.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionCreation'
+      responses:
+        '201':
+          description: The new Connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listConnections
+      summary: An Account's Connections
+      description: Lists every Connection of the Account, in the order they were created.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+      responses:
+        '200':
+          description: The Account's Connections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping:
+    put:
+      operationId: saveCsvMapping
+      summary: Save a Connection's CSV mapping
+      description: |
+        Replaces the Connection's CSV mapping. The mapping is validated as a
+        whole: a missing required field, an unknown date format, the same
+        column used twice or any other problem gets 422 with the problem type
+        `/problems/invalid-csv-mapping`, whose detail lists every problem.
+        Every save gives the mapping a new `csv_mapping_version`.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/ConnectionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CsvMapping'
+      responses:
+        '200':
+          description: The Connection with its new mapping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/transactions:
+    get:
+      operationId: listAccountTransactions
+      summary: An Account's Transactions
+      description: |
+        Lists the Account's Transactions as a single-entry list (ADR-0001):
+        each with its signed amount on this Account (positive is money in),
+        Booking date, Transaction date, description and Category. Sorted by
+        Booking date, then in the order they were recorded, and paged with a
+        cursor. `booking_month` keeps only one Booking month. The list is
+        always current: it is read in the request's own transaction.
+      tags:
+        - Transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/BookingMonth'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of the Account's Transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountTransactionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/imported-transactions:
+    get:
+      operationId: listImportedTransactions
+      summary: An Account's Imported transactions
+      description: |
+        Lists the Account's Imported transactions, sorted by Booking date and
+        then in the order they were imported (a file's rows in line order),
+        paged with a cursor.
+        `state` keeps only those in one state (`PENDING`: waiting for
+        review; `SUSPECTED_DUPLICATE`: only looks like an earlier Imported
+        transaction, shown in `resembles`, and waits to be kept or
+        Discarded; `ACCEPTED`: booked in the Ledger; `DISCARDED`: never to
+        reach the Ledger) and `booking_month` only one Booking month.
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - name: state
+          in: query
+          required: false
+          description: Only Imported transactions in this state
+          schema:
+            type: string
+            x-extensible-enum:
+              - PENDING
+              - SUSPECTED_DUPLICATE
+              - ACCEPTED
+              - DISCARDED
+            example: PENDING
+        - $ref: '#/components/parameters/BookingMonth'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of the Account's Imported transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransactionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/months/{booking_month}:
+    get:
+      operationId: getAccountMonth
+      summary: An Account's month status
+      description: |
+        Returns one Booking month of the Account (months are decided by
+        Booking date): whether it is `OPEN` or `CLOSED`, the Statement
+        balance it closed with, the computed closing balance (the Opening
+        balance plus every month up to this one; absent while the Account
+        awaits its first Statement import), how many of its Imported
+        transactions are pending or undecided Suspected duplicates, how many
+        of its Transactions are in Uncategorised, and whether it changed
+        after it closed. It is always current: it is read in the request's
+        own transaction.
+      tags:
+        - Months
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/BookingMonthPath'
+      responses:
+        '200':
+          description: The month's status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountMonth'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/months/{booking_month}/close:
+    post:
+      operationId: closeAccountMonth
+      summary: Close an Account's month
+      description: |
+        Closes the Booking month with the Statement balance, the closing
+        balance on the bank statement. The close is refused with 422
+        `/problems/month-close-refused`, listing every failed condition in
+        `reasons` at once, while any Imported transaction booked in the month
+        is pending or an undecided Suspected duplicate, any Transaction booked
+        in it is in Uncategorised, a Statement import with rows in or before
+        the month has its Balance check waiting or failed (voided imports
+        don't count), or the computed closing balance differs from the
+        Statement balance (both amounts and the difference are given). Nothing
+        is ever booked to make the balances meet: a gap is closed by
+        correcting the entry that is wrong (ADR-0018). A month already closed
+        gets 409 `/problems/month-already-closed`, and an Account awaiting its
+        first Statement import 409
+        `/problems/account-awaiting-first-statement-import`. A Statement
+        balance in another currency than the Account's, or with more decimal
+        places than it has, a month before the Account's start date, or a month
+        that hasn't started yet gets
+        422 `/problems/invalid-month-close`.
+      tags:
+        - Months
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/BookingMonthPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthClosing'
+      responses:
+        '200':
+          description: The closed month's status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountMonth'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/MonthCloseRefused'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/imported-transactions/{imported_transaction_id}/accept:
+    post:
+      operationId: acceptImportedTransaction
+      summary: Accept a pending Imported transaction
+      description: |
+        Accepts a pending Imported transaction: a balanced Ledger Transaction
+        is recorded in the same transaction, with exactly the row's amount,
+        dates, description and payee, between the Account and `category_id`.
+        Without `category_id`, or with the Uncategorised Category, the other
+        side waits in Uncategorised. The Account's balance and its
+        Transaction list reflect it immediately. An Imported transaction
+        already Accepted gets 409
+        `/problems/imported-transaction-already-accepted`, and a Discarded
+        one 409 `/problems/imported-transaction-discarded`; a Suspected
+        duplicate, not yet kept, gets 409
+        `/problems/imported-transaction-suspected-duplicate`; any other Internal
+        Category gets 422 `/problems/internal-category`, and a Category that
+        isn't one of the Household's gets 422 `/problems/invalid-category`.
+        Retrying with the same Idempotency-Key and body returns the original
+        result and never books twice.
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ImportedTransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportedTransactionAcceptance'
+      responses:
+        '200':
+          description: The Accepted Imported transaction, with the Transaction that booked it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/transactions/{transaction_id}:
+    patch:
+      operationId: changeTransaction
+      summary: Set a Transaction's Category
+      description: |
+        Sets the Category on the non-Account side of the Transaction, for
+        example to categorise one Accepted into Uncategorised or to correct
+        a wrong Category. Its amount never changes. The Account's
+        Uncategorised count and Transaction list reflect it immediately. The
+        Category rules are Accept's: the Uncategorised Category is allowed,
+        any other Internal Category gets 422 `/problems/internal-category`,
+        and a Category that isn't one of the Household's gets 422
+        `/problems/invalid-category`. A reversed Transaction gets 409
+        `/problems/transaction-reversed`; a reversal gets 422
+        `/problems/transaction-is-a-reversal`, and the Opening balance
+        Transaction 422 `/problems/opening-balance-transaction`.
+      tags:
+        - Transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/TransactionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionChange'
+      responses:
+        '200':
+          description: The Transaction with its new Category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/transactions/{transaction_id}/reverse:
+    post:
+      operationId: reverseTransaction
+      summary: Reverse a Transaction
+      description: |
+        Reverses a mistaken Transaction without editing or deleting it
+        (ADR-0018): a reversing Transaction is recorded with the opposite
+        Postings, the same Booking date and a link to the original, and both
+        appear in the Account's Transaction list. Neither counts as
+        Uncategorised any more. When an Accept recorded the Transaction, its
+        Imported transaction goes back to pending in the same transaction,
+        to be Accepted again or Discarded. A Transaction already reversed
+        gets 409 `/problems/transaction-already-reversed`; a reversal gets
+        422 `/problems/transaction-is-a-reversal`, and the Opening balance
+        Transaction 422 `/problems/opening-balance-transaction` (only
+        voiding the first Statement import changes it).
+      tags:
+        - Transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/TransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: The reversing Transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/imported-transactions/{imported_transaction_id}/keep:
+    post:
+      operationId: keepImportedTransaction
+      summary: Keep a Suspected duplicate
+      description: |
+        Keeps a Suspected duplicate as a real transaction: it becomes
+        pending, to be Accepted or Discarded like any other row, and still
+        shows what it resembled. Deciding the last Suspected duplicate of a
+        Statement import runs its waiting Balance check, recorded as passed
+        or failed. An Imported transaction that isn't a Suspected duplicate
+        gets 409 `/problems/imported-transaction-not-suspected-duplicate`.
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ImportedTransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The kept Imported transaction, now pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/imported-transactions/{imported_transaction_id}/discard:
+    post:
+      operationId: discardImportedTransaction
+      summary: Discard a pending Imported transaction or a Suspected duplicate
+      description: |
+        Discards a pending Imported transaction, for example one whose
+        Transaction was reversed, or a Suspected duplicate confirmed as a
+        repeat, so it never reaches the Ledger. Discarded is final: it
+        doesn't count in later Balance checks. Deciding the last Suspected
+        duplicate of a Statement import runs its waiting Balance check. One already
+        Discarded gets 409 `/problems/imported-transaction-already-discarded`,
+        and an Accepted one 409 `/problems/imported-transaction-already-accepted`
+        (reverse its Transaction first).
+      tags:
+        - Imported transactions
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ImportedTransactionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The Discarded Imported transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/connections/{connection_id}/statement-imports/previews:
+    post:
+      operationId: previewStatementImport
+      summary: Preview an Account's first Statement import
+      description: |
+        Reads a statement file with the Connection's CSV mapping and shows
+        the Opening balance the Account's first Statement import would
+        record (ADR-0018): the Export balance minus the total of the rows
+        booked on or after the start date. Records nothing. The Export
+        balance is typed twice; entries that differ get 422
+        `/problems/export-balance-mismatch`. A file with an unreadable row is
+        refused whole with 422 `/problems/unreadable-statement-file`, listing
+        every line and its reason. A file already imported through the
+        Connection gets 409 `/problems/duplicate-statement-import`, naming
+        the earlier import; an Account that already has its Opening balance
+        gets 409 `/problems/opening-balance-already-recorded`. Confirm the
+        import by uploading the same file and Export balance with the
+        returned `preview_id`.
+
+        Every amount is in the Account currency and may have no more decimal
+        places than it has: an Export balance with more gets 422
+        `/problems/invalid-export-balance`, and a row with more is an
+        unreadable row. A file with no rows at all gets 422
+        `/problems/empty-statement-file`, and a Connection without a CSV
+        mapping gets 422 `/problems/csv-mapping-required`.
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StatementImportPreviewUpload'
+      responses:
+        '200':
+          description: What the first Statement import would record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImportPreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/StatementImportConflict'
+        '422':
+          $ref: '#/components/responses/StatementFileRefused'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/connections/{connection_id}/statement-imports:
+    post:
+      operationId: uploadStatementImport
+      summary: Upload a statement file
+      description: |
+        Imports a statement file through the Connection: every row booked on
+        or after the Account's start date becomes a pending Imported
+        transaction, and the rows before it are ignored and counted. The
+        first import of an Account needs the `preview_id` of its preview
+        (422 `/problems/preview-required` without it). It is recomputed from
+        the uploaded file, its Export balance and the Connection's current
+        mapping version, and a difference gets 422
+        `/problems/preview-mismatch`. The first import also records the
+        Opening balance Transaction on the start date, in the same
+        transaction; an Account that got its Opening balance since the
+        preview gets 409 `/problems/opening-balance-already-recorded`. A file
+        with an unreadable row is refused whole (422
+        `/problems/unreadable-statement-file`), and a file already imported
+        through the Connection gets 409 `/problems/duplicate-statement-import`.
+
+        A later import takes its Export balance once and no `preview_id`
+        (409 `/problems/opening-balance-already-recorded` with one). A row
+        whose bank transaction ID, Booking date and amount all equal those of
+        an earlier Imported transaction of the Account is skipped as a
+        certain repeat and counted. The import then runs its Balance check
+        (ADR-0018): the Account's Opening balance plus every non-Discarded
+        Imported transaction, the new rows included, must equal the Export
+        balance. Otherwise the whole import is refused with 422
+        `/problems/balance-check-failed`, giving the expected balance, the
+        Export balance and the difference, and nothing is recorded. Amounts, an empty
+        file and a Connection without a mapping are refused as by the
+        preview. Retrying with the same Idempotency-Key and the same file and
+        fields returns the original result, however the form is rebuilt.
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StatementImportUpload'
+      responses:
+        '201':
+          description: The recorded Statement import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/StatementImportConflict'
+        '422':
+          $ref: '#/components/responses/StatementFileRefused'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listStatementImports
+      summary: A Connection's Statement imports
+      description: Lists every Statement import of the Connection, in the order they were recorded.
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+      responses:
+        '200':
+          description: The Connection's Statement imports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImportList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/connections/{connection_id}/statement-imports/{statement_import_id}/void:
+    post:
+      operationId: voidStatementImport
+      summary: Void a Statement import
+      description: |
+        Withdraws the Account's latest Statement import so that a corrected
+        file, or the same file with a fixed mapping, can be uploaded again
+        (ADR-0018). Every Imported transaction of the import becomes
+        Discarded and its file can be imported again. Voiding the Account's
+        only import also reverses its Opening balance Transaction, in the
+        same transaction, and the Account awaits its first Statement import
+        again: that is the only way to change an Opening balance. Only the
+        Account's latest non-voided import can be voided (409
+        `/problems/not-the-latest-statement-import`), only while none of its
+        rows are Accepted (409 `/problems/statement-import-has-accepted-rows`:
+        reverse their Transactions first), and only once (409
+        `/problems/statement-import-already-voided`).
+      tags:
+        - Statement imports
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/ConnectionID'
+        - $ref: '#/components/parameters/StatementImportID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The voided Statement import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementImport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/notifications:
+    get:
+      operationId: listNotifications
+      summary: The Household's Notifications
+      description: |
+        Lists every Notification of the Household, newest first, with
+        whether the caller has marked it read. Notifications are raised a
+        little after what caused them, by a deferred handler (ADR-0013): a
+        Statement import with Suspected duplicates raises a
+        `SUSPECTED_DUPLICATES_FOUND` one linking to the import.
+      tags:
+        - Notifications
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household's Notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/notifications/{notification_id}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Mark a Notification read
+      description: |
+        Marks the Notification read for the caller only; every other member
+        still sees it unread until they mark it read too. Marking it read
+        again changes nothing.
+      tags:
+        - Notifications
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/NotificationID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The Notification, read by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        A key the client chooses for one request, such as a UUID. Sending the
+        request again with the same key and body returns the stored response
+        without repeating it; the same key with a different body gets 422.
+        Keys are scoped to the caller.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    HouseholdID:
+      name: household_id
+      in: path
+      required: true
+      description: The Household's ID
+      schema:
+        type: string
+        format: uuid
+    CategoryID:
+      name: category_id
+      in: path
+      required: true
+      description: The Category's ID
+      schema:
+        type: string
+        format: uuid
+    AccountID:
+      name: account_id
+      in: path
+      required: true
+      description: The Account's ID
+      schema:
+        type: string
+        format: uuid
+    ConnectionID:
+      name: connection_id
+      in: path
+      required: true
+      description: The Connection's ID
+      schema:
+        type: string
+        format: uuid
+    StatementImportID:
+      name: statement_import_id
+      in: path
+      required: true
+      description: The Statement import's ID
+      schema:
+        type: string
+        format: uuid
+    NotificationID:
+      name: notification_id
+      in: path
+      required: true
+      description: The Notification's ID
+      schema:
+        type: string
+        format: uuid
+    ImportedTransactionID:
+      name: imported_transaction_id
+      in: path
+      required: true
+      description: The Imported transaction's ID
+      schema:
+        type: string
+        format: uuid
+    TransactionID:
+      name: transaction_id
+      in: path
+      required: true
+      description: The Transaction's ID
+      schema:
+        type: string
+        format: uuid
+    BookingMonth:
+      name: booking_month
+      in: query
+      required: false
+      description: Only this Booking month, written YYYY-MM
+      schema:
+        type: string
+        pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+        example: 2026-01
+    BookingMonthPath:
+      name: booking_month
+      in: path
+      required: true
+      description: The Booking month, written YYYY-MM
+      schema:
+        type: string
+        pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+        example: 2026-01
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Where the page starts, the `next_cursor` of the previous page; absent for the first page
+      schema:
+        type: string
+        maxLength: 512
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: The most items a page holds
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 200
+        default: 50
+  securitySchemes:
+    bearer_auth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An OpenID Connect access token issued by the instance's provider (ADR-0010)
+  responses:
+    Unauthorized:
+      description: The bearer token is missing or invalid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The caller may not do this, for example because it is not registered yet
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: The request conflicts with the current state, for example the caller is already registered
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: The request is well-formed but can't be carried out, for example an invalid Invitation code
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: The resource doesn't exist, or the caller may not know it does
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BadRequest:
+      description: The request is malformed, for example an invalid cursor
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    StatementImportConflict:
+      description: |
+        The statement file was already imported through the Connection
+        (`statement_import_id` names the earlier import), or the Account
+        already has its Opening balance
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/StatementImportConflictProblem'
+    StatementFileRefused:
+      description: |
+        The statement file or its Export balance is refused; for unreadable
+        rows, `rows` lists every line and its reason
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/StatementFileProblem'
+    MonthCloseRefused:
+      description: |
+        The month can't close yet (`reasons` lists every failed condition),
+        or the request can't be carried out
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/MonthCloseProblem'
+    Problem:
+      description: An error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Me:
+      type: object
+      description: The signed-in User
+      required:
+        - user_id
+        - is_instance_administrator
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: The User's ID (UUIDv7)
+        is_instance_administrator:
+          type: boolean
+          description: Whether the User controls who is admitted to the instance
+    Registration:
+      type: object
+      description: An Invitation code to redeem
+      required:
+        - invitation_code
+      properties:
+        invitation_code:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: The Invitation code, exactly as it was handed out
+    HouseholdCreation:
+      type: object
+      description: A new Household
+      required:
+        - name
+        - base_currency
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The Household's name
+          example: Home
+        base_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+    Household:
+      type: object
+      description: A Household
+      required:
+        - household_id
+        - name
+        - base_currency
+      properties:
+        household_id:
+          type: string
+          format: uuid
+          description: The Household's ID (UUIDv7)
+        name:
+          type: string
+          description: The Household's name
+          example: Home
+        base_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+    HouseholdList:
+      type: object
+      description: The caller's Households
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Households, in the order they were created
+          items:
+            $ref: '#/components/schemas/Household'
+    Category:
+      type: object
+      description: A Category
+      required:
+        - category_id
+        - name
+        - kind
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: The Category's ID (UUIDv7)
+        name:
+          type: string
+          description: The Category's name
+          example: Uncategorised
+        kind:
+          type: string
+          description: What the Category is for; Internal Categories belong to the system
+          x-extensible-enum:
+            - INCOME
+            - EXPENSE
+            - INTERNAL
+          example: INTERNAL
+        parent_id:
+          type: string
+          format: uuid
+          description: The parent Category's ID; absent for a root Category
+    CategoryNode:
+      type: object
+      description: A Category in the Household's Category tree, with its sub-Categories
+      required:
+        - category_id
+        - name
+        - kind
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: The Category's ID (UUIDv7)
+        name:
+          type: string
+          description: The Category's name
+          example: Eating out
+        kind:
+          type: string
+          description: What the Category is for; Internal Categories belong to the system
+          x-extensible-enum:
+            - INCOME
+            - EXPENSE
+            - INTERNAL
+          example: EXPENSE
+        parent_id:
+          type: string
+          format: uuid
+          description: The parent Category's ID; absent for a root Category
+        children:
+          type: array
+          description: The sub-Categories, sorted by name; absent when there are none
+          items:
+            $ref: '#/components/schemas/CategoryNode'
+    CategoryTree:
+      type: object
+      description: A Household's Categories as a tree
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The root Categories, sorted by name, each with its sub-Categories
+          items:
+            $ref: '#/components/schemas/CategoryNode'
+    CategoryCreation:
+      type: object
+      description: A new Category
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The Category's name, unique among its siblings
+          example: Coffee
+        kind:
+          type: string
+          description: |
+            INCOME or EXPENSE; required for a root Category. A sub-Category
+            takes its parent's kind.
+          x-extensible-enum:
+            - INCOME
+            - EXPENSE
+          example: EXPENSE
+        parent_id:
+          type: string
+          format: uuid
+          description: The Category to create it under; absent for a root Category
+    CategoryChange:
+      type: object
+      description: A change to a Category; a property left out stays as it is
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The new name, unique among its siblings
+          example: Espresso
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The Category to move it under, or `null` to make it a root Category
+    AccountCreation:
+      type: object
+      description: A new Account. There is no Opening balance field; the first Statement import works it out (ADR-0018).
+      required:
+        - name
+        - kind
+        - currency
+        - start_date
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The Account's name
+          example: Main
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        start_date:
+          type: string
+          format: date
+          description: The day the Account's history begins, and the date of its Opening balance
+          example: '2026-01-01'
+    Account:
+      type: object
+      description: An Account
+      required:
+        - account_id
+        - name
+        - kind
+        - currency
+        - start_date
+        - awaiting_first_statement_import
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: The Account's ID (UUIDv7)
+        name:
+          type: string
+          description: The Account's name
+          example: Main
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        start_date:
+          type: string
+          format: date
+          description: The day the Account's history begins, and the date of its Opening balance
+          example: '2026-01-01'
+        awaiting_first_statement_import:
+          type: boolean
+          description: Whether the Account still awaits the first Statement import that records its Opening balance
+        balance:
+          $ref: '#/components/schemas/Money'
+    AccountList:
+      type: object
+      description: A Household's Accounts
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Accounts, in the order they were added
+          items:
+            $ref: '#/components/schemas/Account'
+    AccountKind:
+      type: string
+      description: What sort of place the Account is. `CASH` is not supported yet and is refused.
+      x-extensible-enum:
+        - BANK_ACCOUNT
+        - CREDIT_CARD
+        - LOAN
+        - CRYPTO_WALLET
+      example: BANK_ACCOUNT
+    ConnectionKind:
+      type: string
+      description: Where the Connection's transactions come from. `BANK_FEED` is not supported yet and is refused.
+      x-extensible-enum:
+        - STATEMENT_FILE_IMPORT
+      example: STATEMENT_FILE_IMPORT
+    ConnectionCreation:
+      type: object
+      description: A new Connection
+      required:
+        - kind
+      properties:
+        kind:
+          $ref: '#/components/schemas/ConnectionKind'
+        csv_mapping:
+          $ref: '#/components/schemas/CsvMapping'
+    Connection:
+      type: object
+      description: A Connection between an Account and a source of its transactions
+      required:
+        - connection_id
+        - account_id
+        - kind
+      properties:
+        connection_id:
+          type: string
+          format: uuid
+          description: The Connection's ID (UUIDv7)
+        account_id:
+          type: string
+          format: uuid
+          description: The Account the Connection brings transactions into
+        kind:
+          $ref: '#/components/schemas/ConnectionKind'
+        csv_mapping:
+          $ref: '#/components/schemas/CsvMapping'
+        csv_mapping_version:
+          type: integer
+          format: int32
+          description: |
+            The mapping's version, which changes on every save; absent while
+            the Connection has no mapping. A first Statement import's preview
+            is tied to it.
+          example: 1
+    ConnectionList:
+      type: object
+      description: An Account's Connections
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Connections, in the order they were created
+          items:
+            $ref: '#/components/schemas/Connection'
+    CsvMapping:
+      type: object
+      description: |
+        How a bank lays out its statement CSV. Booking date, description and
+        the amount (one signed column, or debit and credit columns) are
+        required; Transaction date (defaulting to the Booking date), Value
+        date, payee and bank transaction ID are optional. Every field is
+        validated together when the mapping is saved, so the properties the
+        mapping needs are checked there rather than by the schema.
+      properties:
+        delimiter:
+          type: string
+          description: The one character between columns
+          example: ;
+        has_header_row:
+          type: boolean
+          description: Whether the first line after the skipped ones names the columns
+          default: false
+        skip_leading_lines:
+          type: integer
+          format: int32
+          description: How many lines to skip before the header row or the first row
+          default: 0
+        date_format:
+          type: string
+          description: |
+            How dates are written: one of `YYYY-MM-DD`, `YYYY/MM/DD`,
+            `YYYYMMDD`, `DD/MM/YYYY`, `DD-MM-YYYY`, `DD.MM.YYYY`,
+            `MM/DD/YYYY`, `MM-DD-YYYY`, `DD/MM/YY` or `MM/DD/YY`
+          example: DD/MM/YYYY
+        decimal_separator:
+          type: string
+          description: The decimal separator, `.` or `,`
+          example: ','
+        thousands_separator:
+          type: string
+          description: The thousands separator, if any; empty, `.`, `,`, a space or `'`
+          default: ''
+          example: .
+        amount_layout:
+          type: string
+          description: One signed amount column, or separate debit (money out) and credit (money in) columns
+          x-extensible-enum:
+            - SIGNED
+            - DEBIT_CREDIT
+          example: SIGNED
+        positive_amount_means:
+          type: string
+          description: For a signed amount, whether a positive amount is money in or money out; some banks invert the sign
+          x-extensible-enum:
+            - MONEY_IN
+            - MONEY_OUT
+          example: MONEY_IN
+        columns:
+          $ref: '#/components/schemas/CsvColumns'
+    CsvColumns:
+      type: object
+      description: Which column holds each field
+      properties:
+        booking_date:
+          $ref: '#/components/schemas/CsvColumn'
+        description:
+          $ref: '#/components/schemas/CsvColumn'
+        amount:
+          $ref: '#/components/schemas/CsvColumn'
+        debit:
+          $ref: '#/components/schemas/CsvColumn'
+        credit:
+          $ref: '#/components/schemas/CsvColumn'
+        transaction_date:
+          $ref: '#/components/schemas/CsvColumn'
+        value_date:
+          $ref: '#/components/schemas/CsvColumn'
+        payee:
+          $ref: '#/components/schemas/CsvColumn'
+        bank_transaction_id:
+          $ref: '#/components/schemas/CsvColumn'
+    CsvColumn:
+      type: object
+      description: A column, by its name in the header row or by its position counted from 1; exactly one of the two
+      properties:
+        header:
+          type: string
+          description: The column's name in the header row, ignoring case and surrounding spaces
+          example: Amount
+        position:
+          type: integer
+          format: int32
+          description: The column's position, counted from 1
+          example: 3
+    DecimalText:
+      type: string
+      description: An exact decimal written with `.` as the decimal separator and no thousands separator
+      pattern: '^-?[0-9]{1,30}(\.[0-9]{1,18})?$'
+      example: '1234.56'
+    StatementImportPreviewUpload:
+      type: object
+      description: A first statement file to preview, with its Export balance typed twice
+      required:
+        - file
+        - export_balance
+        - export_balance_confirmation
+      properties:
+        file:
+          type: string
+          format: binary
+          description: The statement file, as the bank exported it
+        export_balance:
+          $ref: '#/components/schemas/DecimalText'
+        export_balance_confirmation:
+          $ref: '#/components/schemas/DecimalText'
+    StatementImportUpload:
+      type: object
+      description: A statement file with its Export balance
+      required:
+        - file
+        - export_balance
+      properties:
+        file:
+          type: string
+          format: binary
+          description: The statement file, as the bank exported it
+        export_balance:
+          $ref: '#/components/schemas/DecimalText'
+        preview_id:
+          type: string
+          maxLength: 128
+          description: The preview's ID; required for the Account's first Statement import
+    StatementImportPreview:
+      type: object
+      description: What an Account's first Statement import would record; nothing is recorded yet
+      required:
+        - preview_id
+        - opening_balance
+        - start_date
+        - export_balance
+        - row_count
+        - rows_ignored_before_start_date
+        - rows_total
+      properties:
+        preview_id:
+          type: string
+          description: |
+            Ties a confirming upload to this preview: a hash of the Account,
+            the Connection, the file, the Export balance and the mapping
+            version, so the server keeps no state
+        opening_balance:
+          $ref: '#/components/schemas/Money'
+        start_date:
+          type: string
+          format: date
+          description: The Account's start date, the date of its Opening balance
+          example: '2026-01-01'
+        export_balance:
+          $ref: '#/components/schemas/Money'
+        row_count:
+          type: integer
+          format: int32
+          description: The rows that would become Imported transactions
+          example: 42
+        rows_ignored_before_start_date:
+          type: integer
+          format: int32
+          description: The rows booked before the Account's start date, which are ignored
+          example: 3
+        rows_total:
+          $ref: '#/components/schemas/Money'
+    StatementImport:
+      type: object
+      description: A Statement import
+      required:
+        - statement_import_id
+        - connection_id
+        - account_id
+        - export_balance
+        - rows_imported
+        - rows_skipped_as_certain_repeats
+        - suspected_duplicates
+        - rows_ignored_before_start_date
+        - rows_total
+        - balance_check
+        - imported_at
+      properties:
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import's ID (UUIDv7)
+        connection_id:
+          type: string
+          format: uuid
+          description: The Connection the file came through
+        account_id:
+          type: string
+          format: uuid
+          description: The Account the rows belong to
+        export_balance:
+          $ref: '#/components/schemas/Money'
+        rows_imported:
+          type: integer
+          format: int32
+          description: The rows that became Imported transactions
+          example: 42
+        rows_skipped_as_certain_repeats:
+          type: integer
+          format: int32
+          description: |
+            The rows skipped because an earlier Imported transaction of the
+            Account has the same bank transaction ID, Booking date and amount
+          example: 12
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: |
+            The imported rows (counted in `rows_imported`) that only look like
+            an earlier Imported transaction of the Account and wait to be kept
+            or Discarded
+          example: 2
+        rows_ignored_before_start_date:
+          type: integer
+          format: int32
+          description: The rows booked before the Account's start date, which were ignored
+          example: 3
+        rows_total:
+          $ref: '#/components/schemas/Money'
+        opening_balance:
+          $ref: '#/components/schemas/Money'
+        balance_check:
+          type: string
+          description: |
+            The Balance check; the first import passes it by construction,
+            and a later import without Suspected duplicates that fails it is
+            refused. A later import with Suspected duplicates is `WAITING`
+            until the last one is kept or Discarded, and then `PASSED` or
+            `FAILED`
+          x-extensible-enum:
+            - PASSED
+            - WAITING
+            - FAILED
+          example: PASSED
+        imported_at:
+          type: string
+          format: date-time
+          description: When the import was recorded
+          example: '2026-02-01T09:30:00Z'
+        voided_at:
+          type: string
+          format: date-time
+          description: When the import was voided; absent while it isn't
+          example: '2026-02-02T10:00:00Z'
+    StatementImportList:
+      type: object
+      description: A Connection's Statement imports
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Statement imports, in the order they were recorded
+          items:
+            $ref: '#/components/schemas/StatementImport'
+    Notification:
+      type: object
+      description: |
+        A Household-level message every member sees, with read state per
+        User. A `SUSPECTED_DUPLICATES_FOUND` one links to the Statement
+        import whose Suspected duplicates wait to be kept or Discarded.
+      required:
+        - notification_id
+        - kind
+        - statement_import_id
+        - connection_id
+        - account_id
+        - suspected_duplicates
+        - created_at
+        - read
+      properties:
+        notification_id:
+          type: string
+          format: uuid
+          description: The Notification's ID (UUIDv7)
+        kind:
+          type: string
+          description: What the Notification is about
+          x-extensible-enum:
+            - SUSPECTED_DUPLICATES_FOUND
+          example: SUSPECTED_DUPLICATES_FOUND
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import the Notification links to
+        connection_id:
+          type: string
+          format: uuid
+          description: The Connection the Statement import came through
+        account_id:
+          type: string
+          format: uuid
+          description: The Account of the Statement import
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: The Suspected duplicates the Statement import brought
+          example: 2
+        created_at:
+          type: string
+          format: date-time
+          description: When the Notification was raised
+          example: '2026-02-01T09:30:01Z'
+        read:
+          type: boolean
+          description: Whether the caller has marked it read
+          example: false
+    NotificationList:
+      type: object
+      description: A Household's Notifications
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Notifications, newest first
+          items:
+            $ref: '#/components/schemas/Notification'
+    StatementImportConflictProblem:
+      type: object
+      description: Problem details (RFC 9457) of a refused Statement import
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/duplicate-statement-import
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Duplicate statement file
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 409
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The earlier Statement import of the same file
+    StatementFileProblem:
+      type: object
+      description: |
+        Problem details (RFC 9457) of a refused statement file. An unreadable
+        file lists its bad `rows`; a failed Balance check gives the
+        `expected_balance` (the Opening balance plus every non-Discarded
+        Imported transaction, the file's new rows included), the
+        `export_balance`, and the `difference` (Export balance minus
+        expected balance)
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/unreadable-statement-file
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Unreadable statement file
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 422
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        rows:
+          type: array
+          description: Every line of the file that can't be read, with the reason
+          items:
+            $ref: '#/components/schemas/RowError'
+        expected_balance:
+          $ref: '#/components/schemas/Money'
+        export_balance:
+          $ref: '#/components/schemas/Money'
+        difference:
+          $ref: '#/components/schemas/Money'
+    RowError:
+      type: object
+      description: Why one line of a statement file can't be read
+      required:
+        - line
+        - reason
+      properties:
+        line:
+          type: integer
+          format: int32
+          description: The line in the file, counted from 1, including skipped lines and the header row
+          example: 7
+        reason:
+          type: string
+          description: Why the line can't be read
+    AccountTransaction:
+      type: object
+      description: A Transaction as one line of an Account's single-entry list
+      required:
+        - transaction_id
+        - amount
+        - booking_date
+        - transaction_date
+        - description
+        - category_id
+        - category_name
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction's ID (UUIDv7)
+        amount:
+          $ref: '#/components/schemas/Money'
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        transaction_date:
+          type: string
+          format: date
+          description: The date the purchase or payment happened
+          example: '2026-01-14'
+        description:
+          type: string
+          description: The Transaction's description
+          example: Opening balance
+        category_id:
+          type: string
+          format: uuid
+          description: The Category on the other side of the Transaction
+        category_name:
+          type: string
+          description: The Category's name
+          example: Opening balance
+        reversal_of_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction this one reverses, when it is a reversal
+        reversed_by_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction that reversed this one, once it is reversed
+    Transaction:
+      type: object
+      description: |
+        A Transaction as seen from its Account: its signed amount there
+        (positive is money in) and the Category on the other side
+      required:
+        - transaction_id
+        - account_id
+        - amount
+        - booking_date
+        - transaction_date
+        - description
+        - category_id
+        - category_name
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction's ID (UUIDv7)
+        account_id:
+          type: string
+          format: uuid
+          description: The Account it moves money on
+        amount:
+          $ref: '#/components/schemas/Money'
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        transaction_date:
+          type: string
+          format: date
+          description: The date the purchase or payment happened
+          example: '2026-01-14'
+        value_date:
+          type: string
+          format: date
+          description: The date the money moved, when known
+          example: '2026-01-16'
+        description:
+          type: string
+          description: The Transaction's description
+          example: Coffee
+        payee:
+          type: string
+          description: The payee, when known
+        category_id:
+          type: string
+          format: uuid
+          description: The Category on the other side of the Transaction
+        category_name:
+          type: string
+          description: The Category's name
+          example: Uncategorised
+        imported_transaction_id:
+          type: string
+          format: uuid
+          description: The Imported transaction whose Accept recorded it
+        reversal_of_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction this one reverses, when it is a reversal
+        reversed_by_transaction_id:
+          type: string
+          format: uuid
+          description: The Transaction that reversed this one, once it is reversed
+    TransactionChange:
+      type: object
+      description: A change to a Transaction
+      required:
+        - category_id
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: The Category for the non-Account side; the Uncategorised Category is allowed
+    AccountTransactionPage:
+      type: object
+      description: A page of an Account's Transactions
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Transactions on this page
+          items:
+            $ref: '#/components/schemas/AccountTransaction'
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last page
+    ImportedTransaction:
+      type: object
+      description: A row brought in by a Statement import
+      required:
+        - imported_transaction_id
+        - statement_import_id
+        - state
+        - line
+        - booking_date
+        - transaction_date
+        - amount
+        - description
+      properties:
+        imported_transaction_id:
+          type: string
+          format: uuid
+          description: The Imported transaction's ID (UUIDv7)
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import that brought it in
+        state:
+          type: string
+          description: Where it is in its review
+          x-extensible-enum:
+            - PENDING
+            - SUSPECTED_DUPLICATE
+            - ACCEPTED
+            - DISCARDED
+          example: PENDING
+        line:
+          type: integer
+          format: int32
+          description: Its line in the statement file
+          example: 2
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        transaction_date:
+          type: string
+          format: date
+          description: The date the purchase or payment happened; the Booking date when the file has none
+          example: '2026-01-14'
+        value_date:
+          type: string
+          format: date
+          description: The date the money moved; absent when the file has none
+          example: '2026-01-16'
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: The bank's description
+        payee:
+          type: string
+          description: The payee, when the file has one
+        bank_transaction_id:
+          type: string
+          description: The bank's own transaction ID, when the file has one
+        transaction_id:
+          type: string
+          format: uuid
+          description: The Ledger Transaction that booked it, while it is Accepted
+        resembles:
+          $ref: '#/components/schemas/ResembledImportedTransaction'
+    ResembledImportedTransaction:
+      type: object
+      description: |
+        The earlier Imported transaction a Suspected duplicate looks like,
+        shown next to it so a Household member can decide; kept after the
+        Suspected duplicate is decided
+      required:
+        - imported_transaction_id
+        - statement_import_id
+        - state
+        - booking_date
+        - amount
+        - description
+      properties:
+        imported_transaction_id:
+          type: string
+          format: uuid
+          description: The earlier Imported transaction's ID
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import that brought it in
+        state:
+          type: string
+          description: Where it is in its review
+          x-extensible-enum:
+            - PENDING
+            - SUSPECTED_DUPLICATE
+            - ACCEPTED
+            - DISCARDED
+          example: ACCEPTED
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: The bank's description
+        bank_transaction_id:
+          type: string
+          description: The bank's own transaction ID, when the file has one
+    ImportedTransactionAcceptance:
+      type: object
+      description: How to Accept an Imported transaction
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: |
+            The Category on the other side of the Transaction; absent, or the
+            Uncategorised Category, leaves it in Uncategorised
+    ImportedTransactionPage:
+      type: object
+      description: A page of an Account's Imported transactions
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The Imported transactions on this page
+          items:
+            $ref: '#/components/schemas/ImportedTransaction'
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last page
+    AccountMonth:
+      type: object
+      description: One Booking month of an Account and what is left to do before it closes
+      required:
+        - account_id
+        - booking_month
+        - state
+        - pending
+        - suspected_duplicates
+        - uncategorised
+        - flagged
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: The Account
+        booking_month:
+          type: string
+          description: The Booking month, written YYYY-MM
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          example: 2026-01
+        state:
+          type: string
+          description: Whether the month is closed
+          x-extensible-enum:
+            - OPEN
+            - CLOSED
+          example: OPEN
+        statement_balance:
+          $ref: '#/components/schemas/Money'
+        closed_at:
+          type: string
+          format: date-time
+          description: When the month closed; absent while it is open
+          example: '2026-02-03T18:00:00Z'
+        computed_balance:
+          $ref: '#/components/schemas/Money'
+        pending:
+          type: integer
+          format: int32
+          description: The month's Imported transactions waiting for review
+          example: 4
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: The month's Imported transactions that are undecided Suspected duplicates
+          example: 1
+        uncategorised:
+          type: integer
+          format: int32
+          description: The month's Transactions whose other side is in Uncategorised
+          example: 2
+        flagged:
+          type: boolean
+          description: Whether the month changed after it closed
+          example: false
+    MonthClosing:
+      type: object
+      description: The Statement balance a month closes with
+      required:
+        - statement_balance
+      properties:
+        statement_balance:
+          $ref: '#/components/schemas/Money'
+    MonthCloseProblem:
+      type: object
+      description: |
+        Problem details (RFC 9457) of a refused Month close. `reasons` lists
+        every failed condition, each with its details beside it: the
+        `pending`, `suspected_duplicates` and `uncategorised` counts, the
+        `unchecked_statement_imports`, and for a balance mismatch the
+        `computed_balance`, the `statement_balance` and the `difference`
+        (Statement balance minus computed balance)
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/month-close-refused
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Month can't close
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 422
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        reasons:
+          type: array
+          description: Every condition that stops the month closing
+          items:
+            type: string
+            x-extensible-enum:
+              - PENDING
+              - SUSPECTED_DUPLICATES
+              - UNCATEGORISED
+              - BALANCE_CHECK_NOT_PASSED
+              - BALANCE_MISMATCH
+            example: BALANCE_MISMATCH
+        pending:
+          type: integer
+          format: int32
+          description: The month's Imported transactions waiting for review
+          example: 4
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: The month's undecided Suspected duplicates
+          example: 1
+        uncategorised:
+          type: integer
+          format: int32
+          description: The month's Transactions in Uncategorised
+          example: 2
+        unchecked_statement_imports:
+          type: array
+          description: The Statement imports with rows in or before the month whose Balance check hasn't passed
+          items:
+            $ref: '#/components/schemas/UncheckedStatementImport'
+        computed_balance:
+          $ref: '#/components/schemas/Money'
+        statement_balance:
+          $ref: '#/components/schemas/Money'
+        difference:
+          $ref: '#/components/schemas/Money'
+    UncheckedStatementImport:
+      type: object
+      description: A Statement import whose Balance check stops a Month close
+      required:
+        - statement_import_id
+        - balance_check
+      properties:
+        statement_import_id:
+          type: string
+          format: uuid
+          description: The Statement import
+        balance_check:
+          type: string
+          description: Its Balance check
+          x-extensible-enum:
+            - WAITING
+            - FAILED
+          example: WAITING
+    Money:
+      type: object
+      description: |
+        An amount of money: an exact decimal in its currency, with that
+        currency's number of decimal places (ADR-0007), for example EUR 2,
+        JPY 0, BTC 8 and ETH 18.
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: number
+          format: decimal
+          x-ogen-type: github.com/mumia/wallet-accountant/internal/platform/httpapi/amount.Amount
+          description: |
+            The exact amount, written with its currency's number of decimal
+            places (trailing zeros included); never a binary floating-point
+            value
+          example: 1234.56
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+    CurrencyCode:
+      type: string
+      description: A currency code, such as an ISO 4217 code
+      pattern: '^[A-Z]{3,5}$'
+      example: EUR
+    Problem:
+      type: object
+      description: Problem details (RFC 9457)
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type; `about:blank` when the status says it all
+          example: /problems/registration-required
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Registration required
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 403
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+        instance:
+          type: string
+          format: uri-reference
+          description: Identifies this occurrence of the problem
