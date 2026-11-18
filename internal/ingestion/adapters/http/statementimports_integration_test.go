@@ -124,11 +124,11 @@ func newImportFixture(t *testing.T, app *apitest.App, subject string) importFixt
 }
 
 func (f importFixture) imports() string {
-	return "/households/" + f.household + "/connections/" + f.connection + "/statement-imports"
+	return "/api/households/" + f.household + "/connections/" + f.connection + "/statement-imports"
 }
 
 func (f importFixture) accountPath() string {
-	return "/households/" + f.household + "/accounts/" + f.account
+	return "/api/households/" + f.household + "/accounts/" + f.account
 }
 
 func (f importFixture) preview(t *testing.T, file, balance, confirmation string) *apitest.Response {

@@ -15,7 +15,12 @@ import (
 	"github.com/mumia/wallet-accountant/internal/platform/telemetry"
 )
 
-// NewHandler returns the HTTP handler of the API: the ogen server for h,
+// PathPrefix starts every API path, so the UI can serve every other path on
+// the same origin (ADR-0021). It is the contract's servers URL.
+const PathPrefix = "/api"
+
+// NewHandler returns the HTTP handler of the API: the ogen server for h
+// under PathPrefix (any other path is a 404),
 // with bearer tokens checked by auth, every error as problem+json,
 // Idempotency-Key honoured on every POST (keys stored through pool, which
 // connects as wa_app), and a log record, a trace and metrics for every
@@ -24,6 +29,7 @@ func NewHandler(h oas.Handler, auth authn.Authenticator, pool *pgxpool.Pool, tel
 	errs := Errors{Logger: tel.Logger}
 
 	srv, err := oas.NewServer(h, security{auth: auth},
+		oas.WithPathPrefix(PathPrefix),
 		oas.WithErrorHandler(errs.HandleError),
 		oas.WithNotFound(errs.NotFound),
 		oas.WithMethodNotAllowed(errs.MethodNotAllowed),

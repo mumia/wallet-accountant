@@ -443,7 +443,7 @@ func TestClosingAMonthIsRefused(t *testing.T) {
 	f.closeMonth(t, "2026-13", "0.00").AssertProblem(t, http.StatusBadRequest, "about:blank")
 	f.app.Get(t, f.monthPath("26-01"), f.token).AssertProblem(t, http.StatusBadRequest, "about:blank")
 
-	unknown := "/households/" + f.household + "/accounts/0198f0a0-0000-7000-8000-000000000999/months/2026-01"
+	unknown := "/api/households/" + f.household + "/accounts/0198f0a0-0000-7000-8000-000000000999/months/2026-01"
 	f.app.Get(t, unknown, f.token).AssertProblem(t, http.StatusNotFound, "about:blank")
 	f.app.Post(t, unknown+"/close", f.token, statementBalance("0.00", "EUR")).
 		AssertProblem(t, http.StatusNotFound, "about:blank")
@@ -458,7 +458,7 @@ func TestAnotherHouseholdsMonthsAre404(t *testing.T) {
 	alice.acceptAll(t, alice.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
 
 	for _, household := range []string{alice.household, bob.household} {
-		path := "/households/" + household + "/accounts/" + alice.account + "/months/2026-01"
+		path := "/api/households/" + household + "/accounts/" + alice.account + "/months/2026-01"
 		app.Get(t, path, bob.token).AssertProblem(t, http.StatusNotFound, "about:blank")
 		app.Post(t, path+"/close", bob.token, statementBalance("2510.50", "EUR")).
 			AssertProblem(t, http.StatusNotFound, "about:blank")

@@ -35,7 +35,7 @@ func createHousehold(t *testing.T, app *apitest.App, token, name string) househo
 	t.Helper()
 
 	var created household
-	app.Post(t, "/households", token, map[string]string{"name": name, "base_currency": "EUR"}).
+	app.Post(t, "/api/households", token, map[string]string{"name": name, "base_currency": "EUR"}).
 		AssertJSON(t, http.StatusCreated, &created)
 
 	return created
@@ -47,7 +47,7 @@ func TestCreatingAHouseholdAndOpeningIt(t *testing.T) {
 	token := app.Register(t, "https://issuer.example", "alice")
 
 	var created household
-	app.Post(t, "/households", token, map[string]string{"name": "Home", "base_currency": "EUR"}).
+	app.Post(t, "/api/households", token, map[string]string{"name": "Home", "base_currency": "EUR"}).
 		AssertJSON(t, http.StatusCreated, &created)
 
 	if created.HouseholdID == "" || created.Name != "Home" || created.BaseCurrency != "EUR" {
@@ -55,7 +55,7 @@ func TestCreatingAHouseholdAndOpeningIt(t *testing.T) {
 	}
 
 	var got household
-	app.Get(t, "/households/"+created.HouseholdID, token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+created.HouseholdID, token).AssertJSON(t, http.StatusOK, &got)
 
 	if got != created {
 		t.Errorf("GET /households/{id} = %+v, want %+v", got, created)
@@ -69,7 +69,7 @@ func TestListingTheCallersHouseholds(t *testing.T) {
 	bob := app.Register(t, "https://issuer.example", "bob")
 
 	var empty householdList
-	app.Get(t, "/households", alice).AssertJSON(t, http.StatusOK, &empty)
+	app.Get(t, "/api/households", alice).AssertJSON(t, http.StatusOK, &empty)
 
 	if len(empty.Items) != 0 {
 		t.Fatalf("before creating any: %+v, want none", empty.Items)
@@ -80,7 +80,7 @@ func TestListingTheCallersHouseholds(t *testing.T) {
 	createHousehold(t, app, bob, "Bob's")
 
 	var got householdList
-	app.Get(t, "/households", alice).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households", alice).AssertJSON(t, http.StatusOK, &got)
 
 	if want := []household{home, holiday}; !slices.Equal(got.Items, want) {
 		t.Errorf("GET /households = %+v, want %+v", got.Items, want)
@@ -94,7 +94,7 @@ func TestANewHouseholdComesWithItsThreeInternalCategories(t *testing.T) {
 	home := createHousehold(t, app, token, "Home")
 
 	var got categoryList
-	app.Get(t, "/households/"+home.HouseholdID+"/categories", token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+home.HouseholdID+"/categories", token).AssertJSON(t, http.StatusOK, &got)
 
 	names := make([]string, 0, len(got.Items))
 
@@ -129,8 +129,8 @@ func TestEachUserGets404ForTheOtherUsersHousehold(t *testing.T) {
 		{bob, alices},
 	} {
 		for _, path := range []string{
-			"/households/" + tc.other.HouseholdID,
-			"/households/" + tc.other.HouseholdID + "/categories",
+			"/api/households/" + tc.other.HouseholdID,
+			"/api/households/" + tc.other.HouseholdID + "/categories",
 		} {
 			app.Get(t, path, tc.token).AssertProblem(t, http.StatusNotFound, "about:blank")
 		}
@@ -144,7 +144,7 @@ func TestEachUserGets404ForTheOtherUsersHousehold(t *testing.T) {
 		{bob, bobs},
 	} {
 		var list householdList
-		app.Get(t, "/households", tc.token).AssertJSON(t, http.StatusOK, &list)
+		app.Get(t, "/api/households", tc.token).AssertJSON(t, http.StatusOK, &list)
 
 		if len(list.Items) != 1 || list.Items[0] != tc.own {
 			t.Errorf("listed %+v, want only %+v", list.Items, tc.own)
@@ -157,7 +157,7 @@ func TestAHouseholdThatDoesNotExistIs404LikeAnotherHouseholds(t *testing.T) {
 	app := apitest.Start(t)
 	token := app.Register(t, "https://issuer.example", "alice")
 
-	app.Get(t, "/households/019a8b2c-0000-7000-8000-00000000ffff", token).
+	app.Get(t, "/api/households/019a8b2c-0000-7000-8000-00000000ffff", token).
 		AssertProblem(t, http.StatusNotFound, "about:blank")
 }
 
@@ -168,13 +168,13 @@ func TestUnregisteredCallers(t *testing.T) {
 	home := createHousehold(t, app, alice, "Home")
 	stranger := app.TokenFor("https://issuer.example", "stranger")
 
-	app.Get(t, "/households", stranger).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
-	app.Post(t, "/households", stranger, map[string]string{"name": "Mine", "base_currency": "EUR"}).
+	app.Get(t, "/api/households", stranger).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
+	app.Post(t, "/api/households", stranger, map[string]string{"name": "Mine", "base_currency": "EUR"}).
 		AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
 
 	for _, path := range []string{
-		"/households/" + home.HouseholdID,
-		"/households/" + home.HouseholdID + "/categories",
+		"/api/households/" + home.HouseholdID,
+		"/api/households/" + home.HouseholdID + "/categories",
 	} {
 		app.Get(t, path, stranger).AssertProblem(t, http.StatusNotFound, "about:blank")
 	}
@@ -197,12 +197,12 @@ func TestCreateHouseholdRefusals(t *testing.T) {
 		{"missing name", map[string]string{"base_currency": "EUR"}, http.StatusBadRequest, "about:blank"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			app.Post(t, "/households", token, tc.body).AssertProblem(t, tc.status, tc.typ)
+			app.Post(t, "/api/households", token, tc.body).AssertProblem(t, tc.status, tc.typ)
 		})
 	}
 
 	var none householdList
-	app.Get(t, "/households", token).AssertJSON(t, http.StatusOK, &none)
+	app.Get(t, "/api/households", token).AssertJSON(t, http.StatusOK, &none)
 
 	if len(none.Items) != 0 {
 		t.Errorf("refused creations left Households: %+v", none.Items)
@@ -216,19 +216,19 @@ func TestRebuildRestoresHouseholdsAndTheirCategories(t *testing.T) {
 	home := createHousehold(t, app, token, "Home")
 
 	var before categoryList
-	app.Get(t, "/households/"+home.HouseholdID+"/categories", token).AssertJSON(t, http.StatusOK, &before)
+	app.Get(t, "/api/households/"+home.HouseholdID+"/categories", token).AssertJSON(t, http.StatusOK, &before)
 
 	app.Rebuild(t)
 
 	var list householdList
-	app.Get(t, "/households", token).AssertJSON(t, http.StatusOK, &list)
+	app.Get(t, "/api/households", token).AssertJSON(t, http.StatusOK, &list)
 
 	if len(list.Items) != 1 || list.Items[0] != home {
 		t.Errorf("after rebuild: %+v, want only %+v", list.Items, home)
 	}
 
 	var after categoryList
-	app.Get(t, "/households/"+home.HouseholdID+"/categories", token).AssertJSON(t, http.StatusOK, &after)
+	app.Get(t, "/api/households/"+home.HouseholdID+"/categories", token).AssertJSON(t, http.StatusOK, &after)
 
 	if !slices.Equal(after.Items, before.Items) {
 		t.Errorf("categories after rebuild = %+v, want %+v", after.Items, before.Items)

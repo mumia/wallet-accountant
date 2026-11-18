@@ -27,7 +27,7 @@ request:
       autoRefreshToken: true
   variables:
     - name: baseUrl
-      value: http://localhost:8080
+      value: http://localhost:8080/api
       description: The API (make run)
     - name: authUrl
       value: http://localhost:8081

@@ -487,9 +487,16 @@ change the contract, not the requests. See README.md in this directory for signi
 // so requests work without choosing an environment. An environment's
 // variables take precedence over them, to point the collection elsewhere.
 func variables(doc *document) []keyValue {
-	baseURL := "http://localhost:8080"
+	// A server URL relative to the origin (ADR-0021) is taken on the
+	// development app.
+	const devOrigin = "http://localhost:8080"
+
+	baseURL := devOrigin
 	if len(doc.Servers) > 0 {
 		baseURL = doc.Servers[0].URL
+		if strings.HasPrefix(baseURL, "/") {
+			baseURL = devOrigin + baseURL
+		}
 	}
 
 	vars := []keyValue{

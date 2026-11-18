@@ -12,3 +12,10 @@
 - [ ] Problem types stay relative URIs and still resolve (check `/problems/registration-required` against the new prefix and decide; record it in the conventions doc)
 - [ ] HTTP tests call `/api/...`; one test proves an unprefixed path is 404
 - [ ] README, `api/bruno/README.md` and the conventions doc show the new paths
+
+## Comments
+
+- Implemented: `httpapi.PathPrefix = "/api"` mounts the ogen server with `oas.WithPathPrefix`; ogen's own NotFound hook answers anything outside it as 404 problem+json. A unit test keeps the contract's `servers` (`/api`) and `PathPrefix` in step.
+- The Bruno generator turns an origin-relative server URL into `http://localhost:8080/api` for `baseUrl`.
+- Problem types: kept as `/problems/...` without the prefix (recorded in `docs/architecture/conventions.md`, "API paths"). They resolve against the request URI to `https://<host>/problems/...`, a UI-owned path; they are identifiers compared as sent, so no client-visible type changes.
+- Also updated `deploy/selfhosted/smoke.sh` to call `/api/me` and `/api/registrations` (not run here; `bash -n` only). Swagger UI in `compose.dev.yaml` has submit disabled, so the relative server URL doesn't affect it.

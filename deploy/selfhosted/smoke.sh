@@ -86,16 +86,16 @@ status() { # method path [json] -> HTTP status
 		-H "Authorization: Bearer $token" -H 'Content-Type: application/json' ${3:+-d "$3"}
 }
 i=0
-until [ "$(status GET /me 2>/dev/null || true)" = 403 ]; do
+until [ "$(status GET /api/me 2>/dev/null || true)" = 403 ]; do
 	i=$((i + 1))
 	[ "$i" -lt 60 ] || fail "GET /me never answered 403 registration-required: $(cat "$SMOKE_DIR/body" 2>/dev/null)"
 	sleep 1
 done
 
 step "redeem the bootstrap code"
-got=$(status POST /registrations "{\"invitation_code\":\"$code\"}")
+got=$(status POST /api/registrations "{\"invitation_code\":\"$code\"}")
 [ "$got" = 201 ] || fail "POST /registrations answered $got: $(cat "$SMOKE_DIR/body")"
-got=$(status GET /me)
+got=$(status GET /api/me)
 [ "$got" = 200 ] || fail "GET /me answered $got after registering: $(cat "$SMOKE_DIR/body")"
 cat "$SMOKE_DIR/body"; echo
 
@@ -106,7 +106,7 @@ fi
 
 step "make compose-rebuild keeps the registration"
 $MAKE compose-rebuild
-got=$(status GET /me)
+got=$(status GET /api/me)
 [ "$got" = 200 ] || fail "GET /me answered $got after rebuild: $(cat "$SMOKE_DIR/body")"
 
 if [ "$UP" = up-observability ]; then

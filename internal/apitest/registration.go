@@ -40,7 +40,7 @@ func (a *App) Register(t testing.TB, issuer, subject string) string {
 	t.Helper()
 
 	token := a.TokenFor(issuer, subject)
-	res := a.Post(t, "/registrations", token, map[string]string{"invitation_code": a.SeedInvitation(t)})
+	res := a.Post(t, "/api/registrations", token, map[string]string{"invitation_code": a.SeedInvitation(t)})
 
 	if res.Status != http.StatusCreated {
 		t.Fatalf("register %s %s: status %d; body: %s", issuer, subject, res.Status, res.Body)
