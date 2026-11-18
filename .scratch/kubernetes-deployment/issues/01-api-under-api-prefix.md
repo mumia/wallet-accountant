@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `api/openapi.yaml`: `servers` is `/api`; vacuum with the Zalando ruleset still passes
 - [ ] The HTTP server mounts the ogen handler under `/api`; anything outside it is 404 problem+json
