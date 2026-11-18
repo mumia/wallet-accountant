@@ -30,6 +30,7 @@ internal/tools/opencollection/  writes api/bruno from api/openapi.yaml
 compose.dev.yaml                development dependencies; deploy/dev/ holds their files
 compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secrets generator, PostgreSQL init,
                                 collector, Tempo and Grafana configuration, and the smoke check
+deploy/helm/wallet-accountant/  the Helm chart (ADR-0020); test/ holds its checks (`make lint-chart`)
 ```
 
 depguard rules in golangci-lint enforce the dependencies. `domain` imports nothing from `app`, `adapters` or `platform`. A context uses another context only through that context's `app` ports.
@@ -90,7 +91,8 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make smoke` | From nothing, `make up` and `make bootstrap` in a separate Compose project on other ports, redeem the code as a real Zitadel identity, check the code reached no log, then remove everything. `SMOKE_UP=up-observability` also checks Tempo, Prometheus and Loki through Grafana, and that the code is not in Loki |
 | **Build and quality** | |
 | `make generate` | Regenerate code from `api/openapi.yaml` (ogen), the Bruno collection in `api/bruno`, and SQL queries (sqlc) |
-| `make lint` | Run golangci-lint (including depguard) and vacuum with the Zalando ruleset |
+| `make lint` | Run golangci-lint (including depguard), vacuum with the Zalando ruleset, and `make lint-chart` |
+| `make lint-chart` | Check the Helm chart: `helm lint` and `helm template` with every combination of database mode, Zitadel setup and UI slot, the rejections of `values.schema.json`, and kubeconform. helm and kubeconform are built into `bin/` at pinned versions |
 | `make test` | Run the Decider and other unit tests |
 | `make test-integration` | Run the integration tests against PostgreSQL through testcontainers-go |
 | `make build` / `make docker-build` | Build the binary or the container image |
@@ -101,7 +103,7 @@ GitHub Actions runs `.github/workflows/ci.yaml` on every pull request and on pus
 
 | Job | Local command |
 |---|---|
-| `lint` | `make lint` |
+| `lint` | `make lint` (Go, the API contract and the Helm chart) |
 | `generated` | `make generate`, then `git diff --exit-code`: commit the regenerated code |
 | `tidy` | `go mod tidy`, then `git diff --exit-code go.mod go.sum` |
 | `test` | `make test` |

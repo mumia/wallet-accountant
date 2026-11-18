@@ -1,0 +1,299 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Wallet Accountant chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "nonEmpty": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "pattern": "^https?://[^\\s\"]+$" },
+    "path": { "type": "string", "pattern": "^/[^\\s\"]*$" },
+    "seconds": { "type": "string", "pattern": "^[0-9]+s$" },
+    "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string" },
+        "tag": { "type": "string" },
+        "pullPolicy": { "$ref": "#/definitions/pullPolicy" }
+      }
+    },
+    "requiredImage": {
+      "type": "object",
+      "properties": {
+        "repository": { "$ref": "#/definitions/nonEmpty" },
+        "tag": { "$ref": "#/definitions/nonEmpty" }
+      }
+    },
+    "secretKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "secretName": { "type": "string" },
+        "key": { "$ref": "#/definitions/nonEmpty" }
+      }
+    },
+    "namedSecretKey": {
+      "type": "object",
+      "properties": { "secretName": { "$ref": "#/definitions/nonEmpty" } }
+    },
+    "resources": { "type": "object" },
+    "probe": { "type": ["object", "null"] }
+  },
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "image": { "$ref": "#/definitions/image" },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": { "type": "object", "required": ["name"] }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runModes": {
+          "description": "[all], or [api, worker] to split the app (ADR-0009).",
+          "enum": [["all"], ["api", "worker"], ["worker", "api"]]
+        },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/definitions/resources" },
+        "extraEnv": { "type": "array", "items": { "type": "object", "required": ["name"] } },
+        "livenessProbe": { "$ref": "#/definitions/probe" },
+        "readinessProbe": { "$ref": "#/definitions/probe" },
+        "podAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    },
+    "migrate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["external", "managed"] },
+        "external": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ownerUrl": { "$ref": "#/definitions/secretKey" },
+            "appUrl": { "$ref": "#/definitions/secretKey" },
+            "readerUrl": { "$ref": "#/definitions/secretKey" }
+          }
+        },
+        "managed": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instances": { "type": "integer", "minimum": 1 },
+            "imageName": { "type": "string" },
+            "storage": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "size": { "$ref": "#/definitions/nonEmpty" },
+                "storageClass": { "type": "string" }
+              }
+            },
+            "resources": { "$ref": "#/definitions/resources" },
+            "sslMode": { "enum": ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"] }
+          }
+        }
+      },
+      "if": { "properties": { "mode": { "const": "external" } } },
+      "then": {
+        "properties": {
+          "external": {
+            "required": ["ownerUrl", "appUrl", "readerUrl"],
+            "properties": {
+              "ownerUrl": { "$ref": "#/definitions/namedSecretKey" },
+              "appUrl": { "$ref": "#/definitions/namedSecretKey" },
+              "readerUrl": { "$ref": "#/definitions/namedSecretKey" }
+            }
+          }
+        }
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issuer", "audience"],
+      "properties": {
+        "issuer": { "$ref": "#/definitions/url" },
+        "audience": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "clientIds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "web": { "type": "string", "pattern": "^[^\\s\"]*$" },
+            "apiClients": { "type": "string", "pattern": "^[^\\s\"]*$" }
+          }
+        },
+        "redirectPath": { "$ref": "#/definitions/path" },
+        "postLogoutRedirectPath": { "$ref": "#/definitions/path" },
+        "zitadelSetup": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "url": { "anyOf": [{ "const": "" }, { "$ref": "#/definitions/url" }] },
+            "patSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "key": { "$ref": "#/definitions/nonEmpty" }
+              }
+            },
+            "image": { "$ref": "#/definitions/image" },
+            "web": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "extraRedirectUris": { "type": "array", "items": { "$ref": "#/definitions/url" } },
+                "extraPostLogoutRedirectUris": { "type": "array", "items": { "$ref": "#/definitions/url" } },
+                "devMode": { "type": "boolean" }
+              }
+            },
+            "apiClients": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "redirectUris": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/url" } }
+              }
+            },
+            "tokenLifetimes": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "accessToken": { "$ref": "#/definitions/seconds" },
+                "idToken": { "$ref": "#/definitions/seconds" },
+                "refreshTokenIdle": { "$ref": "#/definitions/seconds" },
+                "refreshToken": { "$ref": "#/definitions/seconds" }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "resources": { "$ref": "#/definitions/resources" }
+          },
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "properties": {
+              "patSecret": { "required": ["name"], "properties": { "name": { "$ref": "#/definitions/nonEmpty" } } },
+              "image": { "$ref": "#/definitions/requiredImage" }
+            }
+          }
+        }
+      }
+    },
+    "trust": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "caConfigMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "key": { "$ref": "#/definitions/nonEmpty" }
+          }
+        }
+      }
+    },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/image" },
+        "exporters": { "type": "object", "additionalProperties": { "type": ["object", "null"] } },
+        "pipelines": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["traces", "metrics", "logs"],
+          "properties": {
+            "traces": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "metrics": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "logs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+          }
+        },
+        "resources": { "$ref": "#/definitions/resources" },
+        "externalEndpoint": { "anyOf": [{ "const": "" }, { "$ref": "#/definitions/url" }] }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hostname": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?\\.)*[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^$" },
+        "parentRefs": {
+          "type": "array",
+          "items": { "type": "object", "required": ["name"] }
+        },
+        "tls": { "type": "boolean" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": {
+        "required": ["hostname", "parentRefs"],
+        "properties": {
+          "hostname": { "minLength": 1 },
+          "parentRefs": { "minItems": 1 }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/image" },
+        "configPath": { "$ref": "#/definitions/path" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/definitions/resources" }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": { "properties": { "image": { "$ref": "#/definitions/requiredImage" } } }
+    },
+    "operatorPod": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["", "bootstrap", "rebuild"] }
+      }
+    },
+    "podSecurityContext": { "type": "object" },
+    "securityContext": { "type": "object" },
+    "global": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "description": "The UI needs the web app's client ID: from the Zitadel setup Job, or from oidc.clientIds.web.",
+      "if": {
+        "properties": {
+          "ui": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "oidc": {
+            "properties": { "zitadelSetup": { "properties": { "enabled": { "const": false } } } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "oidc": {
+            "properties": { "clientIds": { "required": ["web"], "properties": { "web": { "minLength": 1 } } } }
+          }
+        }
+      }
+    }
+  ]
+}

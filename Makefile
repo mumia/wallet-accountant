@@ -13,6 +13,17 @@ COMPOSE       := docker compose --env-file $(ENV_FILE)
 OBSERVABILITY := COLLECTOR_CONFIG=observability $(COMPOSE) --profile observability
 VACUUM        := go tool vacuum lint --ruleset api/zalando-ruleset.yaml --no-banner --no-style
 
+# The Helm chart's checks (deploy/helm/wallet-accountant). helm and kubeconform
+# are built into bin/ at pinned versions, not go.mod tools: their dependencies
+# would join the app's module graph. kubeconform reads the CloudNativePG and
+# Gateway API schemas from the CRDs catalog at a pinned commit.
+CHART               := deploy/helm/wallet-accountant
+HELM_VERSION        := v4.3.0
+KUBECONFORM_VERSION := v0.7.0
+HELM                := bin/helm-$(HELM_VERSION)/helm
+KUBECONFORM         := bin/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
+CRDS_CATALOG        := https://raw.githubusercontent.com/datreeio/CRDs-catalog/784ec895547a36e548e6810b41f27baade3a0890/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+
 # Development configuration (compose.dev.yaml). Override any of them on the
 # command line or in the environment.
 export WA_HTTP_ADDR                 ?= :8080
@@ -103,7 +114,19 @@ swagger: ## Open Swagger UI on api/openapi.yaml (dev-up starts it)
 generate: ## Regenerate the ogen server and the Bruno collection (api/bruno) from api/openapi.yaml
 	go generate ./...
 
-lint: lint-go lint-api ## Run golangci-lint (with depguard) and vacuum with the Zalando ruleset
+lint: lint-go lint-api lint-chart ## Run golangci-lint (with depguard), vacuum with the Zalando ruleset, and the chart checks
+
+lint-chart: $(HELM) $(KUBECONFORM) ## helm lint and helm template with every values combination, schema rejections, kubeconform
+	@mkdir -p bin/kubeconform-cache
+	HELM=$(abspath $(HELM)) KUBECONFORM=$(abspath $(KUBECONFORM)) \
+		KUBECONFORM_FLAGS="-cache $(abspath bin/kubeconform-cache) -schema-location default -schema-location $(CRDS_CATALOG)" \
+		go test -tags chart -count=1 ./$(CHART)/test/
+
+$(HELM):
+	GOBIN=$(abspath $(dir $(HELM))) go install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
+
+$(KUBECONFORM):
+	GOBIN=$(abspath $(dir $(KUBECONFORM))) go install github.com/yannh/kubeconform/cmd/kubeconform@$(KUBECONFORM_VERSION)
 
 lint-go:
 	go tool golangci-lint run ./...

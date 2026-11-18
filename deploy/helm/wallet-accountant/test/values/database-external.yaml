@@ -1,0 +1,9 @@
+database:
+  mode: external
+  external:
+    ownerUrl:
+      secretName: wa-db-owner
+    appUrl:
+      secretName: wa-db-app
+    readerUrl:
+      secretName: wa-db-reader

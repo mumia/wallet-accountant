@@ -1,0 +1,9 @@
+# What every install needs: the route and the OIDC issuer.
+route:
+  hostname: wallet.example.test
+  parentRefs:
+    - name: gateway
+      namespace: gateway-system
+      sectionName: https
+oidc:
+  issuer: https://auth.example.test

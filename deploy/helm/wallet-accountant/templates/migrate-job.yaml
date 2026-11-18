@@ -1,0 +1,60 @@
+{{- /*
+The migrate run mode before every install and upgrade (ADR-0019). The only
+workload with the owner URL: wa_owner owns the schema, and migrate sets the
+passwords of wa_app and wa_event_store_reader to those in their URLs.
+In managed mode, the database objects are earlier pre-install hooks, and the
+retries wait for the new cluster to accept connections.
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "wa.fullname" . }}-migrate
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    # The last run stays for its logs until the next one.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migrate.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrate.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "wa.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "wa.podSecurityContext" (list . 65532) | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "wa.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate"]
+          env:
+            - name: WA_OWNER_DATABASE_URL
+              valueFrom:
+                {{- include "wa.dbUrlRef" (list . "owner") | nindent 16 }}
+            {{- include "wa.appEnv" . | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- with .Values.migrate.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with (include "wa.caVolumeMounts" .) }}
+          volumeMounts:
+            {{- . | nindent 12 }}
+          {{- end }}
+      {{- with (include "wa.caVolumes" .) }}
+      volumes:
+        {{- . | nindent 8 }}
+      {{- end }}

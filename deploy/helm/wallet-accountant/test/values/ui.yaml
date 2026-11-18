@@ -1,0 +1,5 @@
+ui:
+  enabled: true
+  image:
+    repository: ghcr.io/mumia/wallet-accountant-ui
+    tag: 0.1.0

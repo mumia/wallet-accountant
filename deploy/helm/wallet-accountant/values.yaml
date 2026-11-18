@@ -1,0 +1,201 @@
+# Wallet Accountant (ADR-0020). README.md describes every value and the two
+# self-hosting paths; values.schema.json rejects bad values at install.
+
+# Overrides the release-derived names of every object.
+nameOverride: ""
+fullnameOverride: ""
+
+# The app's image: one binary whose run mode is its argument (ADR-0009).
+image:
+  repository: ghcr.io/mumia/wallet-accountant
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# The app's Deployments. The default is one Deployment running `all`. Set
+# runModes to [api, worker] to split it into an `api` and a `worker`
+# Deployment; only the `api` (or `all`) one serves HTTP.
+app:
+  runModes: [all]
+  replicas: 1
+  resources: {}
+  # Extra environment variables for every app container, migrate and the
+  # operator pods included.
+  extraEnv: []
+  # The app has no health endpoint; the probes check that it accepts
+  # connections on its HTTP port. Applied to `all` and `api` only.
+  livenessProbe:
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    tcpSocket:
+      port: http
+    periodSeconds: 5
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# The migrate run mode, as a pre-install and pre-upgrade hook Job (ADR-0019).
+# It is the only workload given the owner database URL.
+migrate:
+  # Retries cover a managed database that is still starting on first install.
+  backoffLimit: 10
+  activeDeadlineSeconds: 1800
+  resources: {}
+
+database:
+  # external: the three connection URLs come from existing Secrets (the
+  #   homelab's shared apps-db, ADR-0023).
+  # managed: the chart creates a single-tenant CloudNativePG Cluster with the
+  #   owner role, and generates the three URLs. Needs the CloudNativePG operator.
+  mode: external
+  external:
+    # Connection URL Secrets. The owner (wa_owner, with CREATEROLE and
+    # BYPASSRLS, ADR-0014) is used only by migrate, which also sets the
+    # passwords of wa_app and wa_event_store_reader to those in their URLs.
+    ownerUrl:
+      secretName: ""
+      key: url
+    appUrl:
+      secretName: ""
+      key: url
+    readerUrl:
+      secretName: ""
+      key: url
+  managed:
+    instances: 1
+    # The PostgreSQL image; empty lets the operator choose.
+    imageName: ""
+    storage:
+      size: 5Gi
+      # Empty uses the cluster's default storage class.
+      storageClass: ""
+    resources: {}
+    # sslmode in the generated URLs. CloudNativePG serves TLS by default.
+    sslMode: require
+
+oidc:
+  # The issuer the app verifies tokens against (WA_OIDC_ISSUER). Required.
+  issuer: ""
+  # The audience the app requires (WA_OIDC_AUDIENCE). With zitadelSetup, the
+  # ID of the Zitadel project the Job creates.
+  audience: wallet-accountant
+  # With zitadelSetup off: the client IDs of the browser UI's app and of the
+  # public app API clients (the Bruno collection) sign in with.
+  clientIds:
+    web: ""
+    apiClients: ""
+  # Paths on the route's host that the UI registers with the IdP
+  # (docs/architecture/ui-contract.md).
+  redirectPath: /auth/callback
+  postLogoutRedirectPath: /
+  # The Zitadel setup Job (ADR-0022): a post-install and post-upgrade hook
+  # that creates or updates the project (ID = audience), `api-clients` and
+  # `web`, and sets 15-minute access tokens. It writes the generated client
+  # IDs to the <fullname>-oidc ConfigMap.
+  zitadelSetup:
+    enabled: false
+    # The Zitadel API's URL. Defaults to the issuer.
+    url: ""
+    # A personal access token of a Zitadel administrator (IAM owner: the
+    # token lifetimes are instance settings).
+    patSecret:
+      name: ""
+      key: pat
+    image:
+      repository: curlimages/curl
+      tag: 8.17.0
+      pullPolicy: IfNotPresent
+    # Redirect URIs registered on top of https://<route.hostname><path>,
+    # such as a UI dev server's. http:// URIs need devMode.
+    web:
+      extraRedirectUris: []
+      extraPostLogoutRedirectUris: []
+      devMode: false
+    apiClients:
+      redirectUris:
+        - https://oauth.usebruno.com/callback
+        - http://localhost/oauth/callback
+    tokenLifetimes:
+      accessToken: 900s
+      idToken: 43200s
+      refreshTokenIdle: 2592000s
+      refreshToken: 7776000s
+    backoffLimit: 5
+    resources: {}
+
+# An extra CA certificate (PEM) trusted by the app, migrate and the Zitadel
+# setup Job, such as the local mkcert CA, so they reach an issuer whose
+# certificate it signed. The setup Job trusts only this CA when it is set.
+trust:
+  caConfigMap:
+    name: ""
+    key: ca.crt
+
+# The OpenTelemetry Collector the app exports to (ADR-0016). By default it
+# accepts every signal and discards it.
+collector:
+  enabled: true
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: 0.162.0
+    pullPolicy: IfNotPresent
+  # Exporters, as in the collector's configuration.
+  exporters:
+    nop: {}
+  # The exporters each signal goes to.
+  pipelines:
+    traces: [nop]
+    metrics: [nop]
+    logs: [nop]
+  resources: {}
+  # Without the collector, where the app sends OTLP over HTTP.
+  externalEndpoint: ""
+
+# The Gateway API route for the app's host (ADR-0021): /api to the app,
+# every other path to the UI when ui.enabled.
+route:
+  enabled: true
+  hostname: ""
+  # Gateways to attach to. The certificate is the Gateway listener's;
+  # pick the HTTPS listener with sectionName.
+  parentRefs: []
+  # Whether the host is served over HTTPS; sets the scheme of the URIs the
+  # UI registers with the IdP.
+  tls: true
+  annotations: {}
+
+# The UI slot (docs/architecture/ui-contract.md), off until a UI image meets
+# the contract.
+ui:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Where the image reads its runtime config.json; the chart mounts it there.
+  configPath: /srv/config.json
+  replicas: 1
+  resources: {}
+
+# Renders one operator pod (bootstrap or rebuild) as JSON, for
+# `kubectl run --overrides` (README.md, "Operator commands"). Never set it in
+# an install's values.
+operatorPod:
+  mode: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
