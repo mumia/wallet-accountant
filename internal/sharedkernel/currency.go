@@ -1,8 +1,10 @@
 package sharedkernel
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -32,6 +34,18 @@ func ParseCurrency(code string) (Currency, error) {
 	}
 
 	return Currency{code: code, decimals: decimals}, nil
+}
+
+// Currencies returns every currency ParseCurrency accepts, sorted by code.
+func Currencies() []Currency {
+	list := make([]Currency, 0, len(currencies))
+	for code, decimals := range currencies {
+		list = append(list, Currency{code: code, decimals: decimals})
+	}
+
+	slices.SortFunc(list, func(a, b Currency) int { return cmp.Compare(a.code, b.code) })
+
+	return list
 }
 
 // currencies maps every known code to its decimal places: the ISO 4217

@@ -11,6 +11,9 @@ import (
 )
 
 var (
+	rn28AllowedHeaders = map[string]string{
+		"GET": "Authorization",
+	}
 	rn20AllowedHeaders = map[string]string{
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type,Idempotency-Key",
@@ -29,10 +32,10 @@ var (
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
-	rn41AllowedHeaders = map[string]string{
+	rn42AllowedHeaders = map[string]string{
 		"PUT": "Authorization,Content-Type",
 	}
-	rn28AllowedHeaders = map[string]string{
+	rn29AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
 	rn15AllowedHeaders = map[string]string{
@@ -51,14 +54,14 @@ var (
 	rn9AllowedHeaders = map[string]string{
 		"PATCH": "Authorization,Content-Type",
 	}
-	rn33AllowedHeaders = map[string]string{
+	rn34AllowedHeaders = map[string]string{
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
-	rn37AllowedHeaders = map[string]string{
+	rn38AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type,Idempotency-Key",
 	}
-	rn44AllowedHeaders = map[string]string{
+	rn45AllowedHeaders = map[string]string{
 		"POST": "Authorization,Idempotency-Key",
 	}
 	rn5AllowedHeaders = map[string]string{
@@ -70,16 +73,16 @@ var (
 	rn26AllowedHeaders = map[string]string{
 		"POST": "Authorization,Idempotency-Key",
 	}
-	rn29AllowedHeaders = map[string]string{
+	rn30AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
-	rn36AllowedHeaders = map[string]string{
+	rn37AllowedHeaders = map[string]string{
 		"POST": "Authorization,Idempotency-Key",
 	}
 	rn11AllowedHeaders = map[string]string{
 		"PATCH": "Authorization,Content-Type",
 	}
-	rn38AllowedHeaders = map[string]string{
+	rn39AllowedHeaders = map[string]string{
 		"POST": "Authorization,Idempotency-Key",
 	}
 	rn25AllowedHeaders = map[string]string{
@@ -141,6 +144,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			switch elem[0] {
+			case 'c': // Prefix: "currencies"
+
+				if l := len("currencies"); len(elem) >= l && elem[0:l] == "currencies" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					// Leaf node.
+					switch r.Method {
+					case "GET":
+						s.handleListCurrenciesRequest([0]string{}, elemIsEscaped, w, r)
+					default:
+						s.notAllowed(w, r, notAllowedParams{
+							allowedMethods: "GET",
+							allowedHeaders: rn28AllowedHeaders,
+							acceptPost:     "",
+							acceptPatch:    "",
+						})
+					}
+
+					return
+				}
+
 			case 'h': // Prefix: "households"
 
 				if l := len("households"); len(elem) >= l && elem[0:l] == "households" {
@@ -365,7 +393,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 													default:
 														s.notAllowed(w, r, notAllowedParams{
 															allowedMethods: "PUT",
-															allowedHeaders: rn41AllowedHeaders,
+															allowedHeaders: rn42AllowedHeaders,
 															acceptPost:     "",
 															acceptPatch:    "",
 														})
@@ -397,7 +425,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 											default:
 												s.notAllowed(w, r, notAllowedParams{
 													allowedMethods: "GET",
-													allowedHeaders: rn28AllowedHeaders,
+													allowedHeaders: rn29AllowedHeaders,
 													acceptPost:     "",
 													acceptPatch:    "",
 												})
@@ -633,7 +661,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "GET,POST",
-												allowedHeaders: rn33AllowedHeaders,
+												allowedHeaders: rn34AllowedHeaders,
 												acceptPost:     "multipart/form-data",
 												acceptPatch:    "",
 											})
@@ -673,7 +701,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 												default:
 													s.notAllowed(w, r, notAllowedParams{
 														allowedMethods: "POST",
-														allowedHeaders: rn37AllowedHeaders,
+														allowedHeaders: rn38AllowedHeaders,
 														acceptPost:     "multipart/form-data",
 														acceptPatch:    "",
 													})
@@ -717,7 +745,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 												default:
 													s.notAllowed(w, r, notAllowedParams{
 														allowedMethods: "POST",
-														allowedHeaders: rn44AllowedHeaders,
+														allowedHeaders: rn45AllowedHeaders,
 														acceptPost:     "",
 														acceptPatch:    "",
 													})
@@ -872,7 +900,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								default:
 									s.notAllowed(w, r, notAllowedParams{
 										allowedMethods: "GET",
-										allowedHeaders: rn29AllowedHeaders,
+										allowedHeaders: rn30AllowedHeaders,
 										acceptPost:     "",
 										acceptPatch:    "",
 									})
@@ -921,7 +949,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "POST",
-												allowedHeaders: rn36AllowedHeaders,
+												allowedHeaders: rn37AllowedHeaders,
 												acceptPost:     "",
 												acceptPatch:    "",
 											})
@@ -989,7 +1017,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 									default:
 										s.notAllowed(w, r, notAllowedParams{
 											allowedMethods: "POST",
-											allowedHeaders: rn38AllowedHeaders,
+											allowedHeaders: rn39AllowedHeaders,
 											acceptPost:     "",
 											acceptPatch:    "",
 										})
@@ -1156,6 +1184,31 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 				break
 			}
 			switch elem[0] {
+			case 'c': // Prefix: "currencies"
+
+				if l := len("currencies"); len(elem) >= l && elem[0:l] == "currencies" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					// Leaf node.
+					switch method {
+					case "GET":
+						r.name = ListCurrenciesOperation
+						r.summary = "The known currencies"
+						r.operationID = "listCurrencies"
+						r.operationGroup = ""
+						r.pathPattern = "/currencies"
+						r.args = args
+						r.count = 0
+						return r, true
+					default:
+						return
+					}
+				}
+
 			case 'h': // Prefix: "households"
 
 				if l := len("households"); len(elem) >= l && elem[0:l] == "households" {

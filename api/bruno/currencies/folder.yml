@@ -1,0 +1,9 @@
+info:
+  name: Currencies
+  type: folder
+  seq: 2
+request:
+  auth: inherit
+docs:
+  content: Currencies Wallet Accountant knows, with their decimal places (ADR-0007)
+  type: text/markdown

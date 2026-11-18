@@ -1,0 +1,16 @@
+info:
+  name: The known currencies
+  type: http
+  seq: 1
+http:
+  method: GET
+  url: '{{baseUrl}}/currencies'
+  auth: inherit
+docs: |-
+  Lists every currency Wallet Accountant knows, sorted by code, with
+  the number of decimal places its amounts use (ADR-0007). This is
+  exactly the set of codes every currency field accepts; any other
+  code is refused. Any authenticated identity may call it, registered
+  or not.
+
+  Operation `listCurrencies`.

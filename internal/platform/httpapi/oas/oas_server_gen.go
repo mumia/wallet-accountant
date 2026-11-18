@@ -192,6 +192,14 @@ type Handler interface {
 	//
 	// GET /households/{household_id}/accounts/{account_id}/connections
 	ListConnections(ctx context.Context, params ListConnectionsParams) (ListConnectionsRes, error)
+	// ListCurrencies implements listCurrencies operation.
+	//
+	// Lists every currency Wallet Accountant knows, sorted by code, with the number of decimal places its
+	// amounts use (ADR-0007). This is exactly the set of codes every currency field accepts; any other
+	// code is refused. Any authenticated identity may call it, registered or not.
+	//
+	// GET /currencies
+	ListCurrencies(ctx context.Context) (ListCurrenciesRes, error)
 	// ListHouseholds implements listHouseholds operation.
 	//
 	// Lists the Households the caller is a member of. An unregistered caller gets 403 with the problem

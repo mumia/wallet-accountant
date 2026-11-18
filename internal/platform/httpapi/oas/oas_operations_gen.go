@@ -25,6 +25,7 @@ const (
 	ListAccountsOperation               OperationName = "ListAccounts"
 	ListCategoriesOperation             OperationName = "ListCategories"
 	ListConnectionsOperation            OperationName = "ListConnections"
+	ListCurrenciesOperation             OperationName = "ListCurrencies"
 	ListHouseholdsOperation             OperationName = "ListHouseholds"
 	ListImportedTransactionsOperation   OperationName = "ListImportedTransactions"
 	ListNotificationsOperation          OperationName = "ListNotifications"
