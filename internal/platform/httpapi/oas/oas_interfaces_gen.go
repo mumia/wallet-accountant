@@ -77,6 +77,10 @@ type ListConnectionsRes interface {
 	listConnectionsRes()
 }
 
+type ListCurrenciesRes interface {
+	listCurrenciesRes()
+}
+
 type ListHouseholdsRes interface {
 	listHouseholdsRes()
 }

@@ -34,3 +34,23 @@ func TestUnknownCurrenciesAreRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrenciesListsEveryKnownCurrencySortedByCode(t *testing.T) {
+	t.Parallel()
+
+	list := sharedkernel.Currencies()
+	if len(list) == 0 {
+		t.Fatal("Currencies() is empty")
+	}
+
+	for i, c := range list {
+		if i > 0 && list[i-1].Code() >= c.Code() {
+			t.Errorf("Currencies() not sorted: %s before %s", list[i-1].Code(), c.Code())
+		}
+
+		parsed, err := sharedkernel.ParseCurrency(c.Code())
+		if err != nil || parsed != c {
+			t.Errorf("ParseCurrency(%q) = %v, %v; want %v", c.Code(), parsed, err, c)
+		}
+	}
+}

@@ -302,6 +302,7 @@ type apiHandler struct {
 	*ledgerhttp.TransactionHandler
 	*ledgerhttp.MonthHandler
 	*ingestionhttp.StatementImportHandler
+	httpapi.CurrencyHandler
 	httpapi.Errors
 }
 

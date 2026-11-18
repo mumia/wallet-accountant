@@ -1173,7 +1173,54 @@ func (s *CsvMapping) SetColumns(val OptCsvColumns) {
 	s.Columns = val
 }
 
+// A currency and the number of decimal places its amounts use.
+// Ref: #/components/schemas/Currency
+type Currency struct {
+	Code CurrencyCode `json:"code"`
+	// How many decimal places the currency's amounts use.
+	DecimalPlaces int32 `json:"decimal_places"`
+}
+
+// GetCode returns the value of Code.
+func (s *Currency) GetCode() CurrencyCode {
+	return s.Code
+}
+
+// GetDecimalPlaces returns the value of DecimalPlaces.
+func (s *Currency) GetDecimalPlaces() int32 {
+	return s.DecimalPlaces
+}
+
+// SetCode sets the value of Code.
+func (s *Currency) SetCode(val CurrencyCode) {
+	s.Code = val
+}
+
+// SetDecimalPlaces sets the value of DecimalPlaces.
+func (s *Currency) SetDecimalPlaces(val int32) {
+	s.DecimalPlaces = val
+}
+
 type CurrencyCode string
+
+// The currencies Wallet Accountant knows.
+// Ref: #/components/schemas/CurrencyList
+type CurrencyList struct {
+	// The currencies, sorted by code.
+	Items []Currency `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *CurrencyList) GetItems() []Currency {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *CurrencyList) SetItems(val []Currency) {
+	s.Items = val
+}
+
+func (*CurrencyList) listCurrenciesRes() {}
 
 type DecimalText string
 
@@ -2664,6 +2711,8 @@ func (s *Problem) SetDetail(val OptString) {
 func (s *Problem) SetInstance(val OptString) {
 	s.Instance = val
 }
+
+func (*Problem) listCurrenciesRes() {}
 
 // ProblemStatusCode wraps Problem with StatusCode.
 type ProblemStatusCode struct {

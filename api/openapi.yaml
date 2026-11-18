@@ -21,6 +21,8 @@ security:
 tags:
   - name: Users
     description: The signed-in identity and its registration
+  - name: Currencies
+    description: Currencies Wallet Accountant knows, with their decimal places (ADR-0007)
   - name: Households
     description: Households, the only ownership and privacy boundary (ADR-0003)
   - name: Categories
@@ -96,6 +98,29 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /currencies:
+    get:
+      operationId: listCurrencies
+      summary: The known currencies
+      description: |
+        Lists every currency Wallet Accountant knows, sorted by code, with
+        the number of decimal places its amounts use (ADR-0007). This is
+        exactly the set of codes every currency field accepts; any other
+        code is refused. Any authenticated identity may call it, registered
+        or not.
+      tags:
+        - Currencies
+      responses:
+        '200':
+          description: The known currencies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrencyList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         default:
           $ref: '#/components/responses/Problem'
   /households:
@@ -2432,6 +2457,32 @@ components:
           example: 1234.56
         currency:
           $ref: '#/components/schemas/CurrencyCode'
+    Currency:
+      type: object
+      description: A currency and the number of decimal places its amounts use
+      required:
+        - code
+        - decimal_places
+      properties:
+        code:
+          $ref: '#/components/schemas/CurrencyCode'
+        decimal_places:
+          type: integer
+          format: int32
+          minimum: 0
+          description: How many decimal places the currency's amounts use
+          example: 2
+    CurrencyList:
+      type: object
+      description: The currencies Wallet Accountant knows
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The currencies, sorted by code
+          items:
+            $ref: '#/components/schemas/Currency'
     CurrencyCode:
       type: string
       description: A currency code, such as an ISO 4217 code
