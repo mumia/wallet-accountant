@@ -12,3 +12,7 @@ The backend is a single Go binary containing several bounded contexts (Household
 No mode other than `migrate` changes the schema. Migrations are forward-only, with no down migrations, and are written as expand/contract steps so the previous release keeps working against the new schema. Docker Compose runs `migrate` as a one-shot service before `all` starts, so self-hosters don't run anything by hand.
 
 We chose one binary because that suits self-hosting (ADR-0005). The run modes and context boundaries let the API and workers scale separately, or the contexts be split into services, if the app ever becomes a hosted service.
+
+## Status
+
+Accepted. The Compose parts are superseded by ADR-0019: `migrate` runs as a Helm hook Job before every install and upgrade (ADR-0020).

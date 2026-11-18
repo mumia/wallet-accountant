@@ -15,3 +15,7 @@ There are two Compose files, because developing and self-hosting need different 
 - **`compose.yaml`** (self-hosting) runs the app in `all` mode, `migrate` as a one-shot service, PostgreSQL, Zitadel and the OpenTelemetry Collector. Tempo, Prometheus, Loki and Grafana start only with `--profile observability`. Without that profile, the collector discards telemetry, so the exporter can stay on while a default install remains at five containers.
 
 We rejected a single Compose file with everything always running, because a household that only wants to track its money would run and store a full monitoring stack it may never open.
+
+## Status
+
+Accepted. The "Compose layout" section is superseded by ADR-0019: locally the Grafana stack is opt-in (`make local-up-observability`), and in production it is a platform component.
