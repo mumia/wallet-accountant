@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-human (the agent can write the code; applying it needs Proxmox, OVH, Tailscale, GitHub and 1Password access)
+**Status:** ready-for-agent
 
 - [ ] Runbook (written first), `infra/README.md`. Every manual step is listed in order, with the exact `op`/`garage` commands:
   - **1Password vault and service account**: create a **dedicated vault** (e.g. `homelab-infra`) that holds only the infra secrets. Create a **service account** with **read-only** access to **that vault only**; check that service accounts are available on the user's plan. OpenTofu's 1Password provider reads through it and never writes. Its token goes in the user's personal vault, not the dedicated one, and is passed as `OP_SERVICE_ACCOUNT_TOKEN` in the shell that runs `tofu`
@@ -18,3 +18,7 @@
 - [ ] Flux provider: `flux_bootstrap_git` against `clusters/prod` with a deploy key, and the SOPS age key Secret, read from 1Password
 - [ ] Existing host settings (pools, bridges) and existing VMs are only referenced, never imported
 - [ ] Destroy-and-recreate of the VM tested once: everything comes back through Flux
+
+## Comments
+
+- 2026-11-18 (orchestrator): the user asked for this ticket to be written as unapplied code in this PR. The agent writes and validates the code (`tofu validate`, `flux build`/`kustomize build`, dry runs) but applies nothing and uses no real credentials. Applying it, first runs and the destroy-and-recreate check stay with the user; after merge the ticket returns to `ready-for-human` for those steps.

@@ -4,7 +4,7 @@
 
 **Blocked by:** 05, 07, 09, 10
 
-**Status:** ready-for-human (needs production secrets and the first bootstrap)
+**Status:** ready-for-agent
 
 - [ ] cert-manager with the OVH DNS-01 webhook (check its maintenance first) and a wildcard certificate for `*.shire.migmar.eu`; staging issuer first, then production
 - [ ] `.sops.yaml` with the age recipient; every prod Secret encrypted. The list of what must also be in 1Password is in the env repo's README
@@ -12,3 +12,7 @@
 - [ ] Flux image automation: `ImageRepository` and `ImagePolicy` (semver) for the image and the chart; `ImageUpdateAutomation` commits to `main` of the env repo
 - [ ] Flux alerts to an ntfy.sh topic with an unguessable name through the generic webhook; check the message is readable, and add a transform if not
 - [ ] First run: bootstrap the Instance administrator with `make prod-bootstrap` (kubeconfig over Tailscale) and redeem it from Bruno
+
+## Comments
+
+- 2026-11-18 (orchestrator): the user asked for this ticket to be written as unapplied code in this PR. The agent writes and validates the code (`tofu validate`, `flux build`/`kustomize build`, dry runs) but applies nothing and uses no real credentials. Applying it, first runs and the destroy-and-recreate check stay with the user; after merge the ticket returns to `ready-for-human` for those steps.
