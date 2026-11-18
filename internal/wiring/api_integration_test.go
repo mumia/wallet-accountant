@@ -16,16 +16,26 @@ func TestUnknownRouteIsProblemJSON(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	res := app.Get(t, "/no-such-route", "")
+	res := app.Get(t, "/api/no-such-route", "")
 
 	res.AssertProblem(t, http.StatusNotFound, "about:blank")
+}
+
+// The API lives under /api, so the UI can own every other path of the same
+// origin (ADR-0021). An API path without the prefix is not the API.
+func TestAPIPathWithoutTheAPIPrefixIsNotFound(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+
+	app.Get(t, "/me", "").AssertProblem(t, http.StatusNotFound, "about:blank")
+	app.Get(t, "/api/me", "").AssertProblem(t, http.StatusUnauthorized, "about:blank")
 }
 
 func TestWrongMethodIsProblemJSONWithAllow(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	res := app.Do(t, http.MethodDelete, "/me", "", nil)
+	res := app.Do(t, http.MethodDelete, "/api/me", "", nil)
 
 	res.AssertProblem(t, http.StatusMethodNotAllowed, "about:blank")
 
@@ -38,7 +48,7 @@ func TestEveryRequestProducesALogRecordATraceAndMetrics(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	app.Get(t, "/me", "")
+	app.Get(t, "/api/me", "")
 
 	spans := app.Spans.GetSpans()
 	if len(spans) == 0 {
@@ -50,7 +60,7 @@ func TestEveryRequestProducesALogRecordATraceAndMetrics(t *testing.T) {
 	var logged bool
 
 	for _, rec := range app.Logs.Records(t) {
-		if rec["msg"] == "http request" && rec["trace_id"] == traceID && rec["url.path"] == "/me" {
+		if rec["msg"] == "http request" && rec["trace_id"] == traceID && rec["url.path"] == "/api/me" {
 			logged = true
 		}
 	}

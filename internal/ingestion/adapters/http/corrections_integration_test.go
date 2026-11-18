@@ -39,7 +39,7 @@ type listedTransaction struct {
 }
 
 func (f acceptFixture) transactionPath(id string) string {
-	return "/households/" + f.household + "/transactions/" + id
+	return "/api/households/" + f.household + "/transactions/" + id
 }
 
 func (f acceptFixture) setCategory(t *testing.T, transactionID, categoryID string) *apitest.Response {
@@ -72,7 +72,7 @@ func (f acceptFixture) discard(t *testing.T, description string) *apitest.Respon
 	t.Helper()
 
 	return f.app.Do(t, http.MethodPost,
-		"/households/"+f.household+"/imported-transactions/"+f.pending[description].ImportedTransactionID+"/discard",
+		"/api/households/"+f.household+"/imported-transactions/"+f.pending[description].ImportedTransactionID+"/discard",
 		f.token, nil)
 }
 
@@ -260,7 +260,7 @@ func TestReversingThenDiscarding(t *testing.T) {
 		t.Errorf("discarded salary = %+v", d)
 	}
 
-	f.app.Do(t, http.MethodPost, "/households/"+f.household+"/imported-transactions/0198f0a0-0000-7000-8000-000000000999/discard",
+	f.app.Do(t, http.MethodPost, "/api/households/"+f.household+"/imported-transactions/0198f0a0-0000-7000-8000-000000000999/discard",
 		f.token, nil).AssertProblem(t, http.StatusNotFound, "about:blank")
 }
 
@@ -279,7 +279,7 @@ func TestADiscardedRowIsLeftOutOfLaterBalanceChecks(t *testing.T) {
 		}
 	}
 
-	app.Do(t, http.MethodPost, "/households/"+f.household+"/imported-transactions/"+coffee+"/discard", f.token, nil).
+	app.Do(t, http.MethodPost, "/api/households/"+f.household+"/imported-transactions/"+coffee+"/discard", f.token, nil).
 		AssertJSON(t, http.StatusOK, &importedTransaction{})
 
 	// 510.50 - 1000.00 + 3000.00 (the coffee Discarded) + the file's coffee
@@ -395,11 +395,11 @@ func TestAnotherHouseholdCantCorrect(t *testing.T) {
 
 	// Bob through Alice's Household, and through his own with her IDs.
 	for _, household := range []string{alice.household, bob.household} {
-		path := "/households/" + household + "/transactions/" + salary.TransactionID
+		path := "/api/households/" + household + "/transactions/" + salary.TransactionID
 		app.Do(t, http.MethodPatch, path, bob.token, bytes.NewReader(raw)).
 			AssertProblem(t, http.StatusNotFound, "about:blank")
 		app.Do(t, http.MethodPost, path+"/reverse", bob.token, nil).AssertProblem(t, http.StatusNotFound, "about:blank")
-		app.Do(t, http.MethodPost, "/households/"+household+"/imported-transactions/"+coffee+"/discard", bob.token, nil).
+		app.Do(t, http.MethodPost, "/api/households/"+household+"/imported-transactions/"+coffee+"/discard", bob.token, nil).
 			AssertProblem(t, http.StatusNotFound, "about:blank")
 	}
 

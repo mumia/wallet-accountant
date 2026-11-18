@@ -38,7 +38,7 @@ func newHousehold(t *testing.T, app *apitest.App, token string) string {
 		HouseholdID string `json:"household_id"`
 	}
 
-	app.Post(t, "/households", token, map[string]string{"name": "Home", "base_currency": "EUR"}).
+	app.Post(t, "/api/households", token, map[string]string{"name": "Home", "base_currency": "EUR"}).
 		AssertJSON(t, http.StatusCreated, &created)
 
 	return created.HouseholdID
@@ -48,7 +48,7 @@ func addAccount(t *testing.T, app *apitest.App, token, household string, body ma
 	t.Helper()
 
 	var created account
-	app.Post(t, "/households/"+household+"/accounts", token, body).AssertJSON(t, http.StatusCreated, &created)
+	app.Post(t, "/api/households/"+household+"/accounts", token, body).AssertJSON(t, http.StatusCreated, &created)
 
 	return created
 }
@@ -72,7 +72,7 @@ func TestAddingAnAccountAndOpeningIt(t *testing.T) {
 	}
 
 	var got account
-	app.Get(t, "/households/"+household+"/accounts/"+created.AccountID, token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+household+"/accounts/"+created.AccountID, token).AssertJSON(t, http.StatusOK, &got)
 
 	if got != want {
 		t.Errorf("GET account = %+v, want %+v", got, want)
@@ -91,7 +91,7 @@ func TestAnAccountSurvivesARebuild(t *testing.T) {
 	app.Rebuild(t)
 
 	var got account
-	app.Get(t, "/households/"+household+"/accounts/"+created.AccountID, token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+household+"/accounts/"+created.AccountID, token).AssertJSON(t, http.StatusOK, &got)
 
 	if got != created {
 		t.Errorf("after rebuild = %+v, want %+v", got, created)
@@ -106,15 +106,15 @@ func TestAddingAnAccountTwiceWithOneIdempotencyKeyAddsOne(t *testing.T) {
 	body := map[string]string{"name": "Main", "kind": "BANK_ACCOUNT", "currency": "EUR", "start_date": "2026-01-01"}
 
 	var first, replay account
-	app.PostWithKey(t, "/households/"+household+"/accounts", token, "k1", body).AssertJSON(t, http.StatusCreated, &first)
-	app.PostWithKey(t, "/households/"+household+"/accounts", token, "k1", body).AssertJSON(t, http.StatusCreated, &replay)
+	app.PostWithKey(t, "/api/households/"+household+"/accounts", token, "k1", body).AssertJSON(t, http.StatusCreated, &first)
+	app.PostWithKey(t, "/api/households/"+household+"/accounts", token, "k1", body).AssertJSON(t, http.StatusCreated, &replay)
 
 	if replay != first {
 		t.Errorf("replay = %+v, want %+v", replay, first)
 	}
 
 	var got accountList
-	app.Get(t, "/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &got)
 
 	if len(got.Items) != 1 {
 		t.Errorf("accounts = %+v, want only the first", got.Items)
@@ -129,7 +129,7 @@ func TestListingTheHouseholdsAccounts(t *testing.T) {
 	other := newHousehold(t, app, token)
 
 	var empty accountList
-	app.Get(t, "/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &empty)
+	app.Get(t, "/api/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &empty)
 
 	if len(empty.Items) != 0 {
 		t.Fatalf("before adding any: %+v, want none", empty.Items)
@@ -147,7 +147,7 @@ func TestListingTheHouseholdsAccounts(t *testing.T) {
 	})
 
 	var got accountList
-	app.Get(t, "/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &got)
 
 	if !slices.Equal(got.Items, added) {
 		t.Errorf("GET accounts = %+v, want %+v", got.Items, added)
@@ -173,13 +173,13 @@ func TestAddingAnAccountIsRefused(t *testing.T) {
 			body := maps.Clone(valid)
 			maps.Copy(body, change)
 
-			app.Post(t, "/households/"+household+"/accounts", token, body).
+			app.Post(t, "/api/households/"+household+"/accounts", token, body).
 				AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-account")
 		})
 	}
 
 	var got accountList
-	app.Get(t, "/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+household+"/accounts", token).AssertJSON(t, http.StatusOK, &got)
 
 	if len(got.Items) != 0 {
 		t.Errorf("after refusals: %+v, want no Account", got.Items)
@@ -192,7 +192,7 @@ func TestAnOpeningBalanceCannotBeTyped(t *testing.T) {
 	token := app.Register(t, "https://issuer.example", "alice")
 	household := newHousehold(t, app, token)
 
-	res := app.Post(t, "/households/"+household+"/accounts", token, map[string]any{
+	res := app.Post(t, "/api/households/"+household+"/accounts", token, map[string]any{
 		"name": "Main", "kind": "BANK_ACCOUNT", "currency": "EUR", "start_date": "2026-01-01",
 		"opening_balance": map[string]any{"amount": 100, "currency": "EUR"},
 		"balance":         map[string]any{"amount": 100, "currency": "EUR"},
@@ -202,7 +202,7 @@ func TestAnOpeningBalanceCannotBeTyped(t *testing.T) {
 	res.AssertJSON(t, http.StatusCreated, &created)
 
 	var got account
-	app.Get(t, "/households/"+household+"/accounts/"+created.AccountID, token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/households/"+household+"/accounts/"+created.AccountID, token).AssertJSON(t, http.StatusOK, &got)
 
 	if !got.AwaitingFirstStatementImport || got.Balance != nil {
 		t.Errorf("account = %+v, want it awaiting its first Statement import with no balance", got)
@@ -222,27 +222,27 @@ func TestAnotherHouseholdsAccountsAre404(t *testing.T) {
 	})
 
 	t.Run("listing", func(t *testing.T) {
-		app.Get(t, "/households/"+alices+"/accounts", bob).AssertProblem(t, http.StatusNotFound, "about:blank")
+		app.Get(t, "/api/households/"+alices+"/accounts", bob).AssertProblem(t, http.StatusNotFound, "about:blank")
 	})
 
 	t.Run("opening", func(t *testing.T) {
-		app.Get(t, "/households/"+alices+"/accounts/"+created.AccountID, bob).
+		app.Get(t, "/api/households/"+alices+"/accounts/"+created.AccountID, bob).
 			AssertProblem(t, http.StatusNotFound, "about:blank")
 	})
 
 	t.Run("opening through the caller's own Household", func(t *testing.T) {
-		app.Get(t, "/households/"+bobs+"/accounts/"+created.AccountID, bob).
+		app.Get(t, "/api/households/"+bobs+"/accounts/"+created.AccountID, bob).
 			AssertProblem(t, http.StatusNotFound, "about:blank")
 	})
 
 	t.Run("adding", func(t *testing.T) {
-		app.Post(t, "/households/"+alices+"/accounts", bob, map[string]string{
+		app.Post(t, "/api/households/"+alices+"/accounts", bob, map[string]string{
 			"name": "Sneaky", "kind": "LOAN", "currency": "EUR", "start_date": "2026-01-01",
 		}).AssertProblem(t, http.StatusNotFound, "about:blank")
 	})
 
 	t.Run("an unknown Account", func(t *testing.T) {
-		app.Get(t, "/households/"+alices+"/accounts/"+bobs, alice).
+		app.Get(t, "/api/households/"+alices+"/accounts/"+bobs, alice).
 			AssertProblem(t, http.StatusNotFound, "about:blank")
 	})
 }

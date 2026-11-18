@@ -19,8 +19,8 @@ func TestReplayingCreateHouseholdReturnsTheStoredResponse(t *testing.T) {
 	token := app.Register(t, "https://issuer.example", "alice")
 	body := map[string]string{"name": "Home", "base_currency": "EUR"}
 
-	first := app.PostWithKey(t, "/households", token, "key-1", body)
-	replay := app.PostWithKey(t, "/households", token, "key-1", body)
+	first := app.PostWithKey(t, "/api/households", token, "key-1", body)
+	replay := app.PostWithKey(t, "/api/households", token, "key-1", body)
 
 	var created, replayed household
 	first.AssertJSON(t, http.StatusCreated, &created)
@@ -31,7 +31,7 @@ func TestReplayingCreateHouseholdReturnsTheStoredResponse(t *testing.T) {
 	}
 
 	var list householdList
-	app.Get(t, "/households", token).AssertJSON(t, http.StatusOK, &list)
+	app.Get(t, "/api/households", token).AssertJSON(t, http.StatusOK, &list)
 
 	if len(list.Items) != 1 {
 		t.Errorf("Households after a replay: %+v, want only %+v", list.Items, created)
@@ -50,13 +50,13 @@ func TestConcurrentRequestsWithOneKeyRunOnce(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Go(func() { responses[i] = app.PostWithKey(t, "/households", token, "double-click", body) })
+		wg.Go(func() { responses[i] = app.PostWithKey(t, "/api/households", token, "double-click", body) })
 	}
 
 	wg.Wait()
 
 	var list householdList
-	app.Get(t, "/households", token).AssertJSON(t, http.StatusOK, &list)
+	app.Get(t, "/api/households", token).AssertJSON(t, http.StatusOK, &list)
 
 	if len(list.Items) != 1 {
 		t.Fatalf("Households: %+v, want exactly one", list.Items)
@@ -83,14 +83,14 @@ func TestTheSameKeyWithADifferentBodyIsRefused(t *testing.T) {
 	app := apitest.Start(t)
 	token := app.Register(t, "https://issuer.example", "alice")
 
-	app.PostWithKey(t, "/households", token, "key-1", map[string]string{"name": "Home", "base_currency": "EUR"}).
+	app.PostWithKey(t, "/api/households", token, "key-1", map[string]string{"name": "Home", "base_currency": "EUR"}).
 		AssertJSON(t, http.StatusCreated, &household{})
 
-	app.PostWithKey(t, "/households", token, "key-1", map[string]string{"name": "Other", "base_currency": "EUR"}).
+	app.PostWithKey(t, "/api/households", token, "key-1", map[string]string{"name": "Other", "base_currency": "EUR"}).
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/idempotency-key-mismatch")
 
 	var list householdList
-	app.Get(t, "/households", token).AssertJSON(t, http.StatusOK, &list)
+	app.Get(t, "/api/households", token).AssertJSON(t, http.StatusOK, &list)
 
 	if len(list.Items) != 1 || list.Items[0].Name != "Home" {
 		t.Errorf("Households: %+v, want only Home", list.Items)
@@ -105,8 +105,8 @@ func TestKeysBelongToTheirCaller(t *testing.T) {
 	body := map[string]string{"name": "Home", "base_currency": "EUR"}
 
 	var alices, bobs household
-	app.PostWithKey(t, "/households", alice, "shared-key", body).AssertJSON(t, http.StatusCreated, &alices)
-	app.PostWithKey(t, "/households", bob, "shared-key", body).AssertJSON(t, http.StatusCreated, &bobs)
+	app.PostWithKey(t, "/api/households", alice, "shared-key", body).AssertJSON(t, http.StatusCreated, &alices)
+	app.PostWithKey(t, "/api/households", bob, "shared-key", body).AssertJSON(t, http.StatusCreated, &bobs)
 
 	if alices.HouseholdID == bobs.HouseholdID {
 		t.Errorf("Bob got Alice's stored response %+v", alices)
@@ -118,11 +118,11 @@ func TestARefusedRequestIsNotStored(t *testing.T) {
 	app := apitest.Start(t)
 	token := app.Register(t, "https://issuer.example", "alice")
 
-	app.PostWithKey(t, "/households", token, "key-1", map[string]string{"name": " ", "base_currency": "EUR"}).
+	app.PostWithKey(t, "/api/households", token, "key-1", map[string]string{"name": " ", "base_currency": "EUR"}).
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-household")
 
 	// Corrected and sent again with the same key, it runs.
-	app.PostWithKey(t, "/households", token, "key-1", map[string]string{"name": "Home", "base_currency": "EUR"}).
+	app.PostWithKey(t, "/api/households", token, "key-1", map[string]string{"name": "Home", "base_currency": "EUR"}).
 		AssertJSON(t, http.StatusCreated, &household{})
 }
 
@@ -133,13 +133,13 @@ func TestReplayingARegistrationReturnsTheStoredUser(t *testing.T) {
 	body := map[string]string{"invitation_code": app.SeedInvitation(t)}
 
 	var registered, replayed me
-	app.PostWithKey(t, "/registrations", token, "key-1", body).AssertJSON(t, http.StatusCreated, &registered)
-	app.PostWithKey(t, "/registrations", token, "key-1", body).AssertJSON(t, http.StatusCreated, &replayed)
+	app.PostWithKey(t, "/api/registrations", token, "key-1", body).AssertJSON(t, http.StatusCreated, &registered)
+	app.PostWithKey(t, "/api/registrations", token, "key-1", body).AssertJSON(t, http.StatusCreated, &replayed)
 
 	if replayed != registered {
 		t.Errorf("replay = %+v, want the stored %+v", replayed, registered)
 	}
 
 	// Without the key, the same request runs again and is refused.
-	app.Post(t, "/registrations", token, body).AssertProblem(t, http.StatusConflict, "/problems/already-registered")
+	app.Post(t, "/api/registrations", token, body).AssertProblem(t, http.StatusConflict, "/problems/already-registered")
 }

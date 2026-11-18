@@ -318,16 +318,16 @@ func TestVoidIsIdempotentAndScopedToTheHousehold(t *testing.T) {
 	bob.confirm(t, statement, "2500.00")
 
 	for _, path := range []string{
-		"/households/" + alice.household + "/connections/" + alice.connection + "/statement-imports/" + first.StatementImportID + "/void",
-		"/households/" + bob.household + "/connections/" + bob.connection + "/statement-imports/" + first.StatementImportID + "/void",
-		"/households/" + bob.household + "/connections/" + alice.connection + "/statement-imports/" + first.StatementImportID + "/void",
+		"/api/households/" + alice.household + "/connections/" + alice.connection + "/statement-imports/" + first.StatementImportID + "/void",
+		"/api/households/" + bob.household + "/connections/" + bob.connection + "/statement-imports/" + first.StatementImportID + "/void",
+		"/api/households/" + bob.household + "/connections/" + alice.connection + "/statement-imports/" + first.StatementImportID + "/void",
 	} {
 		app.Do(t, http.MethodPost, path, bob.token, nil).AssertProblem(t, http.StatusNotFound, "about:blank")
 	}
 
 	// Alice through another of her Connections.
 	other := alice.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()}).ConnectionID
-	app.Do(t, http.MethodPost, "/households/"+alice.household+"/connections/"+other+"/statement-imports/"+
+	app.Do(t, http.MethodPost, "/api/households/"+alice.household+"/connections/"+other+"/statement-imports/"+
 		first.StatementImportID+"/void", alice.token, nil).AssertProblem(t, http.StatusNotFound, "about:blank")
 	alice.void(t, "0198f0a0-0000-7000-8000-00000000dead").AssertProblem(t, http.StatusNotFound, "about:blank")
 

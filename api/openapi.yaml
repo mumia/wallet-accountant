@@ -14,8 +14,10 @@ info:
   x-api-id: 0b9c5a2e-6f0e-4d8a-9a51-3f3c2d7e8b41
   x-audience: external-partner
 servers:
-  - url: http://localhost:8080
-    description: Local development (`make run`)
+  - url: /api
+    description: |
+      The API, on the same origin as the UI (ADR-0021). In development
+      (`make run`) that is http://localhost:8080/api.
 security:
   - bearer_auth: []
 tags:

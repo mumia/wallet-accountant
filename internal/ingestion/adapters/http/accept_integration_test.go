@@ -48,7 +48,7 @@ func newAcceptFixture(t *testing.T, app *apitest.App, subject string) acceptFixt
 }
 
 func (f acceptFixture) acceptPath(description string) string {
-	return "/households/" + f.household + "/imported-transactions/" + f.pending[description].ImportedTransactionID + "/accept"
+	return "/api/households/" + f.household + "/imported-transactions/" + f.pending[description].ImportedTransactionID + "/accept"
 }
 
 // accept Accepts the pending row with the description; a nil body sends
@@ -80,7 +80,7 @@ func (f acceptFixture) categories(t *testing.T) map[string]category {
 		Items []category `json:"items"`
 	}
 
-	f.app.Get(t, "/households/"+f.household+"/categories", f.token).AssertJSON(t, http.StatusOK, &tree)
+	f.app.Get(t, "/api/households/"+f.household+"/categories", f.token).AssertJSON(t, http.StatusOK, &tree)
 
 	byName := map[string]category{}
 
@@ -100,7 +100,7 @@ func (f acceptFixture) createCategory(t *testing.T, name, kind string) string {
 	t.Helper()
 
 	var c category
-	f.app.Post(t, "/households/"+f.household+"/categories", f.token, map[string]any{"name": name, "kind": kind}).
+	f.app.Post(t, "/api/households/"+f.household+"/categories", f.token, map[string]any{"name": name, "kind": kind}).
 		AssertJSON(t, http.StatusCreated, &c)
 
 	return c.CategoryID
@@ -240,7 +240,7 @@ func TestAcceptingIsRefused(t *testing.T) {
 		assertMoney(t, "balance", *got.Balance, "-489.50")
 	}
 
-	f.app.Do(t, http.MethodPost, "/households/"+f.household+"/imported-transactions/0198f0a0-0000-7000-8000-000000000999/accept",
+	f.app.Do(t, http.MethodPost, "/api/households/"+f.household+"/imported-transactions/0198f0a0-0000-7000-8000-000000000999/accept",
 		f.token, nil).AssertProblem(t, http.StatusNotFound, "about:blank")
 }
 
@@ -335,7 +335,7 @@ func TestAnotherHouseholdCantAccept(t *testing.T) {
 
 	// Bob through Alice's Household, and through his own with her IDs.
 	for _, household := range []string{alice.household, bob.household} {
-		app.Post(t, "/households/"+household+"/imported-transactions/"+salary+"/accept", bob.token, map[string]any{}).
+		app.Post(t, "/api/households/"+household+"/imported-transactions/"+salary+"/accept", bob.token, map[string]any{}).
 			AssertProblem(t, http.StatusNotFound, "about:blank")
 	}
 
@@ -346,7 +346,7 @@ func TestAnotherHouseholdCantAccept(t *testing.T) {
 	alice.accepted(t, "Salary", nil)
 
 	for _, household := range []string{alice.household, bob.household} {
-		path := "/households/" + household + "/accounts/" + alice.account
+		path := "/api/households/" + household + "/accounts/" + alice.account
 		app.Get(t, path+"/transactions", bob.token).AssertProblem(t, http.StatusNotFound, "about:blank")
 		app.Get(t, path+"/imported-transactions?state=ACCEPTED", bob.token).
 			AssertProblem(t, http.StatusNotFound, "about:blank")

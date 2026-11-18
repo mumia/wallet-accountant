@@ -25,7 +25,7 @@ func TestRedeemingASeededInvitationRegistersTheCaller(t *testing.T) {
 	code := app.SeedInvitation(t)
 	token := app.TokenFor("https://issuer.example", "subject-1")
 
-	res := app.Post(t, "/registrations", token, map[string]string{"invitation_code": code})
+	res := app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code})
 
 	var registered me
 	res.AssertJSON(t, http.StatusCreated, &registered)
@@ -35,7 +35,7 @@ func TestRedeemingASeededInvitationRegistersTheCaller(t *testing.T) {
 	}
 
 	var got me
-	app.Get(t, "/me", token).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/me", token).AssertJSON(t, http.StatusOK, &got)
 
 	if got != registered {
 		t.Errorf("GET /me = %+v, want %+v", got, registered)
@@ -49,7 +49,7 @@ func TestEveryInvalidCodeGetsTheSameGenericError(t *testing.T) {
 	expired := app.SeedInvitationWith(t, domain.RoleUser, time.Now().Add(-time.Minute))
 
 	used := app.SeedInvitation(t)
-	app.Post(t, "/registrations", app.TokenFor("https://issuer.example", "first"),
+	app.Post(t, "/api/registrations", app.TokenFor("https://issuer.example", "first"),
 		map[string]string{"invitation_code": used}).AssertJSON(t, http.StatusCreated, &me{})
 
 	superseded, err := app.RunBootstrap(t)
@@ -71,11 +71,11 @@ func TestEveryInvalidCodeGetsTheSameGenericError(t *testing.T) {
 	} {
 		token := app.TokenFor("https://issuer.example", "caller-with-"+name+"-code")
 
-		p := app.Post(t, "/registrations", token, map[string]string{"invitation_code": code}).
+		p := app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code}).
 			AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-invitation")
 		details = append(details, p)
 
-		app.Get(t, "/me", token).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
+		app.Get(t, "/api/me", token).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
 	}
 
 	for _, p := range details[1:] {
@@ -90,7 +90,7 @@ func TestAnEmptyCodeIsABadRequest(t *testing.T) {
 	app := apitest.Start(t)
 	token := app.TokenFor("https://issuer.example", "subject-1")
 
-	app.Post(t, "/registrations", token, map[string]string{"invitation_code": ""}).
+	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": ""}).
 		AssertProblem(t, http.StatusBadRequest, "about:blank")
 }
 
@@ -98,7 +98,7 @@ func TestRedeemingWithoutATokenIsUnauthorized(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	app.Post(t, "/registrations", "", map[string]string{"invitation_code": app.SeedInvitation(t)}).
+	app.Post(t, "/api/registrations", "", map[string]string{"invitation_code": app.SeedInvitation(t)}).
 		AssertProblem(t, http.StatusUnauthorized, "about:blank")
 }
 
@@ -108,21 +108,21 @@ func TestARegisteredUserCannotRedeemASecondInvitation(t *testing.T) {
 	token := app.Register(t, "https://issuer.example", "subject-1")
 
 	var before me
-	app.Get(t, "/me", token).AssertJSON(t, http.StatusOK, &before)
+	app.Get(t, "/api/me", token).AssertJSON(t, http.StatusOK, &before)
 
 	second := app.SeedInvitation(t)
-	app.Post(t, "/registrations", token, map[string]string{"invitation_code": second}).
+	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": second}).
 		AssertProblem(t, http.StatusConflict, "/problems/already-registered")
 
 	var after me
-	app.Get(t, "/me", token).AssertJSON(t, http.StatusOK, &after)
+	app.Get(t, "/api/me", token).AssertJSON(t, http.StatusOK, &after)
 
 	if after != before {
 		t.Errorf("GET /me after the refused redemption = %+v, want %+v", after, before)
 	}
 
 	// The refused redemption left the second code unused.
-	app.Post(t, "/registrations", app.TokenFor("https://issuer.example", "subject-2"),
+	app.Post(t, "/api/registrations", app.TokenFor("https://issuer.example", "subject-2"),
 		map[string]string{"invitation_code": second}).AssertJSON(t, http.StatusCreated, &me{})
 }
 
@@ -143,7 +143,7 @@ func TestConcurrentRedemptionsOfOneCodeAdmitOneIdentity(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range callers {
 		wg.Go(func() {
-			statuses[i] = app.Post(t, "/registrations", tokens[i], map[string]string{"invitation_code": code}).Status
+			statuses[i] = app.Post(t, "/api/registrations", tokens[i], map[string]string{"invitation_code": code}).Status
 		})
 	}
 
@@ -156,9 +156,9 @@ func TestConcurrentRedemptionsOfOneCodeAdmitOneIdentity(t *testing.T) {
 		case http.StatusCreated:
 			registered++
 
-			app.Get(t, "/me", tokens[i]).AssertJSON(t, http.StatusOK, &me{})
+			app.Get(t, "/api/me", tokens[i]).AssertJSON(t, http.StatusOK, &me{})
 		case http.StatusUnprocessableEntity:
-			app.Get(t, "/me", tokens[i]).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
+			app.Get(t, "/api/me", tokens[i]).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
 		default:
 			t.Errorf("racer %d: status %d, want 201 or 422", i, status)
 		}
@@ -179,7 +179,7 @@ func TestConcurrentRedemptionsOfTwoCodesByOneIdentityRegisterItOnce(t *testing.T
 	var wg sync.WaitGroup
 	for i, code := range codes {
 		wg.Go(func() {
-			statuses[i] = app.Post(t, "/registrations", token, map[string]string{"invitation_code": code}).Status
+			statuses[i] = app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code}).Status
 		})
 	}
 
@@ -198,12 +198,12 @@ func TestUsersSurviveARebuild(t *testing.T) {
 	token := app.Register(t, "https://issuer.example", "subject-1")
 
 	var before me
-	app.Get(t, "/me", token).AssertJSON(t, http.StatusOK, &before)
+	app.Get(t, "/api/me", token).AssertJSON(t, http.StatusOK, &before)
 
 	app.Rebuild(t)
 
 	var after me
-	app.Get(t, "/me", token).AssertJSON(t, http.StatusOK, &after)
+	app.Get(t, "/api/me", token).AssertJSON(t, http.StatusOK, &after)
 
 	if after != before {
 		t.Errorf("GET /me after rebuild = %+v, want %+v", after, before)

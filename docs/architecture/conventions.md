@@ -34,6 +34,11 @@ compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secre
 
 depguard rules in golangci-lint enforce the dependencies. `domain` imports nothing from `app`, `adapters` or `platform`. A context uses another context only through that context's `app` ports.
 
+## API paths
+
+- Every API path starts with `/api` (`/api/me`, `/api/households/{household_id}/accounts`, …), on the same origin as the UI (ADR-0021). The contract's only `servers` entry is `/api`; `httpapi.PathPrefix` mounts the ogen server there, and any path outside it is a 404 `application/problem+json`. In development the API is at `http://localhost:8080/api`.
+- Problem types stay origin-relative URIs without the prefix: `/problems/registration-required`, not `/api/problems/registration-required`. RFC 9457 resolves them against the request URI, so `/problems/registration-required` in an answer to `https://wallet.example/api/me` is `https://wallet.example/problems/registration-required`, a path the UI owns (`docs/architecture/ui-contract.md`). A problem type is an identifier that clients compare as sent; it need not be dereferenceable, so the prefix move leaves every type unchanged and the UI may document them under `/problems/` later.
+
 ## Identifiers
 
 All aggregate and event IDs are UUIDv7. The application generates them, never the database, so a retried command produces the same IDs.

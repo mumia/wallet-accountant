@@ -23,7 +23,7 @@ type notification struct {
 }
 
 func (f fixture) notificationsPath() string {
-	return "/households/" + f.household + "/notifications"
+	return "/api/households/" + f.household + "/notifications"
 }
 
 func (f fixture) notifications(t *testing.T) []notification {
