@@ -1,0 +1,5 @@
+oidc:
+  zitadelSetup:
+    enabled: true
+    patSecret:
+      name: zitadel-setup-pat

@@ -1,0 +1,19 @@
+{{- /*
+The OIDC settings the UI's config.json and the Make targets read: issuer,
+audience and both client IDs. With the Zitadel setup Job, the Job writes this
+ConfigMap with the client IDs Zitadel generated, so the chart leaves it out.
+*/ -}}
+{{- if not .Values.oidc.zitadelSetup.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wa.oidcConfigMap" . }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+data:
+  issuer: {{ .Values.oidc.issuer | quote }}
+  audience: {{ .Values.oidc.audience | quote }}
+  web-client-id: {{ .Values.oidc.clientIds.web | quote }}
+  api-clients-client-id: {{ .Values.oidc.clientIds.apiClients | quote }}
+  config.json: {{ include "wa.uiConfig" (list . .Values.oidc.clientIds.web) | quote }}
+{{- end }}

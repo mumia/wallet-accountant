@@ -29,6 +29,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # Includes make lint-chart: helm lint and helm template of the chart with
+      # every combination of database mode, Zitadel setup and UI slot, the
+      # schema's rejections and kubeconform.
       - run: make lint
 
   generated:

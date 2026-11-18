@@ -1,0 +1,52 @@
+{{- /*
+An operator run mode (bootstrap or rebuild, ADR-0019) as a one-off Pod,
+rendered only with operatorPod.mode set and printed as JSON for
+`kubectl run --overrides` (README.md, "Operator commands"). kubectl merges
+containers by name, so the container is named after the pod, which must be
+called wallet-accountant-<mode>. It never gets the owner URL.
+*/ -}}
+{{- with .Values.operatorPod.mode }}
+{{- $root := $ }}
+{{- $name := printf "wallet-accountant-%s" . }}
+{{- $pod := include "wa.operatorPod" (list $root . $name) | fromYaml }}
+{{- $pod | toJson }}
+{{- end }}
+{{- define "wa.operatorPod" -}}
+{{- $root := index . 0 }}
+{{- $mode := index . 1 }}
+{{- $name := index . 2 }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.selectorLabels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $mode }}
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  {{- with $root.Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    {{- include "wa.podSecurityContext" (list $root 65532) | nindent 4 }}
+  containers:
+    - name: {{ $name }}
+      image: {{ include "wa.image" $root }}
+      imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+      args: [{{ $mode | quote }}]
+      stdin: true
+      env:
+        {{- include "wa.appEnv" $root | nindent 8 }}
+      securityContext:
+        {{- toYaml $root.Values.securityContext | nindent 8 }}
+      {{- with (include "wa.caVolumeMounts" $root) }}
+      volumeMounts:
+        {{- . | nindent 8 }}
+      {{- end }}
+  {{- with (include "wa.caVolumes" $root) }}
+  volumes:
+    {{- . | nindent 4 }}
+  {{- end }}
+{{- end }}
