@@ -302,7 +302,9 @@ check "the collector takes OTLP over HTTP on localhost:$LOCAL_OTLP_PORT" sh -c '
 
 # Operator commands: the code goes only to this terminal, and no pod is left.
 bootstrap_out=$($MAKE -s local-bootstrap 2>/dev/null) || bootstrap_out=
-code=$(echo "$bootstrap_out" | awk 'NF == 1 && length($1) > 16 {print $1; exit}')
+# The code is the only line that is a lone base64url word: the app's JSON log
+# lines can reach this output too, and are single words as well.
+code=$(echo "$bootstrap_out" | awk 'NF == 1 && length($1) > 16 && $1 ~ /^[A-Za-z0-9_-]+$/ {print $1; exit}')
 if [ -n "$code" ] && ! $KUBECTL -n $NS get pod wallet-accountant-bootstrap >/dev/null 2>&1; then
 	pass "make local-bootstrap prints an Invitation code and leaves no pod"
 else
