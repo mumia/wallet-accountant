@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Scaffold `infra/`, `platform/`, `apps/`, `clusters/{local,prod}`, `images.lock` and the README in `../wallet-accountant-deploy`. The user has already created it with its private GitHub remote (`mumia/wallet-accountant-deploy`, initial commit with a README and `.gitignore`). Build on that commit and ask before pushing
 - [ ] `platform/` has no reference to any app; `apps/` reaches it only through Flux `dependsOn`

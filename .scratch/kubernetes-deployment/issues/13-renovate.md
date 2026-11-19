@@ -4,7 +4,7 @@
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent (installing the GitHub App is the user's step)
+**Status:** claimed
 
 - [ ] `renovate.json` here: Go modules, GitHub Actions, the Dockerfile, the chart's dependencies. Dependabot config removed
 - [ ] `renovate.json` in the env repo: Flux HelmReleases and OCIRepositories, images in values, `images.lock` (a regex manager), k3s and Tailscale versions in cloud-init, OpenTofu providers
