@@ -85,10 +85,10 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make swagger` | Open Swagger UI on `api/openapi.yaml` (http://localhost:8082) |
 | **Local cluster** (k3d, ADR-0019; drives the env repo at `ENV_REPO`, default `../wallet-accountant-deploy`) | |
 | `make local-ca` | Once per Mac: create the mkcert CA and make the Mac trust it (asks for your password) |
-| `make local-up` / `make local-down` | Create the k3d cluster and its registry, install Flux, load the mkcert CA as cert-manager's CA issuer and reconcile the env repo's `clusters/local`; or delete the cluster (the registry's storage, `LOCAL_REGISTRY_DIR`, is kept). `LOCAL_HTTP_PORT` / `LOCAL_HTTPS_PORT` move Traefik off 80 / 443 when they are taken |
+| `make local-up` / `make local-down` | Create the k3d cluster and its registry, install Flux, load the mkcert CA as cert-manager's CA issuer and reconcile the env repo's `clusters/local`; or delete the cluster (the registry's storage, `LOCAL_REGISTRY_DIR`, is kept). Traefik is on the Mac's ports 18080 / 18443 (`LOCAL_HTTP_PORT` / `LOCAL_HTTPS_PORT`), so URLs are `https://<name>.localhost:18443`, Zitadel's issuer included |
 | `make local-deploy` | Push the env repo's working tree, committed or not, as an OCI artifact to the cluster's registry, and have Flux apply it |
-| `make local-check` | Check the running cluster: layout, registry storage, Flux following the artifact, the CA issuer, the Gateway, Headlamp with its Flux plugin, the CoreDNS rewrite |
-| `make local-headlamp-token` | Print a token to sign in to https://headlamp.localhost |
+| `make local-check` | Check the running cluster: layout, registry storage, Flux following the artifact, the CA issuer, the Gateway, Headlamp with its Flux plugin, the CoreDNS rewrite and port 18443 inside the cluster, `zitadel-db` and `apps-db` with the Wallet Accountant tenant, and Zitadel (issuer from the Mac and from a pod, v1 login, self-registration off, admin and machine user) |
+| `make local-headlamp-token` | Print a token to sign in to https://headlamp.localhost:18443 |
 | **Self-hosted** (`compose.yaml`; everything in Docker) | |
 | `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`), and every `make up` makes sure the Zitadel project with the ID `OIDC_AUDIENCE` exists (`deploy/zitadel/setup-project.sh`) |
 | `make up-observability` | Same as `make up`, plus Tempo, Prometheus, Loki and Grafana |
