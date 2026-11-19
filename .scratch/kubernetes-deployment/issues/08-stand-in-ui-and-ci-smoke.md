@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `deploy/helm/wallet-accountant/test/stand-in-ui/`: an image meeting the UI contract (nginx, port 8080, `/healthz`, SPA fallback, reads `/config.json`) with one page that signs in through the `web` app (PKCE) and shows `/api/me`'s response. It is never published
 - [ ] A browser test (Playwright, headless) drives the stand-in UI's sign-in against the local Zitadel and checks `/api/me` answers. It also checks that the access token's `aud` contains the app's audience, and that sign-out ends the Zitadel session
