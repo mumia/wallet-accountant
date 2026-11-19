@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Deployment running `all`, 1 replica, non-root, read-only root filesystem, liveness and readiness probes; values allow splitting into `api` and `worker` later
 - [ ] `migrate` as a `pre-install`/`pre-upgrade` hook Job; only this Job gets the owner database credentials (`WA_OWNER_DATABASE_URL`)
