@@ -18,7 +18,10 @@ VACUUM        := go tool vacuum lint --ruleset api/zalando-ruleset.yaml --no-ban
 # would join the app's module graph. kubeconform reads the CloudNativePG and
 # Gateway API schemas from the CRDs catalog at a pinned commit.
 CHART               := deploy/helm/wallet-accountant
+# The `# renovate:` comments let Renovate bump these (renovate.json).
+# renovate: datasource=go depName=helm.sh/helm/v4
 HELM_VERSION        := v4.3.0
+# renovate: datasource=go depName=github.com/yannh/kubeconform
 KUBECONFORM_VERSION := v0.7.0
 HELM                := bin/helm-$(HELM_VERSION)/helm
 KUBECONFORM         := bin/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
@@ -50,6 +53,7 @@ LOCAL_KUBECTL       := kubectl --context k3d-$(LOCAL_CLUSTER)
 LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
 export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
 
+.PHONY: renovate-check
 .PHONY: local-ca local-up local-down local-push local-deploy local-wait local-check local-headlamp-token
 .PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api build test test-integration
 
@@ -212,3 +216,22 @@ test: ## Run the unit tests
 
 test-integration: ## Run the integration tests against PostgreSQL through testcontainers-go
 	go test -tags integration -count=1 ./...
+
+# Renovate (ADR-0020) keeps every pinned version current in this repo and the
+# env repo. Each list names, per manager, one dependency it must find, so a
+# config change that stops a manager from matching fails here.
+RENOVATE_EXPECT := \
+	gomod:go gomod:github.com/shopspring/decimal \
+	github-actions:actions/checkout github-actions:actions/setup-go \
+	dockerfile:golang dockerfile:gcr.io/distroless/static-debian13 \
+	helm-values:otel/opentelemetry-collector-contrib helm-values:curlimages/curl \
+	regex:helm.sh/helm/v4 regex:github.com/yannh/kubeconform regex:golang.org/x/vuln
+RENOVATE_ENV_EXPECT := \
+	flux:quay.io/jetstack/charts/cert-manager flux:headlamp \
+	kubernetes:ghcr.io/headlamp-k8s/headlamp-plugin-flux kubernetes:rancher/k3s \
+	regex:quay.io/jetstack/charts/cert-manager regex:headlamp \
+	regex:rancher/k3s regex:ghcr.io/headlamp-k8s/headlamp-plugin-flux
+
+renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
+	deploy/renovate/check.sh . $(RENOVATE_EXPECT)
+	deploy/renovate/check.sh $(ENV_REPO) $(RENOVATE_ENV_EXPECT)
