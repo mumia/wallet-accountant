@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Image `ghcr.io/mumia/wallet-accountant`: `vX.Y.Z` on tags, `main-<sha>` on `main`; multi-arch only if the Proxmox VM needs it (amd64 expected)
 - [ ] Chart `oci://ghcr.io/mumia/charts/wallet-accountant`, with version and appVersion from the tag
