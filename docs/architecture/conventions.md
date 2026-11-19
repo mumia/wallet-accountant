@@ -27,7 +27,7 @@ internal/platform/              event store, Decider runtime, codec, Watermill w
 internal/wiring/                composition root: builds every context and runs a run mode
 internal/apitest/               HTTP test harness: the real app in-process against testcontainers PostgreSQL
 internal/tools/opencollection/  writes api/bruno from api/openapi.yaml
-deploy/local/                   the local k3d cluster's check (`make local-check`); the cluster itself is in the env repo (ADR-0019)
+deploy/local/                   the local k3d cluster's check (`make local-check`), artifact staging and operator pods; the cluster itself is in the env repo (ADR-0019)
 compose.dev.yaml                development dependencies; deploy/dev/ holds their files
 compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secrets generator, PostgreSQL init,
                                 collector, Tempo and Grafana configuration, and the smoke check
@@ -74,21 +74,22 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 
 | Target | What it does |
 |---|---|
-| **Development** (`compose.dev.yaml`; the app runs on the host) | |
-| `make dev-up` / `make dev-down` | Start or stop PostgreSQL, Zitadel, Swagger UI and `otel-lgtm`. `dev-up` also creates the Zitadel project `wallet-accountant` and its public application `api-clients` (`deploy/zitadel/setup-project.sh`), and writes that application's client ID to `api/bruno/.env` |
+| **Debug mode** (ADR-0019; the app runs on the host against the local cluster's `apps-db` on `localhost:5432`, its collector on `localhost:4318` and Zitadel at `https://auth.localhost:18443`) | |
+| `make dev-up` / `make dev-down` | The former Compose dependencies (`compose.dev.yaml`), until they are removed: start or stop PostgreSQL, Zitadel, Swagger UI and `otel-lgtm`. The run targets no longer use them. `dev-up` also creates the Zitadel project `wallet-accountant` and its public application `api-clients` (`deploy/zitadel/setup-project.sh`), and writes that application's client ID to `api/bruno/.env` |
 | `make dev-reset` | Delete the dev database and Zitadel data, then `dev-up` and `migrate`. Needed when the database roles change |
-| `make run` | Run the app in `all` mode against the dev dependencies |
+| `make run` | Run the app in `all` mode on the host against the local cluster |
 | `make run-api` / `make run-worker` | Run a single run mode |
-| `make migrate` | Run the `migrate` run mode against the dev database |
-| `make rebuild` | Run the `rebuild` run mode against the dev database |
-| `make dev-bootstrap` | Run the `bootstrap` run mode against the dev database |
+| `make migrate` | Run the `migrate` run mode against the local cluster's `apps-db` |
+| `make rebuild` | Run the `rebuild` run mode against the local cluster's `apps-db` |
+| `make dev-bootstrap` | Run the `bootstrap` run mode against the local cluster's `apps-db` |
 | `make grafana` | Open the local Grafana UI |
 | `make swagger` | Open Swagger UI on `api/openapi.yaml` (http://localhost:8082) |
 | **Local cluster** (k3d, ADR-0019; drives the env repo at `ENV_REPO`, default `../wallet-accountant-deploy`) | |
 | `make local-ca` | Once per Mac: create the mkcert CA and make the Mac trust it (asks for your password) |
 | `make local-up` / `make local-down` | Create the k3d cluster and its registry, install Flux, load the mkcert CA as cert-manager's CA issuer and reconcile the env repo's `clusters/local`; or delete the cluster (the registry's storage, `LOCAL_REGISTRY_DIR`, is kept). Traefik is on the Mac's ports 18080 / 18443 (`LOCAL_HTTP_PORT` / `LOCAL_HTTPS_PORT`), so URLs are `https://<name>.localhost:18443`, Zitadel's issuer included |
-| `make local-deploy` | Push the env repo's working tree, committed or not, as an OCI artifact to the cluster's registry, and have Flux apply it |
-| `make local-check` | Check the running cluster: layout, registry storage, Flux following the artifact, the CA issuer, the Gateway, Headlamp with its Flux plugin, the CoreDNS rewrite and port 18443 inside the cluster, `zitadel-db` and `apps-db` with the Wallet Accountant tenant, and Zitadel (issuer from the Mac and from a pod, v1 login, self-registration off, admin and machine user) |
+| `make local-deploy` | Build the image and chart from this working tree with a unique tag (recorded in `bin/local-build.env`), push them to the cluster's registry, push the env repo's working tree as an OCI artifact with that tag in it (`deploy/local/stage.sh`), have Flux roll the app out at `https://wallet.localhost:18443/api`, and write the `api-clients` client ID to `api/bruno/.env` |
+| `make local-bootstrap` / `make local-rebuild` | Run `bootstrap` or `rebuild` as a one-off pod from the chart's pod spec (`deploy/local/operator-pod.sh`); the code goes only to the terminal and the pod is deleted |
+| `make local-check` | Check the running cluster: layout, registry storage, Flux following the artifact, the CA issuer, the Gateway, Headlamp with its Flux plugin, the CoreDNS rewrite and port 18443 inside the cluster, `zitadel-db` and `apps-db` with the Wallet Accountant tenant, and Zitadel (issuer from the Mac and from a pod, v1 login, self-registration off, admin and machine user), and Wallet Accountant (the HelmRelease, the deployed build, `/api/me`, the setup Job's apps and token lifetime, Bruno's `.env` and environment, Swagger UI, the debug-mode ports, bootstrap and rebuild pods, redeeming the code as a Zitadel identity, and `make run` against the cluster) |
 | `make local-headlamp-token` | Print a token to sign in to https://headlamp.localhost:18443 |
 | **Self-hosted** (`compose.yaml`; everything in Docker) | |
 | `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`), and every `make up` makes sure the Zitadel project with the ID `OIDC_AUDIENCE` exists (`deploy/zitadel/setup-project.sh`) |

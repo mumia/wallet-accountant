@@ -105,6 +105,7 @@ Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.
 | `oidc.redirectPath`, `oidc.postLogoutRedirectPath` | `/auth/callback`, `/` | The UI's sign-in callback and post-logout paths on the route's host |
 | `oidc.zitadelSetup.enabled` | `false` | Run the Zitadel setup Job |
 | `oidc.zitadelSetup.url` | the issuer | Zitadel's API |
+| `oidc.zitadelSetup.connectTo` | `""` | `host:port` the Job connects to instead of the URL's host, which still names the certificate and the `Host` header (curl `--connect-to`). For a host its curl can't resolve: curl answers every `*.localhost` with 127.0.0.1, so a local cluster names its ingress Service |
 | `oidc.zitadelSetup.patSecret.name`, `.key` | `""`, `pat` | The Secret with an IAM owner's personal access token. Required with the setup |
 | `oidc.zitadelSetup.web.extraRedirectUris`, `.extraPostLogoutRedirectUris` | `[]` | URIs registered for `web` on top of the route host's, such as a UI dev server's |
 | `oidc.zitadelSetup.web.devMode` | `false` | Zitadel's development mode for `web`, needed for `http://` URIs |
@@ -121,6 +122,7 @@ Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.
 | `route.hostname` | `""` | The app's host. Required with the route |
 | `route.parentRefs` | `[]` | The Gateways (and listener `sectionName`) to attach to. Required with the route |
 | `route.tls` | `true` | Whether the host is served over HTTPS; sets the scheme of the URIs registered with Zitadel |
+| `route.port` | `0` | The port browsers reach the host on, when it is not the scheme's default (a local cluster's 18443); added to the URIs registered with Zitadel. `0` is the scheme's default |
 | `route.annotations` | `{}` | Annotations of the `HTTPRoute` |
 | `ui.enabled` | `false` | Run the UI |
 | `ui.image.repository`, `ui.image.tag` | `""` | The UI's image. Required with the UI. It must run as a numeric non-root user |
@@ -143,7 +145,7 @@ It ports `deploy/zitadel/setup-project.sh` (`files/zitadel-setup.sh`) and runs a
 
 1. creates the project whose ID is `oidc.audience`, if missing;
 2. creates or updates `api-clients`, a public native app (authorization code with PKCE, refresh tokens) for the Bruno collection;
-3. creates or updates `web`, a public User Agent app (authorization code with PKCE, refresh tokens) whose redirect and post-logout URIs are `https://<route.hostname><path>` plus the extra ones;
+3. creates or updates `web`, a public User Agent app (authorization code with PKCE, refresh tokens) whose redirect and post-logout URIs are `https://<route.hostname>[:<route.port>]<path>` plus the extra ones;
 4. sets the instance's token lifetimes, 15-minute access tokens by default, when they differ;
 5. writes the client IDs to the OIDC ConfigMap.
 

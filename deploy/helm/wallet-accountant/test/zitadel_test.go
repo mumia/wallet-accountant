@@ -125,6 +125,40 @@ func TestZitadelSetupExtraURIsAndTrustedCA(t *testing.T) {
 	}
 }
 
+// Browsers reach the host on a port that is not the scheme's default (the
+// local cluster's 18443), so the URIs registered for `web` carry it. The Job
+// reaches Zitadel through another address when its curl cannot resolve the
+// URL's host itself (curl answers every *.localhost with 127.0.0.1).
+func TestZitadelSetupRegistersTheRoutePortAndConnectsThroughAnotherAddress(t *testing.T) {
+	t.Parallel()
+	ms := render(t, combination{database: "external", zitadelSetup: true}.files(),
+		"route.port=18443",
+		"oidc.zitadelSetup.connectTo=ingress.internal:18443")
+	e := env(containers(ms.Get(t, "Job", "wa-wallet-accountant-zitadel-setup"))[0])
+	want := map[string]string{
+		"WEB_REDIRECT_URIS":             "https://wallet.example.test:18443/auth/callback",
+		"WEB_POST_LOGOUT_REDIRECT_URIS": "https://wallet.example.test:18443/",
+		"CONNECT_TO":                    "ingress.internal:18443",
+	}
+	for name, w := range want {
+		if got := e[name].Str("value"); got != w {
+			t.Errorf("%s = %q, want %q", name, got, w)
+		}
+	}
+}
+
+func TestTheSchemesDefaultPortIsLeftOutOfTheRegisteredURIs(t *testing.T) {
+	t.Parallel()
+	ms := render(t, combination{database: "external", zitadelSetup: true}.files(), "route.port=443")
+	e := env(containers(ms.Get(t, "Job", "wa-wallet-accountant-zitadel-setup"))[0])
+	if got := e["WEB_REDIRECT_URIS"].Str("value"); got != "https://wallet.example.test/auth/callback" {
+		t.Errorf("WEB_REDIRECT_URIS = %q", got)
+	}
+	if got := e["CONNECT_TO"].Str("value"); got != "" {
+		t.Errorf("CONNECT_TO = %q, want empty", got)
+	}
+}
+
 func TestTheZitadelSetupScriptParses(t *testing.T) {
 	t.Parallel()
 	if out, err := exec.CommandContext(t.Context(), "sh", "-n", "../files/zitadel-setup.sh").CombinedOutput(); err != nil {

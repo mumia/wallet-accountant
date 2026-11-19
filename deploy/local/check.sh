@@ -1,12 +1,18 @@
 #!/bin/sh
 # Checks the local cluster against what ADR-0019 and the env repo promise
-# (`make local-check`). It reads a running cluster made by `make local-up`, and
-# changes nothing in it apart from one short-lived DNS probe pod.
+# (`make local-check`). It reads a running cluster made by `make local-up` and
+# `make local-deploy`. It changes little in it: short-lived probe pods, a
+# Zitadel machine user `local-check` that signs in to the app, a bootstrap
+# Invitation it redeems as that user (so the earlier code no longer works),
+# and a rebuild of the folds. It also runs the app on this Mac (`make run`,
+# debug mode) for a moment.
 #
-# Needs docker, k3d, kubectl, flux, curl, mkcert. ENV_REPO is the env repo
-# checkout (wallet-accountant-deploy), LOCAL_CLUSTER the k3d cluster name,
-# LOCAL_REGISTRY the registry's container name, LOCAL_REGISTRY_PORT its port on
-# the host and LOCAL_REGISTRY_DIR its storage on the host.
+# Needs docker, k3d, kubectl, flux, curl, mkcert, jq, go and make. ENV_REPO is
+# the env repo checkout (wallet-accountant-deploy), LOCAL_CLUSTER the k3d
+# cluster name, LOCAL_REGISTRY the registry's container name,
+# LOCAL_REGISTRY_PORT its port on the host and LOCAL_REGISTRY_DIR its storage
+# on the host. LOCAL_BUILD is the file `make local-deploy` records its build
+# in; LOCAL_DB_PORT and LOCAL_OTLP_PORT are the debug-mode ports.
 set -eu
 
 : "${ENV_REPO:?ENV_REPO must point at the wallet-accountant-deploy checkout}"
@@ -16,6 +22,10 @@ set -eu
 : "${LOCAL_REGISTRY_DIR:?LOCAL_REGISTRY_DIR must be the registry storage directory}"
 : "${LOCAL_HTTP_PORT:=18080}"
 : "${LOCAL_HTTPS_PORT:=18443}"
+: "${LOCAL_BUILD:=bin/local-build.env}"
+: "${LOCAL_DB_PORT:=5432}"
+: "${LOCAL_OTLP_PORT:=4318}"
+: "${MAKE:=make}"
 
 CTX="k3d-$LOCAL_CLUSTER"
 KUBECTL="kubectl --context $CTX"
@@ -225,6 +235,141 @@ if [ -n "$admin_id" ] && [ -n "$admin_password" ] && echo "$session" | grep -q s
 else
 	fail "the first-instance admin (admin@zitadel.auth.localhost) signs in with the password in clusters/local/secrets/zitadel (user '$admin_id')"
 fi
+
+## Wallet Accountant (ADR-0019, ADR-0020)
+
+wallet="https://wallet.localhost$port_suffix"
+NS=wallet-accountant
+release=$($KUBECTL -n $NS get helmrelease wallet-accountant -o json 2>/dev/null) || release=
+check "HelmRelease wallet-accountant is ready: external database on apps-db, Zitadel setup on, UI off, at wallet.localhost" sh -c '
+	echo "$1" | jq -e "
+		(.status.conditions[] | select(.type == \"Ready\") | .status == \"True\") and
+		.spec.values.database.mode == \"external\" and
+		.spec.values.database.external.ownerUrl.secretName == \"wallet-accountant-db-owner\" and
+		.spec.values.oidc.zitadelSetup.enabled == true and
+		(.spec.values.ui.enabled // false) == false and
+		.spec.values.route.hostname == \"wallet.localhost\""' _ "$release"
+
+# The build `make local-deploy` made: its image tag, set in the pushed
+# artifact (flux-system/wallet-accountant-build), runs in the cluster.
+built_tag=$(sed -n 's/^WALLET_ACCOUNTANT_IMAGE_TAG=//p' "$LOCAL_BUILD" 2>/dev/null) || built_tag=
+artifact_tag=$($KUBECTL -n flux-system get configmap wallet-accountant-build \
+	-o jsonpath='{.data.WALLET_ACCOUNTANT_IMAGE_TAG}' 2>/dev/null) || artifact_tag=
+running=$($KUBECTL -n $NS get deployment wallet-accountant-all \
+	-o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null) || running=
+if [ -n "$built_tag" ] && [ "$artifact_tag" = "$built_tag" ] && [ "$running" = "$LOCAL_REGISTRY:5000/wallet-accountant:$built_tag" ] &&
+	curl -fsS -o /dev/null -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json" \
+		"http://localhost:$LOCAL_REGISTRY_PORT/v2/wallet-accountant/manifests/$built_tag"; then
+	pass "the app runs the image local-deploy built and pushed, whose tag is in the pushed artifact ($built_tag)"
+else
+	fail "the app runs the image local-deploy built and pushed, whose tag is in the pushed artifact (built '$built_tag', artifact '$artifact_tag', running '$running')"
+fi
+check "the app's pod is ready" sh -c '
+	[ "$(kubectl --context "$1" -n wallet-accountant get deployment wallet-accountant-all -o jsonpath="{.status.readyReplicas}")" = 1 ]' _ "$CTX"
+check "$wallet/api/me answers 401 without a token" sh -c '
+	[ "$(curl -sS --cacert "$1" -o /dev/null -w "%{http_code}" "$2/api/me")" = 401 ]' _ "$CA" "$wallet"
+
+# The setup Job's work in Zitadel.
+web_app=$(zitadel_api /management/v1/projects/wallet-accountant/apps/_search '{}' 2>/dev/null |
+	jq -c '.result[]? | select(.name == "web")') || web_app=
+if echo "$web_app" | jq -e --arg u "$wallet/auth/callback" --arg l "$wallet/" \
+	'(.oidcConfig.redirectUris | index($u)) and (.oidcConfig.postLogoutRedirectUris | index($l))' >/dev/null 2>&1; then
+	pass "Zitadel's web app has the redirect URIs with the browser's port ($wallet/auth/callback)"
+else
+	fail "Zitadel's web app has the redirect URIs with the browser's port (got '$(echo "$web_app" | head -c 300)')"
+fi
+check "access tokens last 15 minutes" sh -c '
+	curl -fsS --cacert "$1" -H "Authorization: Bearer $2" "$3/admin/v1/settings/oidc" |
+		jq -e ".settings.accessTokenLifetime == \"900s\""' _ "$CA" "$pat" "$issuer"
+api_clients_id=$($KUBECTL -n $NS get configmap wallet-accountant-oidc -o jsonpath='{.data.api-clients-client-id}' 2>/dev/null) || api_clients_id=
+check "api/bruno/.env has the api-clients client ID from the setup Job's ConfigMap (${api_clients_id:-none})" sh -c '
+	[ -n "$1" ] && grep -qx "WA_OAUTH_CLIENT_ID=$1" api/bruno/.env' _ "$api_clients_id"
+check "the Bruno environment local points at $wallet/api and $issuer" sh -c '
+	f=api/bruno/environments/local.yml &&
+	grep -A1 "name: baseUrl" "$f" | grep -qF "value: $1/api" &&
+	grep -A1 "name: authUrl" "$f" | grep -qF "value: $2"' _ "$wallet" "$issuer"
+
+swagger="https://swagger.localhost$port_suffix"
+check "Swagger UI at $swagger shows api/openapi.yaml" sh -c '
+	curl -fsS --cacert "$1" "$2/" | grep -qi "swagger" &&
+	curl -fsS --cacert "$1" "$2/openapi.yaml" | cmp -s - api/openapi.yaml' _ "$CA" "$swagger"
+
+# Debug mode: apps-db and the collector on this Mac's localhost.
+check "apps-db answers on localhost:$LOCAL_DB_PORT" nc -z localhost "$LOCAL_DB_PORT"
+check "the collector takes OTLP over HTTP on localhost:$LOCAL_OTLP_PORT" sh -c '
+	[ "$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "{}" \
+		"http://localhost:$1/v1/traces")" = 200 ]' _ "$LOCAL_OTLP_PORT"
+
+# Operator commands: the code goes only to this terminal, and no pod is left.
+bootstrap_out=$($MAKE -s local-bootstrap 2>/dev/null) || bootstrap_out=
+code=$(echo "$bootstrap_out" | awk 'NF == 1 && length($1) > 16 {print $1; exit}')
+if [ -n "$code" ] && ! $KUBECTL -n $NS get pod wallet-accountant-bootstrap >/dev/null 2>&1; then
+	pass "make local-bootstrap prints an Invitation code and leaves no pod"
+else
+	fail "make local-bootstrap prints an Invitation code and leaves no pod (printed '$(echo "$bootstrap_out" | head -c 200)')"
+fi
+check "the code is in no log of the app's namespace" sh -c '
+	[ -n "$1" ] &&
+	for p in $(kubectl --context "$2" -n wallet-accountant get pods -o name); do
+		! kubectl --context "$2" -n wallet-accountant logs "$p" --all-containers 2>/dev/null | grep -qF "$1" || exit 1
+	done' _ "$code" "$CTX"
+check "make local-rebuild rebuilds the folds and leaves no pod" sh -c '
+	$1 -s local-rebuild >/dev/null 2>&1 &&
+	! kubectl --context "$2" -n wallet-accountant get pod wallet-accountant-rebuild >/dev/null 2>&1' _ "$MAKE" "$CTX"
+
+# A real Zitadel identity: the machine user local-check, whose JWT access
+# token carries the project's audience.
+user_id=$(zitadel_api /management/v1/users/_search \
+	'{"queries":[{"userNameQuery":{"userName":"local-check","method":"TEXT_QUERY_METHOD_EQUALS"}}]}' 2>/dev/null |
+	jq -r '.result[0].id // empty') || user_id=
+[ -n "$user_id" ] || user_id=$(zitadel_api /management/v1/users/machine \
+	'{"userName":"local-check","name":"local-check","accessTokenType":"ACCESS_TOKEN_TYPE_JWT"}' 2>/dev/null |
+	jq -r '.userId // empty') || user_id=
+credentials=$(curl -fsS --cacert "$CA" -H "Authorization: Bearer $pat" -H 'Content-Type: application/json' \
+	-X PUT -d '{}' "$issuer/management/v1/users/$user_id/secret" 2>/dev/null) || credentials=
+token=$(curl -fsS --cacert "$CA" -u "$(echo "$credentials" | jq -r '.clientId'):$(echo "$credentials" | jq -r '.clientSecret')" \
+	-d grant_type=client_credentials -d "scope=openid urn:zitadel:iam:org:project:id:wallet-accountant:aud" \
+	"$issuer/oauth/v2/token" 2>/dev/null | jq -r '.access_token // empty') || token=
+api_out=$(mktemp)
+api() { # api <base> <method> <path> [json] -> the HTTP status; the body in $api_out
+	curl -sS --cacert "$CA" -o "$api_out" -w '%{http_code}' -X "$2" -H "Authorization: Bearer $token" \
+		-H 'Content-Type: application/json' -H "Idempotency-Key: $(uuidgen | tr 'A-Z' 'a-z')" ${4:+-d "$4"} "$1$3"
+}
+if [ -n "$token" ] && [ -n "$code" ]; then
+	redeemed=$(api "$wallet" POST /api/registrations "{\"invitation_code\":\"$code\"}") || redeemed=
+	me=$(api "$wallet" GET /api/me) || me=
+	if { [ "$redeemed" = 201 ] || [ "$redeemed" = 409 ]; } && [ "$me" = 200 ] && jq -e '.is_instance_administrator == true' "$api_out" >/dev/null 2>&1; then
+		pass "a Zitadel identity redeems the bootstrap code and is the Instance administrator on /api/me"
+	else
+		fail "a Zitadel identity redeems the bootstrap code and is the Instance administrator on /api/me (redeem $redeemed, me $me: $(head -c 200 "$api_out"))"
+	fi
+else
+	fail "a Zitadel identity redeems the bootstrap code and is the Instance administrator on /api/me (no token or no code)"
+fi
+
+# Debug mode: `make run` on this Mac, with its defaults, against apps-db, the
+# collector and Zitadel in the cluster. Go trusts the mkcert CA through the
+# macOS keychain (no SSL_CERT_FILE), or verifying the token fails.
+debug_addr=127.0.0.1:18089
+debug_log=$(mktemp)
+set -m
+env -u SSL_CERT_FILE -u SSL_CERT_DIR WA_HTTP_ADDR=$debug_addr $MAKE -s run >"$debug_log" 2>&1 &
+debug_pid=$!
+set +m
+i=0
+while [ $i -lt 120 ] && kill -0 "$debug_pid" 2>/dev/null && ! nc -z 127.0.0.1 18089 2>/dev/null; do
+	i=$((i + 1))
+	sleep 1
+done
+debug_me=$(api "http://$debug_addr" GET /api/me 2>/dev/null) || debug_me=
+kill -TERM -- "-$debug_pid" 2>/dev/null || true
+wait "$debug_pid" 2>/dev/null || true
+if [ -n "$token" ] && [ "$debug_me" = 200 ]; then
+	pass "make run (debug mode) serves /api/me to the Zitadel identity, trusting the mkcert CA through the keychain"
+else
+	fail "make run (debug mode) serves /api/me to the Zitadel identity (got '$debug_me': $(head -c 200 "$api_out" 2>/dev/null); log: $(tail -5 "$debug_log"))"
+fi
+rm -f "$debug_log" "$api_out"
 
 if [ "$failures" -ne 0 ]; then
 	echo "local-check: $failures check(s) failed" >&2

@@ -31,17 +31,6 @@ CHART_REGISTRY      ?= oci://ghcr.io/mumia/charts
 ACTIONLINT_VERSION  := v1.7.12
 CRDS_CATALOG        := https://raw.githubusercontent.com/datreeio/CRDs-catalog/784ec895547a36e548e6810b41f27baade3a0890/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
 
-# Development configuration (compose.dev.yaml). Override any of them on the
-# command line or in the environment.
-export WA_HTTP_ADDR                 ?= :8080
-export WA_DATABASE_URL              ?= postgres://wa_app:wa_app@localhost:5432/wallet_accountant?sslmode=disable
-export WA_READER_DATABASE_URL       ?= postgres://wa_event_store_reader:wa_event_store_reader@localhost:5432/wallet_accountant?sslmode=disable
-export WA_OWNER_DATABASE_URL        ?= postgres://wa_owner:wa_owner@localhost:5432/wallet_accountant?sslmode=disable
-export WA_OIDC_ISSUER               ?= http://localhost:8081
-export WA_OIDC_AUDIENCE             ?= wallet-accountant
-export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:4318
-export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
-
 # Local cluster (ADR-0019). The local-* targets drive the env repo
 # (wallet-accountant-deploy); point ENV_REPO at any checkout of it.
 ENV_REPO            ?= ../wallet-accountant-deploy
@@ -55,13 +44,39 @@ LOCAL_REGISTRY_DIR  ?= $(HOME)/.local/share/wallet-accountant/registry
 # clusters/local): change those with LOCAL_HTTPS_PORT, or sign-in breaks.
 LOCAL_HTTP_PORT     ?= 18080
 LOCAL_HTTPS_PORT    ?= 18443
+# Debug mode: apps-db and the app's collector on this Mac's localhost.
+LOCAL_DB_PORT       ?= 5432
+LOCAL_OTLP_PORT     ?= 4318
 LOCAL_ARTIFACT      := oci://localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-deploy:local
 LOCAL_KUBECTL       := kubectl --context k3d-$(LOCAL_CLUSTER)
 LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
+# The last build `make local-deploy` pushed (image tag and chart version), and
+# the copy of the env repo local-push stages for the artifact.
+LOCAL_BUILD         := bin/local-build.env
+LOCAL_STAGE         := bin/local-artifact
+LOCAL_ORIGIN        := $(if $(filter 443,$(LOCAL_HTTPS_PORT)),,:$(LOCAL_HTTPS_PORT))
 export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
+export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD
+
+# Debug mode (ADR-0019): `make run` and the other run targets, or an IDE with
+# the same variables, run the app on this Mac against the local cluster's
+# apps-db, Zitadel and collector. The passwords are the env repo's throwaway
+# ones (clusters/local/tenants/wallet-accountant/secrets.yaml). Go trusts the
+# mkcert CA through the macOS keychain (`make local-ca`). Override any of them
+# on the command line or in the environment.
+LOCAL_DB                            := localhost:$(LOCAL_DB_PORT)/wallet_accountant?sslmode=require
+export WA_HTTP_ADDR                 ?= :8080
+export WA_DATABASE_URL              ?= postgres://wa_app:throwaway-local-wa-app@$(LOCAL_DB)
+export WA_READER_DATABASE_URL       ?= postgres://wa_event_store_reader:throwaway-local-wa-event-store-reader@$(LOCAL_DB)
+export WA_OWNER_DATABASE_URL        ?= postgres://wa_owner:throwaway-local-wa-owner@$(LOCAL_DB)
+export WA_OIDC_ISSUER               ?= https://auth.localhost$(LOCAL_ORIGIN)
+export WA_OIDC_AUDIENCE             ?= wallet-accountant
+export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:$(LOCAL_OTLP_PORT)
+export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
 .PHONY: renovate-check
-.PHONY: local-ca local-up local-down local-push local-deploy local-wait local-check local-headlamp-token
+.PHONY: local-ca local-up local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
+.PHONY: local-bootstrap local-rebuild local-bruno-env
 .PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
 help: ## List the targets
@@ -112,22 +127,22 @@ dev-reset: ## Delete the dev database and Zitadel data, then run dev-up and migr
 	$(COMPOSE_DEV) --profile setup down -v --remove-orphans
 	$(MAKE) --no-print-directory dev-up migrate
 
-run: ## Run the app in all mode against the dev dependencies
+run: ## Debug mode: run the app in all mode on this Mac against the local cluster's apps-db, Zitadel and collector
 	go run ./cmd/wallet-accountant all
 
-run-api: ## Run the api run mode against the dev dependencies
+run-api: ## Debug mode: run the api run mode against the local cluster
 	go run ./cmd/wallet-accountant api
 
-run-worker: ## Run the worker run mode (event forwarding) against the dev dependencies
+run-worker: ## Debug mode: run the worker run mode (event forwarding) against the local cluster
 	go run ./cmd/wallet-accountant worker
 
-migrate: ## Run the migrate run mode against the dev database
+migrate: ## Debug mode: run the migrate run mode against the local cluster's apps-db
 	go run ./cmd/wallet-accountant migrate
 
-rebuild: ## Rebuild every fold from the event store in the dev database
+rebuild: ## Debug mode: rebuild every fold from the event store in the local cluster's apps-db
 	go run ./cmd/wallet-accountant rebuild
 
-dev-bootstrap: ## Print the bootstrap Invitation code for the first Instance administrator (dev database)
+dev-bootstrap: ## Debug mode: print a bootstrap Invitation code (local cluster's apps-db)
 	go run ./cmd/wallet-accountant bootstrap
 
 grafana: ## Open the local Grafana UI
@@ -161,15 +176,44 @@ local-down: ## Delete the k3d cluster and its registry (the registry's storage i
 	k3d cluster delete $(LOCAL_CLUSTER)
 
 local-push:
-	@# The env repo's working tree, committed or not, is what Flux applies.
-	$(LOCAL_FLUX) push artifact $(LOCAL_ARTIFACT) --path="$(ENV_REPO)" \
+	@# The env repo's working tree, committed or not, is what Flux applies, with
+	@# this Mac's CA, the API contract and the last build (deploy/local/stage.sh).
+	deploy/local/stage.sh "$(LOCAL_STAGE)"
+	$(LOCAL_FLUX) push artifact $(LOCAL_ARTIFACT) --path="$(LOCAL_STAGE)" \
 		--source="$$(git -C "$(ENV_REPO)" remote get-url origin 2>/dev/null || echo local)" \
-		--revision="$$(git -C "$(ENV_REPO)" rev-parse --abbrev-ref HEAD)@sha1:$$(git -C "$(ENV_REPO)" rev-parse HEAD)" \
-		--ignore-paths=".git/,infra/"
+		--revision="$$(git -C "$(ENV_REPO)" rev-parse --abbrev-ref HEAD)@sha1:$$(git -C "$(ENV_REPO)" rev-parse HEAD)"
 
-local-deploy: local-push ## Push the env repo's working tree to the local registry and have Flux apply it
+local-build: $(HELM)
+	@# A unique tag per build, so Flux rolls each one out. The image and the chart
+	@# come from this working tree, committed or not.
+	@set -e; stamp=$$(date -u +%Y%m%d%H%M%S); tag=local-$$stamp; \
+	version=$$(awk '$$1 == "version:" {print $$2}' $(CHART)/Chart.yaml)-local.$$stamp; \
+	image=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant:$$tag; \
+	docker build -t $$image . && docker push -q $$image; \
+	rm -rf bin/local-chart; \
+	$(HELM) package $(CHART) --destination bin/local-chart --version $$version --app-version $$tag; \
+	$(HELM) push bin/local-chart/wallet-accountant-$$version.tgz oci://localhost:$(LOCAL_REGISTRY_PORT)/charts --plain-http; \
+	printf 'WALLET_ACCOUNTANT_VERSION=%s\nWALLET_ACCOUNTANT_IMAGE_TAG=%s\n' $$version $$tag > $(LOCAL_BUILD); \
+	echo "local-build: image $$image, chart $$version"
+
+local-deploy: local-build local-push ## Build the app's image and chart from this working tree, push them with the env repo's working tree, and have Flux roll them out
 	$(LOCAL_FLUX) reconcile kustomization cluster --with-source --timeout=5m
-	$(MAKE) --no-print-directory local-wait
+	$(LOCAL_FLUX) reconcile kustomization wallet-accountant --timeout=20m
+	$(MAKE) --no-print-directory local-wait local-bruno-env
+
+local-bruno-env:
+	@# The Bruno collection reads the client ID the setup Job generated from api/bruno/.env.
+	@client_id=$$($(LOCAL_KUBECTL) -n wallet-accountant get configmap wallet-accountant-oidc -o jsonpath='{.data.api-clients-client-id}') && \
+		test -n "$$client_id" && \
+		printf 'WA_OAUTH_CLIENT_ID=%s\n' "$$client_id" > api/bruno/.env && \
+		echo "api/bruno/.env: WA_OAUTH_CLIENT_ID=$$client_id"
+
+local-bootstrap: $(HELM) ## Print a bootstrap Invitation code for the first Instance administrator (local cluster; ADR-0017)
+	@# The code goes only to this terminal: the pod and its log are deleted.
+	@HELM=$(abspath $(HELM)) deploy/local/operator-pod.sh bootstrap
+
+local-rebuild: $(HELM) ## Rebuild every fold from the event store in the local cluster
+	@HELM=$(abspath $(HELM)) deploy/local/operator-pod.sh rebuild
 
 local-wait:
 	@# `cluster` creates the other Kustomizations, so they exist only once it is ready.
@@ -249,7 +293,8 @@ RENOVATE_EXPECT := \
 	regex:helm.sh/helm/v4 regex:github.com/yannh/kubeconform regex:golang.org/x/vuln
 RENOVATE_ENV_EXPECT := \
 	flux:quay.io/jetstack/charts/cert-manager flux:headlamp \
-	kubernetes:ghcr.io/headlamp-k8s/headlamp-plugin-flux kubernetes:rancher/k3s \
+	kubernetes:ghcr.io/headlamp-k8s/headlamp-plugin-flux kubernetes:rancher/k3s kubernetes:swaggerapi/swagger-ui \
+	regex:swaggerapi/swagger-ui \
 	regex:quay.io/jetstack/charts/cert-manager regex:headlamp \
 	regex:rancher/k3s regex:ghcr.io/headlamp-k8s/headlamp-plugin-flux
 

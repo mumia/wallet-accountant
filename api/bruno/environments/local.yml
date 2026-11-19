@@ -1,0 +1,6 @@
+name: local
+variables:
+  - name: baseUrl
+    value: https://wallet.localhost:18443/api
+  - name: authUrl
+    value: https://auth.localhost:18443
