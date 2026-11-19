@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Runbook (written first), `infra/README.md`. Every manual step is listed in order, with the exact `op`/`garage` commands:
   - **1Password vault and service account**: create a **dedicated vault** (e.g. `homelab-infra`) that holds only the infra secrets. Create a **service account** with **read-only** access to **that vault only**; check that service accounts are available on the user's plan. OpenTofu's 1Password provider reads through it and never writes. Its token goes in the user's personal vault, not the dedicated one, and is passed as `OP_SERVICE_ACCOUNT_TOKEN` in the shell that runs `tofu`
@@ -30,3 +30,5 @@
 - Not done, left for the user: every apply and first run (runbook steps 1–5), checking that the 1Password plan has service accounts, and the destroy-and-recreate test (runbook step 6, after ticket 11).
 - To verify on first apply: that k3s takes the pre-placed server and client CAs; that Garage's S3 API supports the conditional writes `use_lockfile` needs (if not, drop it and rely on running one apply at a time); the Proxmox role's privilege list; the `op service-account create` and Tailscale console steps as written.
 - For ticket 11: `flux_bootstrap_git` commits `clusters/prod/flux-system/` itself, with a patch that adds SOPS decryption (`sops-age`) to the `flux-system` Kustomization. Don't write that directory by hand.
+
+- 2026-11-19 (orchestrator): code merged into both repos, so ticket 11 can be written. Marked `resolved` for the code only; it returns to `ready-for-human` at the end of the PR for the apply steps in `infra/README.md`. Known flaky test to fix in the review pass: `cloud_init_is_valid_yaml_with_pinned_versions` (infra/homelab/tests/homelab.tftest.hcl:131) greps the rendered cloud-init for "npm"/"nodejs", which can appear in unmocked random keys.
