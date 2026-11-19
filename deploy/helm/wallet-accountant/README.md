@@ -77,6 +77,10 @@ helm install wallet-accountant oci://ghcr.io/mumia/charts/wallet-accountant \
 
 The longer `--timeout` covers the first install, where `migrate` retries until the new database accepts connections.
 
+## Versions
+
+Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.Z`, and the image `ghcr.io/mumia/wallet-accountant:vX.Y.Z`. Leave `image.tag` empty and the chart runs the image of its own release. Both are signed with cosign (keyless) and carry build provenance attestations; `docs/architecture/conventions.md` ("Releases") shows how to verify them.
+
 ## Values
 
 | Value | Default | Description |

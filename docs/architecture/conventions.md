@@ -32,6 +32,7 @@ compose.dev.yaml                development dependencies; deploy/dev/ holds thei
 compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secrets generator, PostgreSQL init,
                                 collector, Tempo and Grafana configuration, and the smoke check
 deploy/helm/wallet-accountant/  the Helm chart (ADR-0020); test/ holds its checks (`make lint-chart`)
+deploy/release/                 version.sh: what a pushed ref publishes (see "Releases")
 ```
 
 depguard rules in golangci-lint enforce the dependencies. `domain` imports nothing from `app`, `adapters` or `platform`. A context uses another context only through that context's `app` ports.
@@ -98,8 +99,11 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make smoke` | From nothing, `make up` and `make bootstrap` in a separate Compose project on other ports, redeem the code as a real Zitadel identity, check the code reached no log, then remove everything. `SMOKE_UP=up-observability` also checks Tempo, Prometheus and Loki through Grafana, and that the code is not in Loki |
 | **Build and quality** | |
 | `make generate` | Regenerate code from `api/openapi.yaml` (ogen), the Bruno collection in `api/bruno`, and SQL queries (sqlc) |
-| `make lint` | Run golangci-lint (including depguard), vacuum with the Zalando ruleset, and `make lint-chart` |
+| `make lint` | Run golangci-lint (including depguard), vacuum with the Zalando ruleset, `make lint-chart` and `make lint-workflows` |
 | `make lint-chart` | Check the Helm chart: `helm lint` and `helm template` with every combination of database mode, Zitadel setup and UI slot, the rejections of `values.schema.json`, and kubeconform. helm and kubeconform are built into `bin/` at pinned versions |
+| `make lint-workflows` | Check `.github/workflows` with actionlint (pinned, through `go run`). It runs shellcheck on the `run:` scripts when shellcheck is installed |
+| `make chart-package` | Package the chart into `bin/charts`. `CHART_VERSION` and `APP_VERSION` override `Chart.yaml`, as the release workflow does |
+| `make chart-push` | Push the packaged `CHART_VERSION` to `CHART_REGISTRY` (default `oci://ghcr.io/mumia/charts`) after `helm registry login`. Only the release workflow runs it |
 | `make test` | Run the Decider and other unit tests |
 | `make test-integration` | Run the integration tests against PostgreSQL through testcontainers-go |
 | `make build` / `make docker-build` | Build the binary or the container image |
@@ -110,7 +114,7 @@ GitHub Actions runs `.github/workflows/ci.yaml` on every pull request and on pus
 
 | Job | Local command |
 |---|---|
-| `lint` | `make lint` (Go, the API contract and the Helm chart) |
+| `lint` | `make lint` (Go, the API contract, the Helm chart and the workflows) |
 | `generated` | `make generate`, then `git diff --exit-code`: commit the regenerated code |
 | `tidy` | `go mod tidy`, then `git diff --exit-code go.mod go.sum` |
 | `test` | `make test` |
@@ -119,3 +123,69 @@ GitHub Actions runs `.github/workflows/ci.yaml` on every pull request and on pus
 | `govulncheck` | `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` |
 
 `.github/workflows/smoke.yaml` runs `make smoke` nightly and on demand, outside pull request checks because it is slow. Actions are pinned to commit SHAs, and Dependabot proposes weekly updates for them and for Go modules. The Go version comes from the `toolchain` line in `go.mod`.
+
+## Releases
+
+`.github/workflows/release.yaml` publishes to GHCR (ADR-0020). `deploy/release/version.sh` turns the pushed ref into what is published; its tests run in `make test`.
+
+| Pushed ref | Image `ghcr.io/mumia/wallet-accountant` | Chart `oci://ghcr.io/mumia/charts/wallet-accountant` | GitHub Release |
+|---|---|---|---|
+| Tag `v1.2.3` | `v1.2.3` | version `1.2.3`, appVersion `v1.2.3` | yes |
+| Tag `v1.2.3-rc.1` | `v1.2.3-rc.1` | version `1.2.3-rc.1`, appVersion `v1.2.3-rc.1` | yes, marked pre-release |
+| Branch `main` | `main-<first 7 characters of the commit>`, for testing | none | no |
+
+Any other tag fails the workflow before anything is published. `Chart.yaml` in git keeps a placeholder version: the tag sets both versions. The chart's `image.tag` defaults to its appVersion, so a chart release installs the image from the same tag. The image is built for `linux/amd64` only: the production VM is x86-64, and local clusters build the image from source for the host's architecture.
+
+Production follows release tags only. `main-<sha>` images are never deployed there, and pre-releases are skipped by the Flux semver range.
+
+### Who releases, and how
+
+The operator (the repository's maintainer) releases; nobody else pushes tags. A release is a commit on `main` whose CI passed. The workflow refuses a tag that does not point into `main`, and a lightweight tag.
+
+1. Pick the version (semver). MAJOR when a self-hoster must change something to upgrade: an API change that breaks clients, a chart value removed or renamed, a manual step. MINOR for features, new migrations and new chart values. PATCH for fixes.
+2. Tag with an annotated tag whose message is the upgrade notes, and push it:
+
+   ```sh
+   git switch main && git pull
+   git tag -a v1.2.3   # the editor opens for the message
+   git push origin v1.2.3
+   ```
+
+3. Watch the Release workflow. If it fails after publishing something, fix forward with the next patch version. Never move, delete or reuse a published tag: Flux may already have pulled it.
+
+The first release creates the two GHCR packages. Make both public once, in the package settings, so that clusters and self-hosters pull without credentials.
+
+### Release notes
+
+The GitHub Release's notes are, in order:
+
+1. **The tag's message**, written by the operator. Its first line is a one-sentence summary. Then, under `Upgrade notes`, everything someone upgrading must know, or `None.`:
+   - the migrations the release runs. They are forward-only (ADR-0009), so the upgrade cannot be rolled back; say if one is slow or locks a large table;
+   - chart values added, changed or removed, and their new defaults;
+   - breaking API changes;
+   - manual steps, before or after the upgrade.
+2. **Artifacts**, added by the workflow: the image and chart references with their digests.
+3. **What's Changed**, generated by GitHub: the pull requests merged since the previous release.
+
+### Provenance
+
+Every published image and chart, `main-<sha>` images included, has:
+
+- a SLSA build provenance attestation (`actions/attest`), stored in GitHub and pushed to GHCR next to the artifact;
+- a keyless cosign signature, whose certificate names the workflow and the ref that ran it.
+
+Verify them:
+
+```sh
+gh attestation verify oci://ghcr.io/mumia/wallet-accountant:v1.2.3 --repo mumia/wallet-accountant
+cosign verify ghcr.io/mumia/charts/wallet-accountant:1.2.3 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/mumia/wallet-accountant/\.github/workflows/release\.yaml@refs/tags/v'
+```
+
+**Production enforces the chart's signature, not the image's.** Decided on 2026-11-19 (ticket 09); ticket 11 configures it in `wallet-accountant-deploy`.
+
+- Flux verifies the chart before installing it: the chart's source (`OCIRepository` or `HelmRepository`) uses `verify.provider: cosign` with `matchOIDCIdentity` set to the issuer `https://token.actions.githubusercontent.com` and the subject above, which only a release tag of this repository's release workflow matches. Flux does this natively, with no other component. A failed check stops the release and alerts on ntfy like any failed reconciliation.
+- The env repo pins the chart version and leaves `image.tag` empty, so the verified chart decides the image tag.
+- Image signatures are not checked at admission. That needs an admission controller (Kyverno or Sigstore's policy-controller): one more platform component on a single node, which blocks every pod start when it or Sigstore is unreachable. The image comes from a tag that only this repository's workflows can push, through a chart that is verified. The signatures are still published, so admission checks can be added later without a new release process.
+- Local clusters verify nothing: they run images and charts built from the working tree.

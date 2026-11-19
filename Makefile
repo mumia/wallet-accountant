@@ -22,6 +22,10 @@ HELM_VERSION        := v4.3.0
 KUBECONFORM_VERSION := v0.7.0
 HELM                := bin/helm-$(HELM_VERSION)/helm
 KUBECONFORM         := bin/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
+CHART_REGISTRY      ?= oci://ghcr.io/mumia/charts
+# actionlint checks .github/workflows; run with `go run`, not a go.mod tool,
+# for the same reason as helm.
+ACTIONLINT_VERSION  := v1.7.12
 CRDS_CATALOG        := https://raw.githubusercontent.com/datreeio/CRDs-catalog/784ec895547a36e548e6810b41f27baade3a0890/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
 
 # Development configuration (compose.dev.yaml). Override any of them on the
@@ -51,7 +55,7 @@ LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
 export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
 
 .PHONY: local-ca local-up local-down local-push local-deploy local-wait local-check local-headlamp-token
-.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api build test test-integration
+.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
@@ -176,13 +180,27 @@ local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost 
 generate: ## Regenerate the ogen server and the Bruno collection (api/bruno) from api/openapi.yaml
 	go generate ./...
 
-lint: lint-go lint-api lint-chart ## Run golangci-lint (with depguard), vacuum with the Zalando ruleset, and the chart checks
+lint: lint-go lint-api lint-chart lint-workflows ## Run golangci-lint (with depguard), vacuum with the Zalando ruleset, the chart and workflow checks
+
+lint-workflows: ## Check .github/workflows with actionlint (and shellcheck, when it is installed)
+	go run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 lint-chart: $(HELM) $(KUBECONFORM) ## helm lint and helm template with every values combination, schema rejections, kubeconform
 	@mkdir -p bin/kubeconform-cache
 	HELM=$(abspath $(HELM)) KUBECONFORM=$(abspath $(KUBECONFORM)) \
 		KUBECONFORM_FLAGS="-cache $(abspath bin/kubeconform-cache) -schema-location default -schema-location $(CRDS_CATALOG)" \
 		go test -tags chart -count=1 ./$(CHART)/test/
+
+chart-package: $(HELM) ## Package the chart into bin/charts; CHART_VERSION and APP_VERSION override Chart.yaml
+	$(HELM) package $(CHART) --destination bin/charts \
+		$(if $(CHART_VERSION),--version $(CHART_VERSION)) $(if $(APP_VERSION),--app-version $(APP_VERSION))
+
+chart-push: $(HELM) ## Push the CHART_VERSION package from bin/charts to CHART_REGISTRY (after helm registry login)
+	@test -n "$(CHART_VERSION)" || { echo "chart-push: set CHART_VERSION"; exit 1; }
+	$(HELM) push bin/charts/wallet-accountant-$(CHART_VERSION).tgz $(CHART_REGISTRY)
+
+print-helm: $(HELM)
+	@echo $(abspath $(HELM))
 
 $(HELM):
 	GOBIN=$(abspath $(dir $(HELM))) go install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
