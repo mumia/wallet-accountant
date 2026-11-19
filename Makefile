@@ -49,9 +49,12 @@ LOCAL_CLUSTER       ?= wallet-accountant
 LOCAL_REGISTRY      ?= wa-registry
 LOCAL_REGISTRY_PORT ?= 5050
 LOCAL_REGISTRY_DIR  ?= $(HOME)/.local/share/wallet-accountant/registry
-# Host ports for Traefik; change them only if something else holds 80 or 443.
-LOCAL_HTTP_PORT     ?= 80
-LOCAL_HTTPS_PORT    ?= 443
+# Host ports for Traefik, so another cluster on the Mac can keep 80 and 443.
+# Browser URLs are https://<name>.localhost:18443. Zitadel's issuer and the
+# in-cluster port that pods reach it on are 18443 too (env repo,
+# clusters/local): change those with LOCAL_HTTPS_PORT, or sign-in breaks.
+LOCAL_HTTP_PORT     ?= 18080
+LOCAL_HTTPS_PORT    ?= 18443
 LOCAL_ARTIFACT      := oci://localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-deploy:local
 LOCAL_KUBECTL       := kubectl --context k3d-$(LOCAL_CLUSTER)
 LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
@@ -176,7 +179,7 @@ local-wait:
 local-check: ## Check the running local cluster against ADR-0019 and the env repo
 	deploy/local/check.sh
 
-local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost (valid 24 hours)
+local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost:18443 (valid 24 hours)
 	@$(LOCAL_KUBECTL) -n headlamp create token headlamp --duration=24h
 
 ## Build and quality
