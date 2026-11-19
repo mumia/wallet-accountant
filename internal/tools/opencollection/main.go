@@ -500,11 +500,14 @@ func variables(doc *document) []keyValue {
 	}
 
 	vars := []keyValue{
-		{Name: "baseUrl", Value: baseURL, Description: "The API (make run)"},
-		{Name: "authUrl", Value: "http://localhost:8081", Description: "The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel from make dev-up)"},
+		{Name: "baseUrl", Value: baseURL, Description: "The API (make run, debug mode)"},
+		{
+			Name: "authUrl", Value: "https://auth.localhost:18443",
+			Description: "The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel in the local cluster, make local-up)",
+		},
 		{
 			Name: "clientId", Value: "{{process.env.WA_OAUTH_CLIENT_ID}}",
-			Description: "The client ID of the Zitadel application api-clients; make dev-up writes it to .env",
+			Description: "The client ID of the Zitadel application api-clients; make local-deploy writes it to .env",
 		},
 	}
 

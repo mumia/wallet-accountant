@@ -102,6 +102,11 @@ oidc:
     enabled: false
     # The Zitadel API's URL. Defaults to the issuer.
     url: ""
+    # host:port the Job connects to instead of the URL's host, which still
+    # names the TLS certificate and the Host header (curl --connect-to). For
+    # a host the Job cannot resolve itself: curl answers every *.localhost
+    # with 127.0.0.1, so a local cluster names its ingress Service here.
+    connectTo: ""
     # A personal access token of a Zitadel administrator (IAM owner: the
     # token lifetimes are instance settings).
     patSecret:
@@ -168,6 +173,10 @@ route:
   # Whether the host is served over HTTPS; sets the scheme of the URIs the
   # UI registers with the IdP.
   tls: true
+  # The port browsers reach the host on, when it is not the scheme's default
+  # (such as a local cluster's 18443); added to the URIs the UI registers.
+  # 0 means the scheme's default.
+  port: 0
   annotations: {}
 
 # The UI slot (docs/architecture/ui-contract.md), off until a UI image meets

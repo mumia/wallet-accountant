@@ -105,6 +105,8 @@ spec:
           env:
             - name: ZITADEL_URL
               value: {{ $setup.url | default .Values.oidc.issuer | trimSuffix "/" | quote }}
+            - name: CONNECT_TO
+              value: {{ $setup.connectTo | quote }}
             - name: ZITADEL_PAT
               valueFrom:
                 secretKeyRef:

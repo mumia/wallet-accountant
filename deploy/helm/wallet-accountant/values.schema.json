@@ -147,6 +147,7 @@
           "properties": {
             "enabled": { "type": "boolean" },
             "url": { "anyOf": [{ "const": "" }, { "$ref": "#/definitions/url" }] },
+            "connectTo": { "type": "string", "pattern": "^$|^[^:/\\s]+:[0-9]{1,5}$" },
             "patSecret": {
               "type": "object",
               "additionalProperties": false,
@@ -241,6 +242,7 @@
           "items": { "type": "object", "required": ["name"] }
         },
         "tls": { "type": "boolean" },
+        "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
         "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
       },
       "if": { "properties": { "enabled": { "const": true } } },

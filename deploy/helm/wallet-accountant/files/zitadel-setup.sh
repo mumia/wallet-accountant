@@ -30,9 +30,11 @@ log() { echo "zitadel-setup: $*"; }
 fail() { echo "zitadel-setup: $*" >&2; exit 1; }
 
 # zitadel METHOD PATH [JSON] -> body in $out, prints the HTTP status.
-# Trusts CURL_CA_BUNDLE when the chart sets it (trust.caConfigMap).
+# Trusts CURL_CA_BUNDLE when the chart sets it (trust.caConfigMap), and
+# connects to CONNECT_TO (host:port) instead of the URL's host when it is set.
 zitadel() {
 	curl -sS -o "$out" -w '%{http_code}' -X "$1" "$ZITADEL_URL$2" \
+		${CONNECT_TO:+--connect-to "::$CONNECT_TO"} \
 		-H "Authorization: Bearer $ZITADEL_PAT" -H 'Content-Type: application/json' \
 		-H 'Connect-Protocol-Version: 1' ${3:+-d "$3"}
 }

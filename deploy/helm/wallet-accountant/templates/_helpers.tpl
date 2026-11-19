@@ -70,9 +70,15 @@ Usage: include "wa.uiConfig" (list . $clientId)
   "postLogoutRedirectPath" $oidc.postLogoutRedirectPath) | toJson }}
 {{- end }}
 
-{{/* The scheme and host the UI is served from. */}}
+{{/*
+The scheme, host and port the UI is served from. The port is left out when
+it is unset or the scheme's default.
+*/}}
 {{- define "wa.origin" -}}
-{{ ternary "https" "http" .Values.route.tls }}://{{ .Values.route.hostname }}
+{{- $scheme := ternary "https" "http" .Values.route.tls }}
+{{- $port := int (.Values.route.port | default 0) }}
+{{- $scheme }}://{{ .Values.route.hostname }}
+{{- if and $port (ne $port (ternary 443 80 .Values.route.tls)) }}:{{ $port }}{{ end }}
 {{- end }}
 
 {{/*

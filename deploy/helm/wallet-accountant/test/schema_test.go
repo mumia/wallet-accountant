@@ -46,6 +46,12 @@ func TestBadValuesAreRejected(t *testing.T) {
 			"issuer",
 		},
 		{"issuer that is not a URL", ok, []string{"oidc.issuer=auth.example.test"}, "issuer"},
+		{"route port out of range", ok, []string{"route.port=70000"}, "/route/port"},
+		{
+			"Zitadel connect address without a port", values("base", "database-external", "zitadel-setup"),
+			[]string{"oidc.zitadelSetup.connectTo=ingress.internal"},
+			"connectTo",
+		},
 		{
 			"Zitadel setup without a token", values("base", "database-external", "zitadel-setup"),
 			[]string{"oidc.zitadelSetup.patSecret.name="},

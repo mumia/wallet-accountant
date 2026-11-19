@@ -28,13 +28,13 @@ request:
   variables:
     - name: baseUrl
       value: http://localhost:8080/api
-      description: The API (make run)
+      description: The API (make run, debug mode)
     - name: authUrl
-      value: http://localhost:8081
-      description: The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel from make dev-up)
+      value: https://auth.localhost:18443
+      description: The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel in the local cluster, make local-up)
     - name: clientId
       value: '{{process.env.WA_OAUTH_CLIENT_ID}}'
-      description: The client ID of the Zitadel application api-clients; make dev-up writes it to .env
+      description: The client ID of the Zitadel application api-clients; make local-deploy writes it to .env
     - name: household_id
       value: ""
       description: The Household's ID

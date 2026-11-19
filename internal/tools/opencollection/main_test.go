@@ -99,6 +99,24 @@ func TestBaseURLIsTheContractServerOnTheDevelopmentApp(t *testing.T) {
 	t.Error("no baseUrl variable")
 }
 
+// The development app (make run, debug mode) verifies tokens from the local
+// cluster's Zitadel, so the collection signs in there.
+func TestAuthURLIsTheLocalClustersZitadel(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range variables(&document{}) {
+		if v.Name == "authUrl" {
+			if v.Value != "https://auth.localhost:18443" {
+				t.Errorf("authUrl = %q, want https://auth.localhost:18443", v.Value)
+			}
+
+			return
+		}
+	}
+
+	t.Error("no authUrl variable")
+}
+
 func hasHeader(headers []keyValue, name string) bool {
 	for _, h := range headers {
 		if h.Name == name && h.Value != "" {
