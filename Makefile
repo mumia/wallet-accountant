@@ -35,6 +35,22 @@ export WA_OIDC_AUDIENCE             ?= wallet-accountant
 export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
+# Local cluster (ADR-0019). The local-* targets drive the env repo
+# (wallet-accountant-deploy); point ENV_REPO at any checkout of it.
+ENV_REPO            ?= ../wallet-accountant-deploy
+LOCAL_CLUSTER       ?= wallet-accountant
+LOCAL_REGISTRY      ?= wa-registry
+LOCAL_REGISTRY_PORT ?= 5050
+LOCAL_REGISTRY_DIR  ?= $(HOME)/.local/share/wallet-accountant/registry
+# Host ports for Traefik; change them only if something else holds 80 or 443.
+LOCAL_HTTP_PORT     ?= 80
+LOCAL_HTTPS_PORT    ?= 443
+LOCAL_ARTIFACT      := oci://localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-deploy:local
+LOCAL_KUBECTL       := kubectl --context k3d-$(LOCAL_CLUSTER)
+LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
+export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
+
+.PHONY: local-ca local-up local-down local-push local-deploy local-wait local-check local-headlamp-token
 .PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api build test test-integration
 
 help: ## List the targets
@@ -108,6 +124,52 @@ grafana: ## Open the local Grafana UI
 
 swagger: ## Open Swagger UI on api/openapi.yaml (dev-up starts it)
 	@open http://localhost:8082 2>/dev/null || xdg-open http://localhost:8082 2>/dev/null || echo "Swagger UI: http://localhost:8082"
+
+## Local cluster
+
+local-ca: ## Create the mkcert CA if needed and make this Mac trust it (once; asks for your password)
+	mkcert -install
+
+local-up: ## Create the k3d cluster with its registry, install Flux and reconcile the env repo's clusters/local
+	@test -f "$$(mkcert -CAROOT)/rootCA.pem" || { echo "No mkcert CA yet: run 'make local-ca' once."; exit 1; }
+	@test -d "$(ENV_REPO)/clusters/local" || { echo "ENV_REPO=$(ENV_REPO) is not a wallet-accountant-deploy checkout."; exit 1; }
+	mkdir -p "$(LOCAL_REGISTRY_DIR)"
+	k3d cluster get $(LOCAL_CLUSTER) >/dev/null 2>&1 || \
+		k3d cluster create --config "$(ENV_REPO)/clusters/local/k3d.yaml"
+	$(LOCAL_FLUX) install
+	@# cert-manager's CA issuer signs with this Mac's mkcert CA, whose key never leaves the Mac.
+	$(LOCAL_KUBECTL) create namespace cert-manager --dry-run=client -o yaml | $(LOCAL_KUBECTL) apply -f -
+	$(LOCAL_KUBECTL) -n cert-manager create secret tls mkcert-ca \
+		--cert="$$(mkcert -CAROOT)/rootCA.pem" --key="$$(mkcert -CAROOT)/rootCA-key.pem" \
+		--dry-run=client -o yaml | $(LOCAL_KUBECTL) apply -f -
+	$(MAKE) --no-print-directory local-push
+	$(LOCAL_KUBECTL) apply -k "$(ENV_REPO)/clusters/local/flux-system"
+	$(MAKE) --no-print-directory local-wait
+
+local-down: ## Delete the k3d cluster and its registry (the registry's storage is kept)
+	k3d cluster delete $(LOCAL_CLUSTER)
+
+local-push:
+	@# The env repo's working tree, committed or not, is what Flux applies.
+	$(LOCAL_FLUX) push artifact $(LOCAL_ARTIFACT) --path="$(ENV_REPO)" \
+		--source="$$(git -C "$(ENV_REPO)" remote get-url origin 2>/dev/null || echo local)" \
+		--revision="$$(git -C "$(ENV_REPO)" rev-parse --abbrev-ref HEAD)@sha1:$$(git -C "$(ENV_REPO)" rev-parse HEAD)" \
+		--ignore-paths=".git/,infra/"
+
+local-deploy: local-push ## Push the env repo's working tree to the local registry and have Flux apply it
+	$(LOCAL_FLUX) reconcile kustomization cluster --with-source --timeout=5m
+	$(MAKE) --no-print-directory local-wait
+
+local-wait:
+	@# `cluster` creates the other Kustomizations, so they exist only once it is ready.
+	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io/cluster --for=condition=Ready --timeout=5m
+	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io --all --for=condition=Ready --timeout=20m
+
+local-check: ## Check the running local cluster against ADR-0019 and the env repo
+	deploy/local/check.sh
+
+local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost (valid 24 hours)
+	@$(LOCAL_KUBECTL) -n headlamp create token headlamp --duration=24h
 
 ## Build and quality
 
