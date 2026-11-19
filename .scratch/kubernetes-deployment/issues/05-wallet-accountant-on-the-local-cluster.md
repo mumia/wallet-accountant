@@ -4,7 +4,7 @@
 
 **Blocked by:** 02, 04
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `apps/wallet-accountant` HelmRelease with `database.mode: external` on `apps-db`, Zitadel setup on, UI off, at `wallet.localhost`
 - [ ] `local-deploy` builds the image from this repo's working tree, pushes it to the k3d registry, and sets its tag in the pushed artifact (a unique tag per build, so Flux rolls it out)

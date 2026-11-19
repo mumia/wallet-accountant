@@ -4,7 +4,7 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Prometheus (with its OTLP receiver), Loki, Tempo and Grafana HelmReleases in `platform/observability`, a Flux Kustomization that `clusters/local` includes only when the observability flag is set; `clusters/prod` always includes it
 - [ ] Data sources provisioned like `deploy/selfhosted/grafana/provisioning` today, including trace-to-logs links

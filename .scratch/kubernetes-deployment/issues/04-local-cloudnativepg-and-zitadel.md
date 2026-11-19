@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] CNPG operator HelmRelease; `zitadel-db` and `apps-db` `Cluster`s, single instance each, with sizes from cluster values
 - [ ] `apps-db` tenants list: per tenant, a `Database`, an owner role (managed role) and its password Secret. Wallet Accountant's owner `wa_owner` has `BYPASSRLS` and `CREATEROLE` (ADR-0014)
