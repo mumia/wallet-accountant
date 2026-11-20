@@ -301,10 +301,16 @@ check "the collector takes OTLP over HTTP on localhost:$LOCAL_OTLP_PORT" sh -c '
 		"http://localhost:$1/v1/traces")" = 200 ]' _ "$LOCAL_OTLP_PORT"
 
 # Operator commands: the code goes only to this terminal, and no pod is left.
-bootstrap_out=$($MAKE -s local-bootstrap 2>/dev/null) || bootstrap_out=
 # The code is the only line that is a lone base64url word: the app's JSON log
-# lines can reach this output too, and are single words as well.
-code=$(echo "$bootstrap_out" | awk 'NF == 1 && length($1) > 16 && $1 ~ /^[A-Za-z0-9_-]+$/ {print $1; exit}')
+# lines can reach this output too, and are single words as well. On a busy
+# API server, `kubectl run -i` can lose the end of the pod's output; a new
+# bootstrap Invitation replaces the lost one, so try again.
+code=
+for _ in 1 2 3; do
+	bootstrap_out=$($MAKE -s local-bootstrap 2>/dev/null) || bootstrap_out=
+	code=$(echo "$bootstrap_out" | awk 'NF == 1 && length($1) > 16 && $1 ~ /^[A-Za-z0-9_-]+$/ {print $1; exit}')
+	[ -z "$code" ] || break
+done
 if [ -n "$code" ] && ! $KUBECTL -n $NS get pod wallet-accountant-bootstrap >/dev/null 2>&1; then
 	pass "make local-bootstrap prints an Invitation code and leaves no pod"
 else
@@ -372,6 +378,207 @@ else
 	fail "make run (debug mode) serves /api/me to the Zitadel identity (got '$debug_me': $(head -c 200 "$api_out" 2>/dev/null); log: $(tail -5 "$debug_log"))"
 fi
 rm -f "$debug_log" "$api_out"
+
+## Single sign-on for the admin tools (ADR-0022)
+
+# zitadel_sign_in <url> <jar>: opens <url> (an app's sign-in link) with the
+# cookie jar <jar>, signs in to Zitadel's v1 login UI as the first-instance
+# admin, and follows every redirect back to the app. Prints the final URL.
+zitadel_sign_in() {
+	page=$(mktemp)
+	url=$(curl -sSL -c "$2" -b "$2" --cacert "$CA" -o "$page" -w '%{url_effective}' "$1") || { rm -f "$page"; return 1; }
+	for _ in 1 2 3 4 5; do
+		case $url in "$issuer/ui/login/"*) ;; *) break ;; esac
+		csrf=$(grep -o 'name="gorilla.csrf.Token" value="[^"]*"' "$page" | head -1 | sed 's/.*value="//; s/"$//; s/&#43;/+/g; s/&#x2B;/+/g')
+		auth_request=$(grep -o 'name="authRequestID" value="[^"]*"' "$page" | head -1 | sed 's/.*value="//; s/"$//')
+		action=$(grep -o '<form action="[^"]*"' "$page" | head -1 | sed 's/.*action="//; s/"$//')
+		case $action in
+		*/loginname) field=loginName value=$admin_login ;;
+		*/password) field=password value=$admin_password ;;
+		# The prompt to set up a second factor: skip it.
+		*/mfa/prompt) field=skip value=true ;;
+		*) break ;;
+		esac
+		url=$(curl -sSL -c "$2" -b "$2" --cacert "$CA" -o "$page" -w '%{url_effective}' \
+			--data-urlencode "gorilla.csrf.Token=$csrf" --data-urlencode "authRequestID=$auth_request" \
+			--data-urlencode "$field=$value" "$issuer$action") || { rm -f "$page"; return 1; }
+	done
+	# Where it ended, and what that page said (an error, if any).
+	echo "$url $(tr -s '\n' ' ' <"$page" | head -c 200)"
+	rm -f "$page"
+}
+admin_login=admin@zitadel.auth.localhost
+
+# zitadel_app <name>: the client ID of the OIDC app <name> in the platform
+# project, which the platform setup Job creates.
+zitadel_app() {
+	zitadel_api /zitadel.application.v2.ApplicationService/ListApplications \
+		"{\"filters\":[{\"projectIdFilter\":{\"projectId\":\"platform\"}},{\"nameFilter\":{\"name\":\"$1\",\"method\":\"TEXT_FILTER_METHOD_EQUALS\"}}]}" |
+		grep -o '"clientId":"[^"]*"' | head -1 | cut -d '"' -f 4
+}
+
+# The platform setup Job restarts Headlamp once it has its client ID; sign in
+# to the new pod, not to the old one without single sign-on.
+$KUBECTL -n headlamp rollout status deployment/headlamp --timeout=5m >/dev/null 2>&1 || true
+headlamp_client=$(zitadel_app headlamp 2>/dev/null) || headlamp_client=
+check "the platform setup Job made Zitadel's headlamp app and gave Headlamp its client ID (headlamp/headlamp-oidc)" sh -c '
+	[ -n "$1" ] &&
+	[ "$(kubectl --context "$2" -n headlamp get secret headlamp-oidc -o jsonpath="{.data.client-id}" | base64 -d)" = "$1" ]' _ "$headlamp_client" "$CTX"
+jar=$(mktemp)
+landed=$(zitadel_sign_in "$headlamp/oidc?dt=0&cluster=main" "$jar" 2>/dev/null) || landed=
+review=$(curl -sS -b "$jar" --cacert "$CA" -H 'Content-Type: application/json' -X POST \
+	-d '{"apiVersion":"authentication.k8s.io/v1","kind":"SelfSubjectReview"}' \
+	"$headlamp/clusters/main/apis/authentication.k8s.io/v1/selfsubjectreviews" 2>/dev/null) || review=
+if echo "$review" | grep -q '"username":"zitadel:admin' && echo "$review" | grep -q '"zitadel:admin"'; then
+	pass "signing in to Headlamp through Zitadel reaches the API server as zitadel:admin…, in the group zitadel:admin"
+else
+	fail "signing in to Headlamp through Zitadel reaches the API server as zitadel:admin…, in the group zitadel:admin (landed on '$landed', review '$(echo "$review" | head -c 300)')"
+fi
+check "… and may list namespaces there (zitadel:admin is bound to cluster-admin)" sh -c '
+	curl -fsS -b "$1" --cacert "$2" "$3/clusters/main/api/v1/namespaces" | grep -q "\"name\":\"kube-system\""' _ "$jar" "$CA" "$headlamp"
+rm -f "$jar"
+headlamp_token=$($KUBECTL -n headlamp create token headlamp --duration=10m 2>/dev/null) || headlamp_token=
+check "Headlamp's token login still works (break-glass)" sh -c '
+	[ -n "$3" ] &&
+	curl -fsS --cacert "$1" -H "Authorization: Bearer $3" "$2/clusters/main/api/v1/namespaces/headlamp" | grep -q "\"name\":\"headlamp\""' \
+	_ "$CA" "$headlamp" "$headlamp_token"
+
+## The Grafana stack (ADR-0016): opt-in locally (make local-up-observability)
+
+grafana="https://grafana.localhost$port_suffix"
+if [ "${OBSERVABILITY:-false}" != true ]; then
+	check "without the observability flag, no Grafana stack runs" sh -c '
+		! kubectl --context "$1" -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io observability &&
+		! kubectl --context "$1" get namespace monitoring' _ "$CTX"
+else
+	check "the observability Flux Kustomization is ready" sh -c '
+		[ "$(kubectl --context "$1" -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io observability \
+			-o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}")" = True ]' _ "$CTX"
+	for release in prometheus loki tempo grafana; do
+		check "HelmRelease monitoring/$release is ready" sh -c '
+			[ "$(kubectl --context "$1" -n monitoring get helmreleases.helm.toolkit.fluxcd.io "$2" \
+				-o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}")" = True ]' _ "$CTX" "$release"
+	done
+	check "Prometheus runs with its OTLP receiver" sh -c '
+		kubectl --context "$1" get --raw "/api/v1/namespaces/monitoring/services/prometheus:9090/proxy/api/v1/status/flags" |
+			grep -q "\"web.enable-otlp-receiver\":\"true\""' _ "$CTX"
+
+	# The platform setup Job restarts Grafana once it has its client ID; on a
+	# busy node the new pod takes a while, and the old one has no single sign-on.
+	$KUBECTL -n monitoring rollout status deployment/grafana --timeout=5m >/dev/null 2>&1 || true
+	for _ in $(seq 1 36); do
+		curl -fsS --cacert "$CA" "$grafana/api/health" >/dev/null 2>&1 && break
+		sleep 5
+	done
+	grafana_password=$($KUBECTL -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d) || grafana_password=
+	check "Grafana's local admin password is the committed throwaway Secret monitoring/grafana-admin" sh -c '
+		[ -n "$2" ] && grep -rqs "admin-password: \"\{0,1\}$2" "$1/clusters/local/secrets/grafana"' _ "$ENV_REPO" "$grafana_password"
+	grafana_admin() { curl -fsS --cacert "$CA" -u "admin:$grafana_password" "$grafana$1"; }
+	check "$grafana signs in its local admin (break-glass)" sh -c '
+		curl -fsS --cacert "$1" -u "admin:$3" "$2/api/user" | grep -q "\"isGrafanaAdmin\":true"' _ "$CA" "$grafana" "$grafana_password"
+	datasources=$(grafana_admin /api/datasources 2>/dev/null) || datasources=
+	check "Grafana's data sources are Prometheus (default), Tempo and Loki" sh -c '
+		for ds in "\"uid\":\"prometheus\"" "\"uid\":\"tempo\"" "\"uid\":\"loki\""; do
+			echo "$1" | grep -q "$ds" || exit 1
+		done' _ "$datasources"
+	check "Tempo links traces to Loki's logs, and Loki links trace_id to Tempo" sh -c '
+		echo "$1" | grep -q "\"tracesToLogsV2\":{[^}]*\"datasourceUid\":\"loki\"" &&
+		echo "$2" | grep -q "\"derivedFields\":\[{[^]]*\"datasourceUid\":\"tempo\""' _ \
+		"$(grafana_admin /api/datasources/uid/tempo 2>/dev/null)" "$(grafana_admin /api/datasources/uid/loki 2>/dev/null)"
+	for ds in prometheus tempo loki; do
+		check "Grafana reaches its $ds data source" sh -c '
+			curl -fsS --cacert "$1" -u "admin:$3" "$2/api/datasources/uid/$4/health" | grep -q "\"status\":\"OK\""' \
+			_ "$CA" "$grafana" "$grafana_password" "$ds"
+	done
+
+	grafana_client=$(zitadel_app grafana 2>/dev/null) || grafana_client=
+	check "the platform setup Job made Zitadel's grafana app and gave Grafana its client ID (monitoring/grafana-oidc)" sh -c '
+		[ -n "$1" ] &&
+		[ "$(kubectl --context "$2" -n monitoring get secret grafana-oidc -o jsonpath="{.data.client-id}" | base64 -d)" = "$1" ]' _ "$grafana_client" "$CTX"
+	jar=$(mktemp)
+	landed=$(zitadel_sign_in "$grafana/login/generic_oauth" "$jar" 2>/dev/null) || landed=
+	me=$(curl -sS -b "$jar" --cacert "$CA" "$grafana/api/user" 2>/dev/null) || me=
+	orgs=$(curl -fsS -b "$jar" --cacert "$CA" "$grafana/api/user/orgs" 2>/dev/null) || orgs=
+	if echo "$me" | grep -q "\"authLabels\":\[\"Generic OAuth\"\]" && echo "$orgs" | grep -q '"role":"Admin"'; then
+		pass "signing in to Grafana through Zitadel makes the zitadel:admin user a Grafana Admin"
+	else
+		fail "signing in to Grafana through Zitadel makes the zitadel:admin user a Grafana Admin (landed on '$landed', user '$(echo "$me" | head -c 200)', orgs '$orgs')"
+	fi
+	rm -f "$jar"
+
+	# The chart's collector with collector.grafanaStack.enabled, in a scratch
+	# namespace, and one trace, metric and log sent to it.
+	scratch=local-check-otel
+	trace_id=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+	now=$(date +%s)000000000
+	# A namespace left by an earlier run may still be terminating.
+	$KUBECTL delete namespace "$scratch" --ignore-not-found --timeout=3m >/dev/null 2>&1 || true
+	$KUBECTL create namespace "$scratch" >/dev/null 2>&1 || true
+	"${HELM:-helm}" template wa "$(dirname "$0")/../helm/wallet-accountant" --namespace "$scratch" \
+		--set route.hostname=wallet.localhost --set 'route.parentRefs[0].name=platform' \
+		--set oidc.issuer=https://auth.localhost --set oidc.clientIds.web=x --set oidc.clientIds.apiClients=x \
+		--set database.mode=external --set database.external.ownerUrl.secretName=x \
+		--set database.external.appUrl.secretName=x --set database.external.readerUrl.secretName=x \
+		--set collector.grafanaStack.enabled=true --show-only templates/collector.yaml 2>/dev/null |
+		$KUBECTL -n "$scratch" apply -f - >/dev/null 2>&1 &&
+		$KUBECTL -n "$scratch" rollout status deployment/wa-wallet-accountant-collector --timeout=3m >/dev/null 2>&1 || true
+	resource='{"attributes":[{"key":"service.name","value":{"stringValue":"local-check"}}]}'
+	otlp_sent=$(mktemp)
+	# Detached, not `run -i`: attaching times out when the API server is busy.
+	$KUBECTL -n "$scratch" run otlp-sender --restart=Never --image=docker.io/curlimages/curl:8.17.0 \
+		--command -- sh -c '
+		post() { curl -fsS --retry 10 --retry-all-errors --retry-delay 3 -H "Content-Type: application/json" -d "$2" "http://wa-wallet-accountant-collector:4318/v1/$1"; }
+		post traces "{\"resourceSpans\":[{\"resource\":$1,\"scopeSpans\":[{\"spans\":[{\"traceId\":\"$2\",\"spanId\":\"0102030405060708\",\"name\":\"local-check\",\"kind\":1,\"startTimeUnixNano\":\"$3\",\"endTimeUnixNano\":\"$3\"}]}]}]}" &&
+		post logs "{\"resourceLogs\":[{\"resource\":$1,\"scopeLogs\":[{\"logRecords\":[{\"timeUnixNano\":\"$3\",\"severityText\":\"INFO\",\"body\":{\"stringValue\":\"local-check $2\"},\"traceId\":\"$2\",\"spanId\":\"0102030405060708\"}]}]}]}" &&
+		post metrics "{\"resourceMetrics\":[{\"resource\":$1,\"scopeMetrics\":[{\"metrics\":[{\"name\":\"local_check_runs\",\"gauge\":{\"dataPoints\":[{\"asDouble\":1,\"timeUnixNano\":\"$3\"}]}}]}]}]}"' \
+		_ "$resource" "$trace_id" "$now" >/dev/null 2>&1 &&
+		$KUBECTL -n "$scratch" wait pod/otlp-sender --for=jsonpath='{.status.phase}'=Succeeded --timeout=5m >/dev/null 2>&1 || true
+	$KUBECTL -n "$scratch" logs otlp-sender >"$otlp_sent" 2>&1 || true
+	proxy() { $KUBECTL get --raw "/api/v1/namespaces/monitoring/services/$1/proxy$2" 2>/dev/null; }
+	got_trace= got_log= got_metric=
+	for _ in $(seq 1 30); do
+		[ -n "$got_trace" ] || ! proxy tempo:3200 "/api/v2/traces/$trace_id" | grep -q local-check || got_trace=1
+		[ -n "$got_log" ] || ! proxy loki:3100 "/loki/api/v1/query_range?query=%7Bservice_name%3D%22local-check%22%7D&start=$((now / 1000000000 - 600))000000000" |
+			grep -q "local-check $trace_id" || got_log=1
+		[ -n "$got_metric" ] || ! proxy prometheus:9090 "/api/v1/query?query=local_check_runs" | grep -q '"job":"local-check"' || got_metric=1
+		[ -n "$got_trace" ] && [ -n "$got_log" ] && [ -n "$got_metric" ] && break
+		sleep 5
+	done
+	$KUBECTL delete namespace "$scratch" --wait=false >/dev/null 2>&1 || true
+	[ -n "$got_trace" ] && [ -n "$got_log" ] && [ -n "$got_metric" ] ||
+		echo "local-check: the OTLP sender said: $(head -c 300 "$otlp_sent")" >&2
+	rm -f "$otlp_sent"
+	check "the chart's collector, with collector.grafanaStack.enabled, sends a trace to Tempo" test -n "$got_trace"
+	check "… a log record to Loki" test -n "$got_log"
+	check "… and a metric to Prometheus" test -n "$got_metric"
+fi
+
+# The app's own collector (ticket 05) follows the flag, once the app is deployed.
+app_collector=$($KUBECTL -n wallet-accountant get configmaps -l app.kubernetes.io/component=collector \
+	-o jsonpath='{.items[0].data.config\.yaml}' 2>/dev/null) || app_collector=
+if [ -z "$app_collector" ]; then
+	echo "skip: the app's collector is not deployed"
+elif [ "${OBSERVABILITY:-false}" = true ]; then
+	check "the app's collector exports to Tempo, Prometheus and Loki" sh -c '
+		echo "$1" | grep -q "otlphttp/tempo" && echo "$1" | grep -q "otlphttp/prometheus" && echo "$1" | grep -q "otlphttp/loki"' _ "$app_collector"
+	# The app served requests above (/api/me, the bootstrap); its own telemetry
+	# reaches the stack. Metrics are exported once a minute.
+	app_trace= app_log= app_metric=
+	for _ in $(seq 1 36); do
+		[ -n "$app_trace" ] || ! proxy tempo:3200 "/api/search?tags=service.name%3Dwallet-accountant&limit=1" | grep -q '"traceID"' || app_trace=1
+		[ -n "$app_log" ] || ! proxy loki:3100 "/loki/api/v1/query_range?query=%7Bservice_name%3D%22wallet-accountant%22%7D&limit=1&start=$(($(date +%s) - 3600))000000000" |
+			grep -q '"values":\[\[' || app_log=1
+		[ -n "$app_metric" ] || ! proxy prometheus:9090 "/api/v1/query?query=count(%7Bjob%3D%22wallet-accountant%22%7D)" | grep -q '"value":\[' || app_metric=1
+		[ -n "$app_trace" ] && [ -n "$app_log" ] && [ -n "$app_metric" ] && break
+		sleep 5
+	done
+	check "the app's traces are in Tempo (service.name wallet-accountant)" test -n "$app_trace"
+	check "… its logs in Loki" test -n "$app_log"
+	check "… and its metrics in Prometheus (job wallet-accountant)" test -n "$app_metric"
+else
+	check "the app's collector discards telemetry" sh -c '
+		echo "$1" | grep -q "nop" && ! echo "$1" | grep -q otlphttp' _ "$app_collector"
+fi
 
 if [ "$failures" -ne 0 ]; then
 	echo "local-check: $failures check(s) failed" >&2

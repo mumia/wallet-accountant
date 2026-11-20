@@ -116,6 +116,8 @@ Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.
 | `collector.enabled` | `true` | Run the OpenTelemetry Collector |
 | `collector.exporters` | `{nop: {}}` | Collector exporters, as in its configuration |
 | `collector.pipelines.{traces,metrics,logs}` | `[nop]` | The exporters each signal goes to; each must be in `collector.exporters` |
+| `collector.grafanaStack.enabled` | `false` | Send traces, metrics and logs over OTLP to the Grafana stack instead of `collector.pipelines`; the env repo turns it on where the stack runs |
+| `collector.grafanaStack.endpoints.{tempo,prometheus,loki}` | `http://tempo.monitoring:4318`, `http://prometheus.monitoring:9090/api/v1/otlp`, `http://loki.monitoring:3100/otlp` | The stack's OTLP endpoints |
 | `collector.externalEndpoint` | `""` | Without the collector, where the app sends OTLP over HTTP; empty turns the exporters off |
 | `collector.image.*`, `collector.resources` | `otel/opentelemetry-collector-contrib:0.162.0` | The collector's image and resources |
 | `route.enabled` | `true` | Render the `HTTPRoute` |

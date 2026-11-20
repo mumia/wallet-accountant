@@ -227,6 +227,23 @@
             "logs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
           }
         },
+        "grafanaStack": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "endpoints": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["tempo", "prometheus", "loki"],
+              "properties": {
+                "tempo": { "$ref": "#/definitions/url" },
+                "prometheus": { "$ref": "#/definitions/url" },
+                "loki": { "$ref": "#/definitions/url" }
+              }
+            }
+          }
+        },
         "resources": { "$ref": "#/definitions/resources" },
         "externalEndpoint": { "anyOf": [{ "const": "" }, { "$ref": "#/definitions/url" }] }
       }
