@@ -151,11 +151,15 @@ local-up: ## Create the k3d cluster with its registry, install Flux and reconcil
 	else \
 		$(LOCAL_KUBECTL) -n flux-system delete kustomizations.kustomize.toolkit.fluxcd.io observability --ignore-not-found; \
 	fi
-	$(MAKE) --no-print-directory local-wait
+	@# Not the app: its chart is the last one local-deploy built, which may not
+	@# fit this env repo (a values change); local-deploy builds it and waits on it.
+	$(MAKE) --no-print-directory local-wait LOCAL_WAIT_SKIP=wallet-accountant
 	@# The app reads the flag (the ConfigMap flux-system/observability) when its
-	@# Flux Kustomization reconciles, which may have been before the flag changed.
+	@# Flux Kustomization reconciles, which may have been before the flag
+	@# changed: ask for a reconcile, without waiting on it.
 	@if $(LOCAL_KUBECTL) -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io wallet-accountant >/dev/null 2>&1; then \
-		$(LOCAL_FLUX) reconcile kustomization wallet-accountant --timeout=20m; \
+		$(LOCAL_KUBECTL) -n flux-system annotate --overwrite kustomizations.kustomize.toolkit.fluxcd.io wallet-accountant \
+			reconcile.fluxcd.io/requestedAt="$$(date +%s)"; \
 	fi
 
 local-up-observability: ## Same as local-up, plus the Grafana stack at https://grafana.localhost:18443
@@ -224,9 +228,13 @@ local-rebuild: $(HELM) ## Rebuild every fold from the event store in the local c
 	@HELM=$(abspath $(HELM)) deploy/local/operator-pod.sh rebuild
 
 local-wait:
-	@# `cluster` creates the other Kustomizations, so they exist only once it is ready.
+	@# `cluster` creates the other Kustomizations, so they exist only once it is
+	@# ready. Then every one but those LOCAL_WAIT_SKIP names.
 	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io/cluster --for=condition=Ready --timeout=5m
-	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io --all --for=condition=Ready --timeout=20m
+	@set -e; names=$$($(LOCAL_KUBECTL) -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io -o name | \
+		grep -v -x -F -e '' $(foreach k,$(LOCAL_WAIT_SKIP),-e kustomization.kustomize.toolkit.fluxcd.io/$(k))); \
+	echo "local-wait: $$names" | tr '\n' ' '; echo; \
+	$(LOCAL_KUBECTL) -n flux-system wait $$names --for=condition=Ready --timeout=20m
 
 local-check: $(HELM) ## Check the running local cluster against ADR-0019 and the env repo (OBSERVABILITY=true: with the Grafana stack)
 	HELM=$(abspath $(HELM)) deploy/local/check.sh
