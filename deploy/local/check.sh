@@ -118,14 +118,20 @@ check "every Flux source fetches from $LOCAL_REGISTRY:5000" sh -c '
 		-o jsonpath="{range .items[*]}{.spec.url}{\"\\n\"}{end}") &&
 	[ -n "$urls" ] && ! echo "$urls" | grep -qv "^oci://$2:5000/"' _ "$CTX" "$LOCAL_REGISTRY"
 # Fails closed: an image that was not prefetched cannot be pulled, even with
-# the network up, from any registry (k3d.yaml: mirrors, no fallback).
+# the network up, from any registry (k3d.yaml: mirrors, no fallback). Each
+# exists upstream, so a "not found" whose request reached wa-registry (its
+# access log, `?ns=<registry>`) means k3s asked only the mirror.
 for unmirrored in docker.io/library/hello-world:latest ghcr.io/fluxcd/flux-cli:v2.0.0 \
 	quay.io/prometheus/busybox:latest registry.k8s.io/pause:3.10 gcr.io/distroless/base:latest; do
+	since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	ns=${unmirrored%%/*}
+	tag=${unmirrored##*:}
 	if out=$(docker exec "$NODE" crictl pull "$unmirrored" 2>&1); then
 		fail "k3s pulls only through $LOCAL_REGISTRY: $unmirrored was pulled from upstream"
 		docker exec "$NODE" crictl rmi "$unmirrored" >/dev/null 2>&1 || true
-	elif echo "$out" | grep -q "$LOCAL_REGISTRY:5000" && ! echo "$out" | grep -qE "https://(registry-1\.docker\.io|ghcr\.io|quay\.io|registry\.k8s\.io|gcr\.io)"; then
-		pass "k3s pulls only through $LOCAL_REGISTRY: $unmirrored fails there, with no upstream try"
+	elif echo "$out" | grep -q "not found" &&
+		docker logs --since "$since" "$LOCAL_REGISTRY" 2>&1 | grep -q "/manifests/$tag?ns=$ns "; then
+		pass "k3s pulls only through $LOCAL_REGISTRY: $unmirrored is not found there, with no upstream try"
 	else
 		fail "k3s pulls only through $LOCAL_REGISTRY: $unmirrored ($(echo "$out" | tail -1 | head -c 300))"
 	fi

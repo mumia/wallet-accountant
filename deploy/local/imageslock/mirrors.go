@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -11,7 +12,8 @@ import (
 // MirrorProblems checks the k3d config (clusters/local/k3d.yaml): k3s's
 // registries.yaml must send every registry images.lock mirrors to the local
 // registry, keeping the upstream name as a path prefix (the layout
-// `make local-prefetch` writes), and must fail closed: no fallback to the
+// `make local-prefetch` writes: the rewrite "^" -> "<registry>/" prefixes it,
+// with no "$", which k3d would expand as an environment variable), and must fail closed: no fallback to the
 // upstream registry, and a "*" mirror for every other registry.
 func MirrorProblems(k3dConfig []byte, lock Lock, localRegistry string) []string {
 	var cfg struct {
@@ -65,8 +67,13 @@ func MirrorProblems(k3dConfig []byte, lock Lock, localRegistry string) []string 
 	sort.Strings(names)
 	for _, r := range names {
 		m, ok := registries.Mirrors[r]
-		if !ok || !slices.Equal(m.Endpoint, []string{endpoint}) || len(m.Rewrite) != 1 || m.Rewrite["^(.*)$"] != r+"/$1" {
-			problems = append(problems, fmt.Sprintf(`registries.yaml: %s is not mirrored to %s with rewrite "^(.*)$": "%s/$1"`, r, endpoint, r))
+		for from, to := range m.Rewrite {
+			if strings.Contains(from+to, "$") {
+				problems = append(problems, fmt.Sprintf(`registries.yaml: a "$" in k3d's config is an environment variable to k3d, which replaces it (with nothing): %s's rewrite %q: %q`, r, from, to))
+			}
+		}
+		if !ok || !slices.Equal(m.Endpoint, []string{endpoint}) || len(m.Rewrite) != 1 || m.Rewrite["^"] != r+"/" {
+			problems = append(problems, fmt.Sprintf(`registries.yaml: %s is not mirrored to %s with rewrite "^": "%s/"`, r, endpoint, r))
 		}
 	}
 	return problems
