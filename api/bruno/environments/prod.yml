@@ -1,0 +1,8 @@
+name: prod
+variables:
+  - name: baseUrl
+    value: https://wallet.shire.migmar.eu/api
+  - name: authUrl
+    value: https://auth.shire.migmar.eu
+  - name: clientId
+    value: "{{process.env.WA_PROD_OAUTH_CLIENT_ID}}"

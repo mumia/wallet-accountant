@@ -32,6 +32,16 @@ CI (`.github/workflows/ci.yaml`) runs the same lint, generate, tidy, test, integ
 
 `make dev-up` still starts the former Compose dependencies (PostgreSQL, Zitadel on `http://localhost:8081`, Swagger UI, otel-lgtm) until they are removed; the run targets no longer point at them, and its PostgreSQL needs `localhost:5432`, which the cluster holds.
 
+## Production
+
+Production is the env repo's `clusters/prod`: a k3s VM on the homelab, at `https://wallet.shire.migmar.eu`, reachable only on the tailnet. Releases reach it by themselves: Flux image automation follows this repo's semver tags (`docs/architecture/conventions.md`, "Releases"). With the admin kubeconfig at `~/.kube/shire.yaml` (`PROD_KUBECONFIG`; the env repo's `infra/README.md`):
+
+```sh
+make prod-check       # build and check clusters/prod without a cluster (REQUIRE_ENCRYPTED=1: every Secret sealed)
+make prod-bootstrap   # print production's bootstrap Invitation code (only to this terminal)
+make prod-bruno-env   # production's api-clients client ID for Bruno's environment prod
+```
+
 ## Self-hosting
 
 Needs Docker, and `openssl` for the first `make up`.
