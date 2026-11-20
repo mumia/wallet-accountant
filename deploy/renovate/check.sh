@@ -34,12 +34,14 @@ docker run --rm -v "$repo:/usr/src/app:ro" -w /usr/src/app \
 	exit 1
 }
 
-deps=$(jq -r 'select(.msg == "packageFiles with updates") | .config | to_entries[]
+# Only the JSON log lines: Node prints some warnings as plain text (a
+# gcr.io lookup probes for Google Cloud metadata and warns when it is absent).
+deps=$(grep '^{' "$log" | jq -r 'select(.msg == "packageFiles with updates") | .config | to_entries[]
 	| .key as $m | .value[] | .packageFile as $f | .deps[]
 	| [$m, .depName, (.currentValue // "-"), $f, (.depType // "-"),
 	   ((.updates // []) | map(.newValue // .newDigest) | join(",") | if . == "" then "-" else . end),
 	   ((.skipReason // "") + ((.warnings // []) | map(.message) | join("; ")))]
-	| @tsv' "$log")
+	| @tsv')
 if [ -z "$deps" ]; then
 	echo "no dependencies found" >&2
 	exit 1

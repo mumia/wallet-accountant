@@ -7,6 +7,7 @@ Needs Go (see `go.mod`), Docker, k3d, kubectl, flux, mkcert and jq, and a checko
 
 ```sh
 make local-ca       # once per Mac: create the mkcert CA and trust it (asks for your password)
+make local-prefetch # online, once: mirror the env repo's images.lock, so the rest works offline
 make local-up       # the k3d cluster: Traefik, cert-manager, CloudNativePG (apps-db), Zitadel, Headlamp, Swagger UI
 make local-deploy   # build the image and chart from this working tree and roll them out through Flux
 make local-bootstrap   # print a bootstrap Invitation code (only to this terminal)

@@ -38,6 +38,8 @@ LOCAL_CLUSTER       ?= wallet-accountant
 LOCAL_REGISTRY      ?= wa-registry
 LOCAL_REGISTRY_PORT ?= 5050
 LOCAL_REGISTRY_DIR  ?= $(HOME)/.local/share/wallet-accountant/registry
+# The registry's configuration file, which k3d mounts (an absolute path).
+LOCAL_REGISTRY_CONFIG ?= $(abspath $(ENV_REPO))/clusters/local/registry-config.yml
 # Host ports for Traefik, so another cluster on the Mac can keep 80 and 443.
 # Browser URLs are https://<name>.localhost:18443. Zitadel's issuer and the
 # in-cluster port that pods reach it on are 18443 too (env repo,
@@ -55,7 +57,7 @@ LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
 LOCAL_BUILD         := bin/local-build.env
 LOCAL_STAGE         := bin/local-artifact
 LOCAL_ORIGIN        := $(if $(filter 443,$(LOCAL_HTTPS_PORT)),,:$(LOCAL_HTTPS_PORT))
-export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
+export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_REGISTRY_CONFIG LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
 export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD
 
 # Debug mode (ADR-0019): `make run` and the other run targets, or an IDE with
@@ -76,7 +78,7 @@ export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
 .PHONY: renovate-check
 .PHONY: local-ca local-up local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
-.PHONY: local-bootstrap local-rebuild local-bruno-env
+.PHONY: local-bootstrap local-rebuild local-bruno-env local-prefetch images-lock-check images-lock-pin
 .PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
 help: ## List the targets
@@ -156,10 +158,15 @@ swagger: ## Open Swagger UI on api/openapi.yaml (dev-up starts it)
 local-ca: ## Create the mkcert CA if needed and make this Mac trust it (once; asks for your password)
 	mkcert -install
 
+local-prefetch: $(HELM) ## Online, once: mirror every image and chart in ENV_REPO's images.lock into the cluster's registry and Docker, so local-up and local-deploy then work offline
+	HELM=$(abspath $(HELM)) deploy/local/prefetch.sh
+
 local-up: ## Create the k3d cluster with its registry, install Flux and reconcile the env repo's clusters/local
 	@test -f "$$(mkcert -CAROOT)/rootCA.pem" || { echo "No mkcert CA yet: run 'make local-ca' once."; exit 1; }
 	@test -d "$(ENV_REPO)/clusters/local" || { echo "ENV_REPO=$(ENV_REPO) is not a wallet-accountant-deploy checkout."; exit 1; }
 	mkdir -p "$(LOCAL_REGISTRY_DIR)"
+	@# Offline once everything is in: it then only checks what is already there.
+	$(MAKE) --no-print-directory local-prefetch
 	k3d cluster get $(LOCAL_CLUSTER) >/dev/null 2>&1 || \
 		k3d cluster create --config "$(ENV_REPO)/clusters/local/k3d.yaml"
 	$(LOCAL_FLUX) install
@@ -185,11 +192,16 @@ local-push:
 
 local-build: $(HELM)
 	@# A unique tag per build, so Flux rolls each one out. The image and the chart
-	@# come from this working tree, committed or not.
+	@# come from this working tree, committed or not. Offline: the modules come
+	@# from the module cache (local-prefetch filled it), vendored into bin/vendor
+	@# (-e: a go.mod tool's package may not load; the app's do), and the build
+	@# has no network (Dockerfile).
+	rm -rf bin/vendor
+	GOFLAGS=-mod=mod GOPROXY=off go mod vendor -e -o bin/vendor
 	@set -e; stamp=$$(date -u +%Y%m%d%H%M%S); tag=local-$$stamp; \
 	version=$$(awk '$$1 == "version:" {print $$2}' $(CHART)/Chart.yaml)-local.$$stamp; \
 	image=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant:$$tag; \
-	docker build -t $$image . && docker push -q $$image; \
+	docker build --network=none --build-context vendor=bin/vendor -t $$image . && docker push -q $$image; \
 	rm -rf bin/local-chart; \
 	$(HELM) package $(CHART) --destination bin/local-chart --version $$version --app-version $$tag; \
 	$(HELM) push bin/local-chart/wallet-accountant-$$version.tgz oci://localhost:$(LOCAL_REGISTRY_PORT)/charts --plain-http; \
@@ -222,6 +234,18 @@ local-wait:
 
 local-check: ## Check the running local cluster against ADR-0019 and the env repo
 	deploy/local/check.sh
+
+# Offline (ADR-0019): images.lock in ENV_REPO lists every image and chart the
+# local cluster uses. CI runs images-lock-check (ci.yaml, the images-lock job).
+IMAGESLOCK := go run ./deploy/local/imageslock
+# Dockerfiles whose base images images.lock must list (the Mac's Docker builds from them).
+LOCK_DOCKERFILES := Dockerfile
+
+images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts, Flux, k3d, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock
+	$(IMAGESLOCK) check -env "$(ENV_REPO)" -helm $(HELM) -chart $(CHART) $(foreach f,$(LOCK_DOCKERFILES),-dockerfile $(f))
+
+images-lock-pin: ## Add the digest to every image in ENV_REPO's images.lock that has none (online)
+	$(IMAGESLOCK) pin -lock "$(ENV_REPO)/images.lock"
 
 local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost:18443 (valid 24 hours)
 	@$(LOCAL_KUBECTL) -n headlamp create token headlamp --duration=24h
@@ -296,7 +320,8 @@ RENOVATE_ENV_EXPECT := \
 	kubernetes:ghcr.io/headlamp-k8s/headlamp-plugin-flux kubernetes:rancher/k3s kubernetes:swaggerapi/swagger-ui \
 	regex:swaggerapi/swagger-ui \
 	regex:quay.io/jetstack/charts/cert-manager regex:headlamp \
-	regex:rancher/k3s regex:ghcr.io/headlamp-k8s/headlamp-plugin-flux
+	regex:rancher/k3s regex:ghcr.io/headlamp-k8s/headlamp-plugin-flux \
+	kubernetes:registry regex:registry regex:golang regex:quay.io/jetstack/cert-manager-controller
 
 renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
 	deploy/renovate/check.sh . $(RENOVATE_EXPECT)
