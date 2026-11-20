@@ -3,7 +3,7 @@
 -- connection uses (ADR-0014). Runs as wa_owner, which owns every table.
 
 -- Roles. wa_owner runs this migration, so it exists already: the database
--- bootstrap creates it (deploy/dev/postgres-init.sql in development) with
+-- platform creates it (a CloudNativePG managed role, ADR-0023) with
 -- CREATEROLE and BYPASSRLS, which creating wa_event_store_reader requires.
 -- Roles are cluster-wide, so a second database in the same cluster reuses them.
 DO $$

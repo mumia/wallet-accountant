@@ -2,15 +2,7 @@
 # Go tools are pinned in go.mod and run with `go tool`.
 
 BINARY        := bin/wallet-accountant
-COMPOSE_DEV   := docker compose -f compose.dev.yaml
 IMAGE         ?= wallet-accountant:local
-
-# Self-hosting (compose.yaml). ENV_FILE holds the secrets; `make up` writes it
-# on first use. Set COMPOSE_PROJECT_NAME or COMPOSE_FILE to run another
-# installation side by side.
-ENV_FILE      ?= .env
-COMPOSE       := docker compose --env-file $(ENV_FILE)
-COMPOSE_OBSERVABILITY := COLLECTOR_CONFIG=observability $(COMPOSE) --profile observability
 VACUUM        := go tool vacuum lint --ruleset api/zalando-ruleset.yaml --no-banner --no-style
 
 # The Helm chart's checks (deploy/helm/wallet-accountant). helm and kubeconform
@@ -103,52 +95,12 @@ export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 .PHONY: local-ca local-up local-up-observability local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
 .PHONY: local-bootstrap local-rebuild local-bruno-env local-prefetch images-lock-check images-lock-pin local-browser-test local-smoke stand-in-ui-vendor
 .PHONY: prod-check prod-bootstrap prod-bruno-env
-.PHONY: help up up-observability down logs bootstrap compose-rebuild docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
+.PHONY: help docker-build run run-api run-worker migrate rebuild dev-bootstrap generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
 
-## Self-hosted
-
-$(ENV_FILE):
-	deploy/selfhosted/init-env.sh $(ENV_FILE)
-
-up: $(ENV_FILE) ## Start the app, migrations, PostgreSQL, Zitadel and the collector
-	$(COMPOSE) up -d --build --wait
-
-up-observability: $(ENV_FILE) ## Same as up, plus Tempo, Prometheus, Loki and Grafana
-	$(COMPOSE_OBSERVABILITY) up -d --build --wait
-
-down: ## Stop the self-hosted stack (the volumes are kept)
-	$(COMPOSE) --profile observability down
-
-logs: ## Follow the app's logs
-	$(COMPOSE) logs -f app
-
-bootstrap: ## Print the bootstrap Invitation code for the first Instance administrator (ADR-0017)
-	@# The code goes only to this terminal: the container is removed, and the
-	@# app logs no more than that an Invitation was issued.
-	@$(COMPOSE) run --rm --no-deps app bootstrap
-
-compose-rebuild: ## Rebuild every fold from the event store in the self-hosted database
-	$(COMPOSE) run --rm --no-deps app rebuild
-
-## Development
-
-dev-up: ## Start PostgreSQL, Zitadel (with the wallet-accountant project), Swagger UI and otel-lgtm
-	$(COMPOSE_DEV) up -d --wait
-	$(COMPOSE_DEV) run --rm zitadel-setup
-	@# The Bruno collection reads the client ID Zitadel generated from api/bruno/.env.
-	@client_id=$$($(COMPOSE_DEV) run --rm --no-deps -T --entrypoint cat zitadel-setup /zitadel-setup/api-clients-client-id.txt) && \
-		printf 'WA_OAUTH_CLIENT_ID=%s\n' "$$client_id" > api/bruno/.env && \
-		echo "api/bruno/.env: WA_OAUTH_CLIENT_ID=$$client_id"
-
-dev-down: ## Stop the development dependencies (the volumes are kept)
-	$(COMPOSE_DEV) down
-
-dev-reset: ## Delete the dev database and Zitadel data, then run dev-up and migrate
-	$(COMPOSE_DEV) --profile setup down -v --remove-orphans
-	$(MAKE) --no-print-directory dev-up migrate
+## Debug mode
 
 run: ## Debug mode: run the app in all mode on this Mac against the local cluster's apps-db, Zitadel and collector
 	go run ./cmd/wallet-accountant all
@@ -167,12 +119,6 @@ rebuild: ## Debug mode: rebuild every fold from the event store in the local clu
 
 dev-bootstrap: ## Debug mode: print a bootstrap Invitation code (local cluster's apps-db)
 	go run ./cmd/wallet-accountant bootstrap
-
-grafana: ## Open the local Grafana UI
-	@open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "Grafana: http://localhost:3000"
-
-swagger: ## Open Swagger UI on api/openapi.yaml (dev-up starts it)
-	@open http://localhost:8082 2>/dev/null || xdg-open http://localhost:8082 2>/dev/null || echo "Swagger UI: http://localhost:8082"
 
 ## Local cluster
 

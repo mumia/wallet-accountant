@@ -92,8 +92,8 @@ func Migrate(t testing.TB, fn func() error) {
 	}
 }
 
-// start runs the container and creates wa_owner, as the database bootstrap
-// does in development (deploy/dev/postgres-init.sql).
+// start runs the container and creates wa_owner, as the platform does in a
+// cluster (a CloudNativePG managed role, ADR-0023).
 func start(ctx context.Context) (string, error) {
 	c, err := postgres.Run(ctx, PostgresImage,
 		postgres.WithDatabase("postgres"),

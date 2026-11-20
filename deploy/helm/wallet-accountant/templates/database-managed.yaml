@@ -1,7 +1,7 @@
 {{- /*
 database.mode: managed (ADR-0023): a single-tenant CloudNativePG Cluster
 with wa_owner, the role that owns the database and runs migrate (ADR-0014).
-This replaces deploy/selfhosted/postgres-init.sh. The first migration creates
+The first migration creates
 wa_app and wa_event_store_reader, and migrate sets their passwords to those
 in the generated URLs.
 

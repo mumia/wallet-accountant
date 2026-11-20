@@ -28,9 +28,7 @@ internal/wiring/                composition root: builds every context and runs 
 internal/apitest/               HTTP test harness: the real app in-process against testcontainers PostgreSQL
 internal/tools/opencollection/  writes api/bruno from api/openapi.yaml
 deploy/local/                   the local k3d cluster's check (`make local-check`), smoke test (`make local-smoke`), browser test, artifact staging and operator pods; the cluster itself is in the env repo (ADR-0019)
-compose.dev.yaml                development dependencies; deploy/dev/ holds their files
-compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secrets generator, PostgreSQL init,
-                                collector, Tempo and Grafana configuration
+Dockerfile                      the app's image (`make docker-build`; `make local-build` builds it offline)
 deploy/helm/wallet-accountant/  the Helm chart (ADR-0020); test/ holds its checks (`make lint-chart`) and, in
                                 test/stand-in-ui/, the stand-in UI test fixture and its Playwright test
 deploy/release/                 version.sh: what a pushed ref publishes (see "Releases")
@@ -66,7 +64,7 @@ All aggregate and event IDs are UUIDv7. The application generates them, never th
 - Configuration comes only from environment variables: `WA_DATABASE_URL` (as `wa_app`), `WA_OIDC_ISSUER` and `WA_OIDC_AUDIENCE` (required), `WA_READER_DATABASE_URL` (as `wa_event_store_reader`; needed by `worker`, `all` and `rebuild`), `WA_OWNER_DATABASE_URL` (as `wa_owner`; needed by `migrate`, which also sets the passwords of `wa_app` and `wa_event_store_reader` to those in their URLs), `WA_HTTP_ADDR` (default `:8080`), `WA_SHUTDOWN_TIMEOUT` (default `10s`), and the standard `OTEL_*` variables. The run mode is the binary's only argument (default `all`).
 - Logs use `log/slog` with JSON output.
 - Logs, traces and metrics are exported over OTLP by default. Logs also go to stdout as JSON; slog reaches OTLP through the OpenTelemetry slog bridge.
-- Telemetry goes to an OpenTelemetry Collector, which forwards it to the Grafana stack: Tempo for traces, Prometheus for metrics, Loki for logs, Grafana to view them (ADR-0016). Development uses the all-in-one `otel-lgtm` image from `compose.dev.yaml`; self-hosting runs the collector and enables the backends with the `observability` profile (`make up-observability`).
+- Telemetry goes to an OpenTelemetry Collector, which forwards it to the Grafana stack: Tempo for traces, Prometheus for metrics, Loki for logs, Grafana to view them (ADR-0016). The chart runs the app's collector; locally the Grafana stack is opt-in (`make local-up-observability`, then `https://grafana.localhost:18443`), and in production it is a platform component.
 - Events carry W3C trace context (`traceparent`, ADR-0015), so a Watermill handler continues the trace of the request that caused the event.
 
 ## Make targets
@@ -76,20 +74,17 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | Target | What it does |
 |---|---|
 | **Debug mode** (ADR-0019; the app runs on the host against the local cluster's `apps-db` on `localhost:5432`, its collector on `localhost:4318` and Zitadel at `https://auth.localhost:18443`) | |
-| `make dev-up` / `make dev-down` | The former Compose dependencies (`compose.dev.yaml`), until they are removed: start or stop PostgreSQL, Zitadel, Swagger UI and `otel-lgtm`. The run targets no longer use them. `dev-up` also creates the Zitadel project `wallet-accountant` and its public application `api-clients` (`deploy/zitadel/setup-project.sh`), and writes that application's client ID to `api/bruno/.env` |
-| `make dev-reset` | Delete the dev database and Zitadel data, then `dev-up` and `migrate`. Needed when the database roles change |
 | `make run` | Run the app in `all` mode on the host against the local cluster |
 | `make run-api` / `make run-worker` | Run a single run mode |
 | `make migrate` | Run the `migrate` run mode against the local cluster's `apps-db` |
 | `make rebuild` | Run the `rebuild` run mode against the local cluster's `apps-db` |
 | `make dev-bootstrap` | Run the `bootstrap` run mode against the local cluster's `apps-db` |
-| `make grafana` | Open the local Grafana UI |
-| `make swagger` | Open Swagger UI on `api/openapi.yaml` (http://localhost:8082) |
 | **Local cluster** (k3d, ADR-0019; drives the env repo at `ENV_REPO`, default `../wallet-accountant-deploy`) | |
 | `make local-ca` | Once per Mac: create the mkcert CA and make the Mac trust it (asks for your password) |
 | `make local-prefetch` | Online, once (and after the env repo's `images.lock` changes): mirror every image and chart in `images.lock` into the cluster's registry, pull the host images into Docker and download the Go modules (`deploy/local/prefetch.sh`), so `local-up` and `local-deploy` then work offline. Already-mirrored entries are only checked, so `local-up` runs it first |
 | `make images-lock-check` / `make images-lock-pin` | Render what the env repo's `clusters/local` applies (Flux Kustomizations, charts, `flux install`, k3d config, Dockerfiles) and fail on an image or chart missing from `images.lock`, a chart source left upstream or an unmirrored registry (`deploy/local/imageslock`; CI's `images-lock` job runs it); or add the digest to each `images.lock` image without one |
 | `make local-up` / `make local-down` | Create the k3d cluster and its registry, install Flux, load the mkcert CA as cert-manager's CA issuer and reconcile the env repo's `clusters/local`; or delete the cluster (the registry's storage, `LOCAL_REGISTRY_DIR`, is kept). Traefik is on the Mac's ports 18080 / 18443 (`LOCAL_HTTP_PORT` / `LOCAL_HTTPS_PORT`), so URLs are `https://<name>.localhost:18443`, Zitadel's issuer included |
+| `make local-up-observability` | Same as `make local-up`, plus the Grafana stack (Tempo, Prometheus, Loki, Grafana; ADR-0016) at `https://grafana.localhost:18443`. `OBSERVABILITY=true` does the same on `local-up` and `local-check` |
 | `make local-deploy` | Build the image (offline: vendored modules, `--network=none`) and chart from this working tree with a unique tag (recorded in `bin/local-build.env`), push them to the cluster's registry, push the env repo's working tree as an OCI artifact with that tag in it (`deploy/local/stage.sh`), have Flux roll the app out at `https://wallet.localhost:18443/api`, and write the `api-clients` client ID to `api/bruno/.env` |
 | `make local-bootstrap` / `make local-rebuild` | Run `bootstrap` or `rebuild` as a one-off pod from the chart's pod spec (`deploy/local/operator-pod.sh`); the code goes only to the terminal and the pod is deleted |
 | `make local-check` | Check the running cluster: layout, registry storage, Flux following the artifact, offline (`images-lock-check`, the node's images all in `images.lock`, everything in `images.lock` mirrored, Flux sources on the registry, unmirrored pulls failing for every registry), the CA issuer, the Gateway, Headlamp with its Flux plugin, the CoreDNS rewrite and port 18443 inside the cluster, `zitadel-db` and `apps-db` with the Wallet Accountant tenant, and Zitadel (issuer from the Mac and from a pod, v1 login, self-registration off, admin and machine user), and Wallet Accountant (the HelmRelease, the deployed build, `/api/me`, the setup Job's apps and token lifetime, Bruno's `.env` and environment, Swagger UI, the debug-mode ports, bootstrap and rebuild pods, redeeming the code as a Zitadel identity, and `make run` against the cluster) |
@@ -98,12 +93,10 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make local-smoke` | The end-to-end test, from nothing (it refuses to run while the cluster exists): `local-up`, `local-deploy LOCAL_STAND_IN_UI=1`, bootstrap, redeem the code as a Zitadel machine user, `/api/me`, the code in no pod's log, `local-browser-test`, then `local-down` (`SMOKE_KEEP=1` keeps the cluster) |
 | `make stand-in-ui-vendor` | Copy oidc-client-ts's browser bundle, at the version the stand-in UI's `e2e/package.json` names, into its `site/vendor` (in Docker). The browser test fails while the two differ |
 | `make local-headlamp-token` | Print a token to sign in to https://headlamp.localhost:18443 |
-| **Self-hosted** (`compose.yaml`; everything in Docker) | |
-| `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`), and every `make up` makes sure the Zitadel project with the ID `OIDC_AUDIENCE` exists (`deploy/zitadel/setup-project.sh`) |
-| `make up-observability` | Same as `make up`, plus Tempo, Prometheus, Loki and Grafana |
-| `make logs` | Follow the app's logs |
-| `make bootstrap` | Run the `bootstrap` run mode once and print the first Instance administrator Invitation code (ADR-0017) |
-| `make compose-rebuild` | Run the `rebuild` run mode against the self-hosted database |
+| **Production** (the env repo's `clusters/prod`, over Tailscale with the admin kubeconfig `PROD_KUBECONFIG`, default `~/.kube/shire.yaml`) | |
+| `make prod-check` | Build and check `clusters/prod` without a cluster, and this chart with production's values (`REQUIRE_ENCRYPTED=1`: every Secret sealed) |
+| `make prod-bootstrap` | Print a bootstrap Invitation code for production's first Instance administrator (ADR-0017), from a one-off pod; the code goes only to the terminal |
+| `make prod-bruno-env` | Write production's `api-clients` client ID to `api/bruno/.env` (`WA_PROD_OAUTH_CLIENT_ID`) for Bruno's environment `prod` |
 | **Build and quality** | |
 | `make generate` | Regenerate code from `api/openapi.yaml` (ogen), the Bruno collection in `api/bruno`, and SQL queries (sqlc) |
 | `make lint` | Run golangci-lint (including depguard), vacuum with the Zalando ruleset, `make lint-chart` and `make lint-workflows` |

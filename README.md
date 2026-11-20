@@ -22,6 +22,7 @@ Every URL carries the cluster's port, 18443 (`LOCAL_HTTPS_PORT`), so another clu
 | Zitadel (the issuer) | `https://auth.localhost:18443`, console `/ui/console`; login and password in the env repo's README |
 | Swagger UI, showing `api/openapi.yaml` (read-only) | `https://swagger.localhost:18443` |
 | Headlamp | `https://headlamp.localhost:18443` (`make local-headlamp-token`) |
+| Grafana (traces, metrics, logs) | `https://grafana.localhost:18443`, only with `make local-up-observability` |
 
 `make local-deploy` gives every build a unique image tag and chart version, pushes both to the cluster's registry (`localhost:5050`), records them in `bin/local-build.env` and in the env repo's artifact, which it pushes with them, and waits for Flux to roll them out. Migrations run as the chart's hook before the app starts, and the chart's Zitadel setup Job creates the project `wallet-accountant` (the audience) with the applications `api-clients` and `web`. It then writes the `api-clients` client ID to `api/bruno/.env`. `make local-rebuild` rebuilds the folds in the cluster. `make local-check` checks the whole local environment, the app included; `make local-down` deletes the cluster (the registry's storage is kept, and the next `make local-up` deploys the last build again).
 
@@ -31,7 +32,7 @@ Every URL carries the cluster's port, 18443 (`LOCAL_HTTPS_PORT`), so another clu
 
 CI (`.github/workflows/ci.yaml`) runs the same lint, generate, tidy, test, integration test, image build and govulncheck checks on every pull request; the list is in `docs/architecture/conventions.md`.
 
-`make dev-up` still starts the former Compose dependencies (PostgreSQL, Zitadel on `http://localhost:8081`, Swagger UI, otel-lgtm) until they are removed; the run targets no longer point at them, and its PostgreSQL needs `localhost:5432`, which the cluster holds.
+**Smoke test.** `make local-smoke` is the end-to-end test from nothing: it creates the cluster, deploys this working tree with the stand-in UI, redeems a bootstrap code, runs the browser test and deletes the cluster again (it refuses to run while the cluster exists). `.github/workflows/smoke.yaml` runs it on every pull request.
 
 ## Production
 
@@ -45,13 +46,6 @@ make prod-bruno-env   # production's api-clients client ID for Bruno's environme
 
 ## Self-hosting
 
-Needs Docker, and `openssl` for the first `make up`.
-
-```sh
-make up          # the app, with the API under http://localhost:8080/api, Zitadel on http://auth.localhost:8081
-make bootstrap   # prints the one-time Invitation code for the first Instance administrator
-```
-
-The first `make up` writes random secrets to `.env`; keep that file. `make up-observability` also starts Tempo, Prometheus, Loki and Grafana (http://localhost:3000, user `admin`, password `GRAFANA_ADMIN_PASSWORD` in `.env`). `make up` also creates the Zitadel project Wallet Accountant's users sign in to, with the ID in `OIDC_AUDIENCE` (default `wallet-accountant`), so the audience needs no manual step; the other settings are listed at the end of `.env`. An installation whose Zitadel was first started before this setup existed has no setup token: create the project in the console and set `OIDC_AUDIENCE` to its ID. Sign in, then redeem the code with `POST /api/registrations`.
+Wallet Accountant runs on Kubernetes (k3s is enough; ADR-0019): install the Helm chart `oci://ghcr.io/mumia/charts/wallet-accountant`, which `deploy/helm/wallet-accountant/README.md` describes (values, database modes, the Zitadel setup Job). The env repo's `clusters/prod` is one such installation.
 
 `make help` lists every target. The conventions are in `docs/architecture/conventions.md`.
