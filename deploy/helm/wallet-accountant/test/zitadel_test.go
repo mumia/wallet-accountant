@@ -48,20 +48,17 @@ func TestZitadelSetupIsAPostInstallAndPostUpgradeHookJob(t *testing.T) {
 		t.Errorf("ZITADEL_PAT from Secret %q, want zitadel-setup-pat", got)
 	}
 
-	// The Job owns the oidc ConfigMap. The chart creates it only once, as a
-	// pre-install hook with no client IDs, which Helm never updates or
-	// deletes afterwards: the UI needs its config.json to start, and Helm
-	// waits for the UI to be ready before it runs the post-install Job.
+	// Before the Job's first run the oidc ConfigMap has no client IDs.
 	cm := ms.Get(t, "ConfigMap", "wa-wallet-accountant-oidc")
-	annotations := cm.Map("metadata.annotations")
-	if hook, policy := annotations["helm.sh/hook"], annotations["helm.sh/hook-delete-policy"]; hook != "pre-install" || policy != "before-hook-creation" {
-		t.Errorf("oidc ConfigMap hook = %v (delete policy %v), want pre-install (before-hook-creation)", hook, policy)
-	}
 	if got := cm.Str("data.web-client-id"); got != "" {
 		t.Errorf("web-client-id before the Job = %q, want empty", got)
 	}
 	if raw, _ := cm.Map("data")["config.json"].(string); !strings.Contains(raw, `"clientId":""`) {
 		t.Errorf("config.json before the Job = %s, want an empty clientId", raw)
+	}
+	// The Job patches only its data; Helm keeps owning it.
+	if _, ok := e["CONFIGMAP_LABELS"]; ok {
+		t.Error("the Job relabels the oidc ConfigMap, so Helm no longer owns it")
 	}
 
 	// Its ServiceAccount may write that ConfigMap and restart the UI, nothing else.
@@ -169,5 +166,28 @@ func TestTheZitadelSetupScriptParses(t *testing.T) {
 	t.Parallel()
 	if out, err := exec.CommandContext(t.Context(), "sh", "-n", "../files/zitadel-setup.sh").CombinedOutput(); err != nil {
 		t.Fatalf("sh -n: %v\n%s", err, out)
+	}
+}
+
+// The oidc ConfigMap is an ordinary release resource with or without the
+// Zitadel setup Job, so turning the Job on or off on an installed release is
+// an ordinary upgrade of it: never a hook resource Helm deletes (off to on)
+// or one it refuses to adopt (on to off).
+func TestTheOIDCConfigMapIsAReleaseResourceWithOrWithoutTheSetupJob(t *testing.T) {
+	t.Parallel()
+	for _, setup := range []bool{false, true} {
+		c := combination{database: "external", zitadelSetup: setup, ui: true}
+		t.Run(c.String(), func(t *testing.T) {
+			t.Parallel()
+			cm := render(t, c.files()).Get(t, "ConfigMap", "wa-wallet-accountant-oidc")
+			for k := range cm.Map("metadata.annotations") {
+				if strings.HasPrefix(k, "helm.sh/") {
+					t.Errorf("annotation %s: want an ordinary release resource", k)
+				}
+			}
+			if got := cm.Map("metadata.labels")["app.kubernetes.io/managed-by"]; got != "Helm" {
+				t.Errorf("managed-by = %v, want Helm", got)
+			}
+		})
 	}
 }

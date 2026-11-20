@@ -2,14 +2,22 @@
 The OIDC settings the UI's config.json and the Make targets read: issuer,
 audience and both client IDs.
 
-With the Zitadel setup Job, the Job owns this ConfigMap and writes the client
-IDs Zitadel generated. The chart still creates it once, before anything else
-on install, as a pre-install hook with no client IDs: the UI mounts config.json
-from it and cannot start without it, and Helm waits for the UI to be ready
-before it runs the post-install Job. Helm never updates or deletes a hook
-resource afterwards, so it never reverts the Job's client IDs.
+It is an ordinary release resource with or without the Zitadel setup Job, so
+turning the Job on or off on an installed release is an ordinary upgrade of
+it. With the Job, the Job writes the client IDs Zitadel generated into its
+data after every install and upgrade; the chart renders the client IDs the
+ConfigMap already holds (none on the first install), so an upgrade never
+reverts them. The UI starts from it before the post-install Job runs.
+Flux's drift detection leaves it alone, since the Job changes it.
 */ -}}
 {{- $setup := .Values.oidc.zitadelSetup.enabled }}
+{{- $web := .Values.oidc.clientIds.web }}
+{{- $apiClients := .Values.oidc.clientIds.apiClients }}
+{{- if $setup }}
+{{- $live := (lookup "v1" "ConfigMap" .Release.Namespace (include "wa.oidcConfigMap" .)).data | default dict }}
+{{- $web = get $live "web-client-id" }}
+{{- $apiClients = get $live "api-clients-client-id" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -18,18 +26,11 @@ metadata:
     {{- include "wa.labels" . | nindent 4 }}
   {{- if $setup }}
   annotations:
-    helm.sh/hook: pre-install
-    helm.sh/hook-delete-policy: before-hook-creation
+    helm.toolkit.fluxcd.io/driftDetection: disabled
   {{- end }}
 data:
   issuer: {{ .Values.oidc.issuer | quote }}
   audience: {{ .Values.oidc.audience | quote }}
-  {{- if $setup }}
-  web-client-id: ""
-  api-clients-client-id: ""
-  config.json: {{ include "wa.uiConfig" (list . "") | quote }}
-  {{- else }}
-  web-client-id: {{ .Values.oidc.clientIds.web | quote }}
-  api-clients-client-id: {{ .Values.oidc.clientIds.apiClients | quote }}
-  config.json: {{ include "wa.uiConfig" (list . .Values.oidc.clientIds.web) | quote }}
-  {{- end }}
+  web-client-id: {{ $web | quote }}
+  api-clients-client-id: {{ $apiClients | quote }}
+  config.json: {{ include "wa.uiConfig" (list . $web) | quote }}
