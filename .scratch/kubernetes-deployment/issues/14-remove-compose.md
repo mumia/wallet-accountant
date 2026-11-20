@@ -4,7 +4,7 @@
 
 **Blocked by:** 06, 08, 11
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Delete `compose.yaml`, `compose.dev.yaml`, `deploy/selfhosted/`, `deploy/dev/` and `deploy/zitadel/setup-project.sh` (ported in ticket 02)
 - [ ] Remove the Compose Make targets (`up`, `up-observability`, `down`, `logs`, `bootstrap`, `compose-rebuild`, `smoke`, `dev-*`, `grafana`, `swagger`), or point them at their `local-*` replacements
