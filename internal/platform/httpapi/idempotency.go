@@ -48,8 +48,9 @@ const (
 	defaultAbandonAfter = 10 * time.Minute
 )
 
-// householdPath matches the path of a Household-scoped route.
-var householdPath = regexp.MustCompile(`^/households/([0-9a-fA-F-]{36})(?:/|$)`)
+// householdPath matches the path of a Household-scoped route, under
+// PathPrefix.
+var householdPath = regexp.MustCompile(`^` + regexp.QuoteMeta(PathPrefix) + `/households/([0-9a-fA-F-]{36})(?:/|$)`)
 
 type responseScopeKey struct{}
 

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mumia/wallet-accountant/internal/platform/authn"
@@ -50,7 +52,14 @@ func newKeyed(t *testing.T, abandonAfter time.Duration, next http.Handler) keyed
 func (k keyed) post(t *testing.T) (res *httptest.ResponseRecorder, panicked any) {
 	t.Helper()
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/things", strings.NewReader(`{"a":1}`))
+	return k.postTo(t, PathPrefix+"/things")
+}
+
+// postTo is post to path.
+func (k keyed) postTo(t *testing.T, path string) (res *httptest.ResponseRecorder, panicked any) {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(`{"a":1}`))
 	req.Header.Set("Authorization", "Bearer "+k.token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(IdempotencyKeyHeader, "key-1")
@@ -146,5 +155,53 @@ func TestAnAbandonedReservationIsTakenOver(t *testing.T) {
 
 	if res, _ := k.post(t); res.Code != http.StatusCreated || res.Body.String() != `{"run":2}` {
 		t.Errorf("replay = %d %s, want the retry's stored response", res.Code, res.Body)
+	}
+}
+
+// The response to a POST under a Household's path, served under the API's
+// path prefix, is stored in that Household's scope, never with the key in
+// instance scope (ADR-0014). Its replay is read back from there.
+func TestAResponseUnderAHouseholdsPathIsStoredInItsScope(t *testing.T) {
+	t.Parallel()
+
+	var runs atomic.Int32
+
+	k := newKeyed(t, time.Hour, created(&runs))
+	household := uuid.New()
+	path := PathPrefix + "/households/" + household.String() + "/things"
+
+	if res, _ := k.postTo(t, path); res.Code != http.StatusCreated {
+		t.Fatalf("first request = %d %s, want 201", res.Code, res.Body)
+	}
+
+	if res, _ := k.postTo(t, path); res.Code != http.StatusCreated || res.Body.String() != `{"run":1}` {
+		t.Fatalf("replay = %d %s, want the stored response", res.Code, res.Body)
+	}
+
+	var inHousehold, withKey int
+
+	err := pgx.BeginFunc(t.Context(), k.idem.pool, func(tx pgx.Tx) error {
+		if err := setScope(t.Context(), tx, household); err != nil {
+			return err
+		}
+
+		if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM idempotency_responses`).Scan(&inHousehold); err != nil {
+			return err
+		}
+
+		if err := setScope(t.Context(), tx, uuid.Nil); err != nil {
+			return err
+		}
+
+		return tx.QueryRow(t.Context(), `SELECT count(*) FROM idempotency_keys
+			WHERE household_id = $1 AND body IS NULL`, household).Scan(&withKey)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if inHousehold != 1 || withKey != 1 {
+		t.Errorf("responses in the Household's scope = %d, keys naming it without a body = %d, want 1 and 1",
+			inHousehold, withKey)
 	}
 }
