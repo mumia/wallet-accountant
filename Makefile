@@ -366,7 +366,10 @@ RENOVATE_ENV_EXPECT := \
 	kubernetes:docker.io/curlimages/curl regex:docker.io/curlimages/curl \
 	kubernetes:registry regex:registry regex:golang regex:quay.io/jetstack/cert-manager-controller \
 	flux:cert-manager-webhook-ovh regex:cert-manager-webhook-ovh regex:ghcr.io/aureq/cert-manager-webhook-ovh \
-	regex:mikefarah/yq regex:ghcr.io/yannh/kubeconform regex:binwiederhier/ntfy
+	regex:mikefarah/yq regex:ghcr.io/yannh/kubeconform regex:binwiederhier/ntfy \
+	regex:k3s-io/k3s regex:tailscale/tailscale regex:fluxcd/flux2 regex:Deuxfleurs/garage \
+	terraform:flux terraform:http terraform:kubernetes terraform:onepassword terraform:ovh \
+	terraform:proxmox terraform:random terraform:tailscale terraform:tls
 
 renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
 	deploy/renovate/check.sh . $(RENOVATE_EXPECT)
