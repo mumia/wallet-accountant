@@ -283,7 +283,7 @@ local-check: $(HELM) ## Check the running local cluster against ADR-0019 and the
 # local cluster uses. CI runs images-lock-check (ci.yaml, the images-lock job).
 IMAGESLOCK := go run ./deploy/local/imageslock
 # Dockerfiles whose base images images.lock must list (the Mac's Docker builds from them).
-LOCK_DOCKERFILES := Dockerfile
+LOCK_DOCKERFILES := Dockerfile $(STAND_IN_UI)/Dockerfile
 
 images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts, Flux, k3d, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock
 	$(IMAGESLOCK) check -env "$(ENV_REPO)" -helm $(HELM) -chart $(CHART) $(foreach f,$(LOCK_DOCKERFILES),-dockerfile $(f))

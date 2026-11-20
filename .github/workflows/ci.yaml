@@ -108,8 +108,9 @@ jobs:
 
   # ADR-0019: fails when what the env repo's clusters/local renders to (with
   # this PR's chart and Dockerfile) uses an image or chart missing from its
-  # images.lock. The env repo is private: ENV_REPO_TOKEN is a fine-grained
-  # token with read access to its contents.
+  # images.lock. The env repo is private: the secret ENV_REPO_DEPLOY_KEY holds
+  # a read-only deploy key of it (as in smoke.yaml). The repository variable
+  # ENV_REPO_REF picks its branch (default main).
   images-lock:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -120,7 +121,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: mumia/wallet-accountant-deploy
-          token: ${{ secrets.ENV_REPO_TOKEN }}
+          ref: ${{ vars.ENV_REPO_REF || 'main' }}
+          ssh-key: ${{ secrets.ENV_REPO_DEPLOY_KEY }}
           path: bin/env-repo
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

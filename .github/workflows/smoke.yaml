@@ -1,5 +1,6 @@
 # The end-to-end smoke test on the local cluster (spec "CI"): `make
-# local-smoke` creates a k3d cluster online (no prefetch) from the env repo's
+# local-smoke` creates a k3d cluster online (local-up's prefetch downloads
+# images.lock's images, charts and Go modules) from the env repo's
 # clusters/local, deploys this commit's image and chart with the stand-in UI
 # through the same local-* path a developer runs, bootstraps, redeems the code
 # as a Zitadel identity, runs the stand-in UI's browser test and tears the
@@ -70,11 +71,10 @@ jobs:
       - run: make local-ca
       # helm lint and helm template of the chart, as in CI's lint job.
       - run: make lint-chart
-      # HOOK (ticket 06): the check that every image and chart a rendered
-      # manifest uses is in the env repo's images.lock. Replace this step with
-      # its Make target once ticket 06 lands.
-      - name: images.lock coverage (ticket 06)
-        run: echo "::warning::the images.lock coverage check (ticket 06) is not wired in yet"
+      # Every image and chart clusters/local renders to (with this commit's
+      # chart and Dockerfiles, the stand-in UI's included) is in the env repo's
+      # images.lock (ADR-0019; as CI's images-lock job).
+      - run: make images-lock-check
       - run: make local-smoke
       - name: Upload the browser test's traces
         if: failure()
