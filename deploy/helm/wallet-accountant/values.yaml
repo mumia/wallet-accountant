@@ -158,6 +158,15 @@ collector:
     traces: [nop]
     metrics: [nop]
     logs: [nop]
+  # Send every signal to the Grafana stack over OTLP instead of the
+  # pipelines above: traces to Tempo, metrics to Prometheus, logs to Loki.
+  # The env repo turns it on in clusters that run the stack.
+  grafanaStack:
+    enabled: false
+    endpoints:
+      tempo: http://tempo.monitoring:4318
+      prometheus: http://prometheus.monitoring:9090/api/v1/otlp
+      loki: http://loki.monitoring:3100/otlp
   resources: {}
   # Without the collector, where the app sends OTLP over HTTP.
   externalEndpoint: ""

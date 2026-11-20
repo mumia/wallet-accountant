@@ -75,6 +75,38 @@ func TestTheCollectorsExportersComeFromValues(t *testing.T) {
 	}
 }
 
+// The switch the env repo flips when the cluster runs the Grafana stack
+// (ADR-0016): every signal goes to it, without spelling out exporters.
+func TestTheCollectorExportsToTheGrafanaStackWhenItIsPresent(t *testing.T) {
+	t.Parallel()
+	ms := render(t, minimal.files(), "collector.grafanaStack.enabled=true")
+
+	cfg := collectorConfig(t, ms)
+	want := map[string]struct{ exporter, endpoint string }{
+		"traces":  {"otlphttp/tempo", "http://tempo.monitoring:4318"},
+		"metrics": {"otlphttp/prometheus", "http://prometheus.monitoring:9090/api/v1/otlp"},
+		"logs":    {"otlphttp/loki", "http://loki.monitoring:3100/otlp"},
+	}
+	for signal, w := range want {
+		if got := cfg.List("service.pipelines." + signal + ".exporters"); !slices.Equal(got, []any{w.exporter}) {
+			t.Errorf("%s exporters = %v, want [%s]", signal, got, w.exporter)
+		}
+		if got := cfg.Str("exporters." + w.exporter + ".endpoint"); got != w.endpoint {
+			t.Errorf("%s endpoint = %q, want %s", w.exporter, got, w.endpoint)
+		}
+	}
+	if hasKey(cfg.Map("exporters"), "nop") {
+		t.Error("the nop exporter is still configured")
+	}
+
+	// Another stack's addresses.
+	ms = render(t, minimal.files(), "collector.grafanaStack.enabled=true",
+		"collector.grafanaStack.endpoints.loki=http://loki.observability:3100/otlp")
+	if got := collectorConfig(t, ms).Str("exporters.otlphttp/loki.endpoint"); got != "http://loki.observability:3100/otlp" {
+		t.Errorf("loki endpoint = %q", got)
+	}
+}
+
 func TestWithoutTheCollectorTheAppExportsToTheExternalEndpoint(t *testing.T) {
 	t.Parallel()
 	ms := render(t, minimal.files(), "collector.enabled=false", "collector.externalEndpoint=http://otel.monitoring:4318")

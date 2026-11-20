@@ -10,7 +10,7 @@ IMAGE         ?= wallet-accountant:local
 # installation side by side (deploy/selfhosted/smoke.sh does).
 ENV_FILE      ?= .env
 COMPOSE       := docker compose --env-file $(ENV_FILE)
-OBSERVABILITY := COLLECTOR_CONFIG=observability $(COMPOSE) --profile observability
+COMPOSE_OBSERVABILITY := COLLECTOR_CONFIG=observability $(COMPOSE) --profile observability
 VACUUM        := go tool vacuum lint --ruleset api/zalando-ruleset.yaml --no-banner --no-style
 
 # The Helm chart's checks (deploy/helm/wallet-accountant). helm and kubeconform
@@ -47,6 +47,14 @@ LOCAL_HTTPS_PORT    ?= 18443
 # Debug mode: apps-db and the app's collector on this Mac's localhost.
 LOCAL_DB_PORT       ?= 5432
 LOCAL_OTLP_PORT     ?= 4318
+# The Grafana stack (ADR-0016) is opt-in locally: `make local-up-observability`,
+# or OBSERVABILITY=true on local-up and local-check.
+OBSERVABILITY       ?= false
+# The k3s API server trusts this Mac's mkcert CA to verify Zitadel's tokens
+# (Headlamp's single sign-on); k3d mounts it into the node.
+LOCAL_MKCERT_CA     ?= $(shell mkcert -CAROOT 2>/dev/null)/rootCA.pem
+# k3d mounts files from the env repo, and needs an absolute path for that.
+LOCAL_ENV_REPO_DIR   = $(abspath $(ENV_REPO))
 LOCAL_ARTIFACT      := oci://localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-deploy:local
 LOCAL_KUBECTL       := kubectl --context k3d-$(LOCAL_CLUSTER)
 LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
@@ -55,7 +63,7 @@ LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
 LOCAL_BUILD         := bin/local-build.env
 LOCAL_STAGE         := bin/local-artifact
 LOCAL_ORIGIN        := $(if $(filter 443,$(LOCAL_HTTPS_PORT)),,:$(LOCAL_HTTPS_PORT))
-export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
+export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT OBSERVABILITY LOCAL_MKCERT_CA LOCAL_ENV_REPO_DIR
 export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD
 
 # Debug mode (ADR-0019): `make run` and the other run targets, or an IDE with
@@ -75,7 +83,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT  ?= http://localhost:$(LOCAL_OTLP_PORT)
 export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
 .PHONY: renovate-check
-.PHONY: local-ca local-up local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
+.PHONY: local-ca local-up local-up-observability local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
 .PHONY: local-bootstrap local-rebuild local-bruno-env
 .PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
@@ -91,7 +99,7 @@ up: $(ENV_FILE) ## Start the app, migrations, PostgreSQL, Zitadel and the collec
 	$(COMPOSE) up -d --build --wait
 
 up-observability: $(ENV_FILE) ## Same as up, plus Tempo, Prometheus, Loki and Grafana
-	$(OBSERVABILITY) up -d --build --wait
+	$(COMPOSE_OBSERVABILITY) up -d --build --wait
 
 down: ## Stop the self-hosted stack (the volumes are kept)
 	$(COMPOSE) --profile observability down
@@ -170,7 +178,22 @@ local-up: ## Create the k3d cluster with its registry, install Flux and reconcil
 		--dry-run=client -o yaml | $(LOCAL_KUBECTL) apply -f -
 	$(MAKE) --no-print-directory local-push
 	$(LOCAL_KUBECTL) apply -k "$(ENV_REPO)/clusters/local/flux-system"
+	@# The Grafana stack is its own Flux entry point, outside `cluster`, so
+	@# applying or deleting it is the switch; deleting prunes the stack.
+	@if [ "$(OBSERVABILITY)" = true ]; then \
+		$(LOCAL_KUBECTL) apply -f "$(ENV_REPO)/clusters/local/flux-system/observability.yaml"; \
+	else \
+		$(LOCAL_KUBECTL) -n flux-system delete kustomizations.kustomize.toolkit.fluxcd.io observability --ignore-not-found; \
+	fi
 	$(MAKE) --no-print-directory local-wait
+	@# The app reads the flag (the ConfigMap flux-system/observability) when its
+	@# Flux Kustomization reconciles, which may have been before the flag changed.
+	@if $(LOCAL_KUBECTL) -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io wallet-accountant >/dev/null 2>&1; then \
+		$(LOCAL_FLUX) reconcile kustomization wallet-accountant --timeout=20m; \
+	fi
+
+local-up-observability: ## Same as local-up, plus the Grafana stack at https://grafana.localhost:18443
+	$(MAKE) --no-print-directory local-up OBSERVABILITY=true
 
 local-down: ## Delete the k3d cluster and its registry (the registry's storage is kept)
 	k3d cluster delete $(LOCAL_CLUSTER)
@@ -220,8 +243,8 @@ local-wait:
 	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io/cluster --for=condition=Ready --timeout=5m
 	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io --all --for=condition=Ready --timeout=20m
 
-local-check: ## Check the running local cluster against ADR-0019 and the env repo
-	deploy/local/check.sh
+local-check: $(HELM) ## Check the running local cluster against ADR-0019 and the env repo (OBSERVABILITY=true: with the Grafana stack)
+	HELM=$(abspath $(HELM)) deploy/local/check.sh
 
 local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost:18443 (valid 24 hours)
 	@$(LOCAL_KUBECTL) -n headlamp create token headlamp --duration=24h
@@ -296,7 +319,10 @@ RENOVATE_ENV_EXPECT := \
 	kubernetes:ghcr.io/headlamp-k8s/headlamp-plugin-flux kubernetes:rancher/k3s kubernetes:swaggerapi/swagger-ui \
 	regex:swaggerapi/swagger-ui \
 	regex:quay.io/jetstack/charts/cert-manager regex:headlamp \
-	regex:rancher/k3s regex:ghcr.io/headlamp-k8s/headlamp-plugin-flux
+	regex:rancher/k3s regex:ghcr.io/headlamp-k8s/headlamp-plugin-flux \
+	flux:prometheus flux:loki flux:tempo flux:grafana \
+	regex:prometheus regex:loki regex:tempo regex:grafana \
+	kubernetes:docker.io/curlimages/curl regex:docker.io/curlimages/curl
 
 renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
 	deploy/renovate/check.sh . $(RENOVATE_EXPECT)
