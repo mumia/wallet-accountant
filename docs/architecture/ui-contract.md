@@ -4,7 +4,7 @@ What the Wallet Accountant UI image must do so the Helm chart (ADR-0020) can ser
 
 ## The image
 
-- Serves the built static files over plain HTTP on port **8080**, as a **non-root** user, with a read-only root filesystem. TLS ends at the gateway.
+- Serves the built static files over plain HTTP on port **8080**, as a **non-root** user, with a read-only root filesystem. TLS ends at the gateway. The chart mounts an empty, writable **`/tmp`**: the server's pid and temporary files go there (`nginxinc/nginx-unprivileged` does this already).
 - Answers **`GET /healthz`** with 200 and no auth, for the chart's probes.
 - **SPA fallback**: any `GET` for a path that is not a file returns `index.html` with 200, so deep links work.
 - Caching: hashed assets (`/assets/*`) get `Cache-Control: public, max-age=31536000, immutable`; `index.html` and `config.json` get `no-cache`.
@@ -44,3 +44,7 @@ The same image runs in every environment. Nothing is baked in at build time. The
 ## Versioning
 
 The UI image is versioned and released separately from the backend. The chart pins a UI image tag in values, and the environment repo bumps it like the app image. A UI release states the lowest API contract version it needs.
+
+## The stand-in UI
+
+`deploy/helm/wallet-accountant/test/stand-in-ui` is a test fixture that meets this contract with stock nginx and one page (oidc-client-ts, vendored, no CDN). It is never published. `make local-smoke` deploys it in the UI slot, and its Playwright test checks, against the local Zitadel: `/healthz`, the SPA fallback, `config.json`, `/api` reaching the app on the same origin, sign-in with PKCE through the `web` app, an access token whose `aud` contains the API's audience, and that signing out ends the Zitadel session (a `prompt=none` sign-in that succeeded before signing out fails afterwards; Zitadel answers `interaction_required`). The real UI can read it as a working example.

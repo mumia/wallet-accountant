@@ -6,11 +6,11 @@ Installs Wallet Accountant (ADR-0020):
 - `migrate` as a `pre-install` / `pre-upgrade` hook Job, the only workload given the owner database URL;
 - an OpenTelemetry Collector, which by default discards every signal (ADR-0016);
 - a Gateway API `HTTPRoute` for the app's host: `/api` to the app, every other path to the UI (ADR-0021);
-- optionally, the UI (`ui.enabled`, `docs/architecture/ui-contract.md`);
+- optionally, the UI (`ui.enabled`, `docs/architecture/ui-contract.md`), with a writable `/tmp` emptyDir under its read-only root filesystem;
 - optionally, a single-tenant CloudNativePG database (`database.mode: managed`, ADR-0023);
 - optionally, a Job that sets Zitadel up for the app (`oidc.zitadelSetup.enabled`, ADR-0022).
 
-`values.schema.json` rejects bad values at install. `make lint-chart` runs `helm lint`, `helm template` with every combination of database mode, Zitadel setup and UI slot, the schema's rejections, and kubeconform (`test/`).
+`values.schema.json` rejects bad values at install. `make lint-chart` runs `helm lint`, `helm template` with every combination of database mode, Zitadel setup and UI slot, the schema's rejections, and kubeconform (`test/`). `test/stand-in-ui/` is a test fixture for the UI slot (`make local-smoke`); `.helmignore` keeps all of `test/` out of the package.
 
 ## Requirements
 
@@ -135,7 +135,7 @@ Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.
 
 ## The OIDC ConfigMap
 
-`<release>-wallet-accountant-oidc` holds `issuer`, `audience`, `web-client-id`, `api-clients-client-id` and the UI's `config.json`. Without the Zitadel setup the chart renders it from values. With it, the Job writes it after every install and upgrade, and restarts the UI when `config.json` changes; until the first run, the UI has no `config.json`. Make targets read the client IDs from it:
+`<release>-wallet-accountant-oidc` holds `issuer`, `audience`, `web-client-id`, `api-clients-client-id` and the UI's `config.json`. Without the Zitadel setup the chart renders it from values. With it, the Job writes it after every install and upgrade, and restarts the UI when `config.json` changes. The chart creates it only once, as a `pre-install` hook with empty client IDs, so the UI can start (Helm waits for the UI to be ready before the post-install Job runs); Helm never updates a hook resource, so it never reverts the Job's client IDs, and leaves the ConfigMap behind on uninstall. Make targets read the client IDs from it:
 
 ```sh
 kubectl -n wallet get configmap wa-wallet-accountant-oidc -o jsonpath='{.data.api-clients-client-id}'

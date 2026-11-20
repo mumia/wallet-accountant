@@ -29,7 +29,8 @@ set -eu
 
 CTX="k3d-$LOCAL_CLUSTER"
 KUBECTL="kubectl --context $CTX"
-CA="$(mkcert -CAROOT)/rootCA.pem"
+. "$(dirname "$0")/zitadel.sh"
+zitadel_env "$CTX" "$LOCAL_HTTPS_PORT" # sets CA, ZITADEL_URL, ZITADEL_PAT
 failures=0
 
 pass() { echo "ok:   $*"; }
@@ -249,14 +250,7 @@ check "Zitadel's masterkey comes from the committed throwaway Secret zitadel/zit
 		-o jsonpath="{.spec.template.spec.containers[0].env[?(@.name==\"ZITADEL_MASTERKEY\")].valueFrom.secretKeyRef.name}")" = zitadel-masterkey ] &&
 	grep -rqs "name: zitadel-masterkey" "$2/clusters/local/secrets"' _ "$CTX" "$ENV_REPO"
 
-pat=$($KUBECTL -n zitadel get secret platform-setup-pat -o jsonpath='{.data.pat}' 2>/dev/null | base64 -d) || pat=
-zitadel_api() { # zitadel_api <path> [json]: calls Zitadel's API with the machine user's token
-	if [ $# -gt 1 ]; then
-		curl -fsS --cacert "$CA" -H "Authorization: Bearer $pat" -H 'Content-Type: application/json' -X POST -d "$2" "$issuer$1"
-	else
-		curl -fsS --cacert "$CA" -H "Authorization: Bearer $pat" "$issuer$1"
-	fi
-}
+pat=$ZITADEL_PAT
 if [ -n "$pat" ] && zitadel_api /admin/v1/policies/login >/dev/null 2>&1; then
 	pass "the machine user's token (zitadel/platform-setup-pat, key pat) works on the admin API"
 else
@@ -349,14 +343,13 @@ check "the collector takes OTLP over HTTP on localhost:$LOCAL_OTLP_PORT" sh -c '
 		"http://localhost:$1/v1/traces")" = 200 ]' _ "$LOCAL_OTLP_PORT"
 
 # Operator commands: the code goes only to this terminal, and no pod is left.
-# The code is the only line that is a lone base64url word: the app's JSON log
-# lines can reach this output too, and are single words as well. On a busy
-# API server, `kubectl run -i` can lose the end of the pod's output; a new
-# bootstrap Invitation replaces the lost one, so try again.
+# The code is found by bootstrap_code (zitadel.sh). On a busy API server,
+# `kubectl run -i` can lose the end of the pod's output; a new bootstrap
+# Invitation replaces the lost one, so try again.
 code=
 for _ in 1 2 3; do
 	bootstrap_out=$($MAKE -s local-bootstrap 2>/dev/null) || bootstrap_out=
-	code=$(echo "$bootstrap_out" | awk 'NF == 1 && length($1) > 16 && $1 ~ /^[A-Za-z0-9_-]+$/ {print $1; exit}')
+	code=$(echo "$bootstrap_out" | bootstrap_code)
 	[ -z "$code" ] || break
 done
 if [ -n "$code" ] && ! $KUBECTL -n $NS get pod wallet-accountant-bootstrap >/dev/null 2>&1; then
@@ -375,17 +368,7 @@ check "make local-rebuild rebuilds the folds and leaves no pod" sh -c '
 
 # A real Zitadel identity: the machine user local-check, whose JWT access
 # token carries the project's audience.
-user_id=$(zitadel_api /management/v1/users/_search \
-	'{"queries":[{"userNameQuery":{"userName":"local-check","method":"TEXT_QUERY_METHOD_EQUALS"}}]}' 2>/dev/null |
-	jq -r '.result[0].id // empty') || user_id=
-[ -n "$user_id" ] || user_id=$(zitadel_api /management/v1/users/machine \
-	'{"userName":"local-check","name":"local-check","accessTokenType":"ACCESS_TOKEN_TYPE_JWT"}' 2>/dev/null |
-	jq -r '.userId // empty') || user_id=
-credentials=$(curl -fsS --cacert "$CA" -H "Authorization: Bearer $pat" -H 'Content-Type: application/json' \
-	-X PUT -d '{}' "$issuer/management/v1/users/$user_id/secret" 2>/dev/null) || credentials=
-token=$(curl -fsS --cacert "$CA" -u "$(echo "$credentials" | jq -r '.clientId'):$(echo "$credentials" | jq -r '.clientSecret')" \
-	-d grant_type=client_credentials -d "scope=openid urn:zitadel:iam:org:project:id:wallet-accountant:aud" \
-	"$issuer/oauth/v2/token" 2>/dev/null | jq -r '.access_token // empty') || token=
+token=$(zitadel_machine_token local-check 2>/dev/null) || token=
 api_out=$(mktemp)
 api() { # api <base> <method> <path> [json] -> the HTTP status; the body in $api_out
 	curl -sS --cacert "$CA" -o "$api_out" -w '%{http_code}' -X "$2" -H "Authorization: Bearer $token" \
