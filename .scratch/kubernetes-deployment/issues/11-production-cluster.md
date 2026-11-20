@@ -4,7 +4,7 @@
 
 **Blocked by:** 05, 07, 09, 10
 
-**Status:** resolved
+**Status:** ready-for-human (code merged; applying it is the user's — see ## Comments)
 
 - [ ] cert-manager with the OVH DNS-01 webhook (check its maintenance first) and a wildcard certificate for `*.shire.migmar.eu`; staging issuer first, then production
 - [ ] `.sops.yaml` with the age recipient; every prod Secret encrypted. The list of what must also be in 1Password is in the env repo's README

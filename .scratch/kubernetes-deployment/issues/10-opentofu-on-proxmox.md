@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** resolved
+**Status:** ready-for-human (code merged; applying it is the user's — see ## Comments)
 
 - [ ] Runbook (written first), `infra/README.md`. Every manual step is listed in order, with the exact `op`/`garage` commands:
   - **1Password vault and service account**: create a **dedicated vault** (e.g. `homelab-infra`) that holds only the infra secrets. Create a **service account** with **read-only** access to **that vault only**; check that service accounts are available on the user's plan. OpenTofu's 1Password provider reads through it and never writes. Its token goes in the user's personal vault, not the dedicated one, and is passed as `OP_SERVICE_ACCOUNT_TOKEN` in the shell that runs `tofu`
