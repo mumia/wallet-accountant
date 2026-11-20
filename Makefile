@@ -177,13 +177,16 @@ local-build: $(HELM)
 	@# come from this working tree, committed or not. Offline: the modules come
 	@# from the module cache (local-prefetch filled it), vendored into bin/vendor
 	@# (-e: a go.mod tool's package may not load; the app's do), and the build
-	@# has no network (Dockerfile).
+	@# has no network (Dockerfile). Every command of the recipe below is its own
+	@# under set -e (never `a && b`, which set -e lets fail), so a failed build
+	@# or push stops it before it records a tag.
 	rm -rf bin/vendor
 	GOFLAGS=-mod=mod GOPROXY=off go mod vendor -e -o bin/vendor
 	@set -e; stamp=$$(date -u +%Y%m%d%H%M%S); tag=local-$$stamp; \
 	version=$$(awk '$$1 == "version:" {print $$2}' $(CHART)/Chart.yaml)-local.$$stamp; \
 	image=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant:$$tag; \
-	docker build --network=none --build-context vendor=bin/vendor -t $$image . && docker push -q $$image; \
+	docker build --network=none --build-context vendor=bin/vendor -t $$image .; \
+	docker push -q $$image; \
 	rm -rf bin/local-chart; \
 	$(HELM) package $(CHART) --destination bin/local-chart --version $$version --app-version $$tag; \
 	$(HELM) push bin/local-chart/wallet-accountant-$$version.tgz oci://localhost:$(LOCAL_REGISTRY_PORT)/charts --plain-http; \
@@ -191,7 +194,8 @@ local-build: $(HELM)
 	echo "local-build: image $$image, chart $$version"; \
 	if [ -n "$(LOCAL_STAND_IN_UI)" ]; then \
 		ui=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-stand-in-ui:$$tag; \
-		docker build -t $$ui $(STAND_IN_UI) && docker push -q $$ui; \
+		docker build -t $$ui $(STAND_IN_UI); \
+		docker push -q $$ui; \
 		printf 'WALLET_ACCOUNTANT_UI_TAG=%s\n' $$tag >> $(LOCAL_BUILD); \
 		echo "local-build: stand-in UI $$ui"; \
 	fi
