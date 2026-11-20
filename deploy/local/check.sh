@@ -89,6 +89,54 @@ check "every HelmRelease is ready" sh -c '
 		-o jsonpath="{range .items[*]}{.status.conditions[?(@.type==\"Ready\")].status}{\"\\n\"}{end}") &&
 	[ -n "$out" ] && ! echo "$out" | grep -qv True' _ "$CTX"
 
+## Offline (images.lock, local-prefetch)
+
+NODE="k3d-$LOCAL_CLUSTER-server-0"
+LOCK="$ENV_REPO/images.lock"
+check "images.lock covers everything clusters/local renders to (make images-lock-check)" \
+	$MAKE -s images-lock-check
+check "every image the node has pulled, and every k3d container's image, is in images.lock" sh -c '
+	{
+		docker exec "$1" crictl images -o json | jq -r ".images[].repoTags[]?"
+		docker ps --filter "label=k3d.cluster=$2" --format "{{.Image}}"
+		docker inspect "$3" --format "{{.Config.Image}}"
+	} | go run ./deploy/local/imageslock covers -lock "$4"' _ "$NODE" "$LOCAL_CLUSTER" "$LOCAL_REGISTRY" "$LOCK"
+check "every image and chart in images.lock is in $LOCAL_REGISTRY, at the pinned digest" sh -c '
+	accept="application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
+	go run ./deploy/local/imageslock list -lock "$2" | while read -r kind a b c; do
+		case $kind in
+		image) ref=${a%@*}; repo=${ref%:*}; path="$repo/manifests/${ref##*:}"; want=${a#*@} ;;
+		chart) path="charts/$a/manifests/$c"; want= ;;
+		*) continue ;;
+		esac
+		got=$(curl -fsSI -H "Accept: $accept" "http://localhost:$1/v2/$path" | tr -d "\r" |
+			awk "tolower(\$1) == \"docker-content-digest:\" {print \$2}")
+		[ -n "$got" ] && { [ -z "$want" ] || [ "$got" = "$want" ]; } || { echo "missing: $a" >&2; exit 1; }
+	done' _ "$LOCAL_REGISTRY_PORT" "$LOCK"
+check "every Flux source fetches from $LOCAL_REGISTRY:5000" sh -c '
+	urls=$(kubectl --context "$1" get helmrepositories.source.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io -A \
+		-o jsonpath="{range .items[*]}{.spec.url}{\"\\n\"}{end}") &&
+	[ -n "$urls" ] && ! echo "$urls" | grep -qv "^oci://$2:5000/"' _ "$CTX" "$LOCAL_REGISTRY"
+# Fails closed: an image that was not prefetched cannot be pulled, even with
+# the network up, from any registry (k3d.yaml: mirrors, no fallback). Each
+# exists upstream, so a "not found" whose request reached wa-registry (its
+# access log, `?ns=<registry>`) means k3s asked only the mirror.
+for unmirrored in docker.io/library/hello-world:latest ghcr.io/fluxcd/flux-cli:v2.0.0 \
+	quay.io/prometheus/busybox:latest registry.k8s.io/pause:3.10 gcr.io/distroless/base:latest; do
+	since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	ns=${unmirrored%%/*}
+	tag=${unmirrored##*:}
+	if out=$(docker exec "$NODE" crictl pull "$unmirrored" 2>&1); then
+		fail "k3s pulls only through $LOCAL_REGISTRY: $unmirrored was pulled from upstream"
+		docker exec "$NODE" crictl rmi "$unmirrored" >/dev/null 2>&1 || true
+	elif echo "$out" | grep -q "not found" &&
+		docker logs --since "$since" "$LOCAL_REGISTRY" 2>&1 | grep -q "/manifests/$tag?ns=$ns "; then
+		pass "k3s pulls only through $LOCAL_REGISTRY: $unmirrored is not found there, with no upstream try"
+	else
+		fail "k3s pulls only through $LOCAL_REGISTRY: $unmirrored ($(echo "$out" | tail -1 | head -c 300))"
+	fi
+done
+
 ## Certificates, Gateway, DNS
 
 check "the mkcert CA issuer is ready and holds this Mac's mkcert CA" sh -c '
