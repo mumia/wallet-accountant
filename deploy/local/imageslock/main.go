@@ -236,28 +236,48 @@ func runPin(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	lines := strings.SplitAfter(string(data), "\n")
-	section := ""
 	r := renderer{ctx: ctx}
-	for i, line := range lines {
-		body := strings.TrimRight(line, "\n")
-		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "#") && strings.Contains(line, ":") {
-			section = strings.TrimSpace(strings.SplitN(line, ":", 2)[0])
-		}
-		m := unpinned.FindStringSubmatch(body)
-		if (section != "images" && section != "host-images") || m == nil || strings.Contains(m[2], "@") {
-			continue
-		}
-		raw, err := r.run("", "docker", "buildx", "imagetools", "inspect", "--raw", m[2])
-		if err != nil {
-			return err
-		}
-		sum := sha256.Sum256(raw)
-		lines[i] = m[1] + m[2] + "@sha256:" + hex.EncodeToString(sum[:]) + m[3] + line[len(body):]
-		fmt.Println("pinned", strings.TrimSpace(lines[i]))
+	pinnedLock, pinned, err := pinLock(string(data), func(ref string) ([]byte, error) {
+		return r.run("", "docker", "buildx", "imagetools", "inspect", "--raw", ref)
+	})
+	for _, p := range pinned {
+		fmt.Println("pinned", p)
 	}
-	if err := os.WriteFile(*path, []byte(strings.Join(lines, "")), 0o600); err != nil {
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(*path, []byte(pinnedLock), 0o600); err != nil {
 		return fmt.Errorf("pin: %w", err)
 	}
 	return nil
+}
+
+// section is a top-level key of images.lock, starting a section.
+var section = regexp.MustCompile(`^[A-Za-z][\w-]*:\s*$`)
+
+// pinLock returns the lock with the digest of the raw manifest inspect
+// returns added to every image under images: or host-images: that has none,
+// and the image lines it pinned.
+func pinLock(lock string, inspect func(ref string) ([]byte, error)) (string, []string, error) {
+	lines := strings.SplitAfter(lock, "\n")
+	current := ""
+	var pinned []string
+	for i, line := range lines {
+		body := strings.TrimRight(line, "\n")
+		if section.MatchString(body) {
+			current = strings.TrimSpace(strings.SplitN(body, ":", 2)[0])
+		}
+		m := unpinned.FindStringSubmatch(body)
+		if (current != "images" && current != "host-images") || m == nil || strings.Contains(m[2], "@") {
+			continue
+		}
+		raw, err := inspect(m[2])
+		if err != nil {
+			return "", pinned, err
+		}
+		sum := sha256.Sum256(raw)
+		lines[i] = m[1] + m[2] + "@sha256:" + hex.EncodeToString(sum[:]) + m[3] + line[len(body):]
+		pinned = append(pinned, strings.TrimSpace(lines[i]))
+	}
+	return strings.Join(lines, ""), pinned, nil
 }
