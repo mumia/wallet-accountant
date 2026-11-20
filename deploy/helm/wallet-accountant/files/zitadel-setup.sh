@@ -1,7 +1,7 @@
 #!/bin/sh
 # The chart's Zitadel setup Job (ADR-0022), run after every install and
-# upgrade; safe to run again. It ports deploy/zitadel/setup-project.sh and
-# makes sure that, in the organisation of the token's user:
+# upgrade; safe to run again. It makes sure that, in the organisation of the
+# token's user:
 #
 # - the project with the ID PROJECT_ID exists: its ID is the audience the app
 #   checks (WA_OIDC_AUDIENCE);

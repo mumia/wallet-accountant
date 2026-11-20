@@ -1,5 +1,6 @@
 # The Wallet Accountant image: one static binary whose run mode is its
-# argument (ADR-0009). `make docker-build` builds it; compose.yaml runs it.
+# argument (ADR-0009). `make docker-build` builds it; the chart
+# (deploy/helm/wallet-accountant) runs it.
 #
 # Offline (`make local-build`, ADR-0019): the Go modules come vendored in the
 # build context `vendor` (`--build-context vendor=bin/vendor`, from `go mod

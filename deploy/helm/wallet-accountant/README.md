@@ -143,7 +143,7 @@ kubectl -n wallet get configmap wa-wallet-accountant-oidc -o jsonpath='{.data.ap
 
 ## The Zitadel setup Job
 
-It ports `deploy/zitadel/setup-project.sh` (`files/zitadel-setup.sh`) and runs after every install and upgrade. It is idempotent. In the organisation of the token's user it:
+It runs `files/zitadel-setup.sh` after every install and upgrade. It is idempotent. In the organisation of the token's user it:
 
 1. creates the project whose ID is `oidc.audience`, if missing;
 2. creates or updates `api-clients`, a public native app (authorization code with PKCE, refresh tokens) for the Bruno collection;

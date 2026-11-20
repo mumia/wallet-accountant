@@ -4,7 +4,7 @@ Signing in through the OIDC provider (ADR-0010) proves who someone is. It does n
 
 ## The first User
 
-When an instance has no Instance administrator, nobody can issue Invitations. The operator solves this with the `bootstrap` run mode (ADR-0009), for example `docker compose run --rm app bootstrap`. It issues the **bootstrap Invitation**, which grants Instance administrator, and prints its code to stdout. Access to the deployment is the proof of authority. The first User then registers the same way as every later User, so there is no first-login special case. We rejected:
+When an instance has no Instance administrator, nobody can issue Invitations. The operator solves this with the `bootstrap` run mode (ADR-0009), for example `make local-bootstrap` or `make prod-bootstrap`, which run it as a one-off pod (ADR-0019). It issues the **bootstrap Invitation**, which grants Instance administrator, and prints its code to stdout. Access to the deployment is the proof of authority. The first User then registers the same way as every later User, so there is no first-login special case. We rejected:
 
 - **first come, first served**, because anyone who reaches a freshly started instance before its owner could claim it;
 - **a setup code written to the logs**, because logs are shipped to Loki (ADR-0016), so the secret would end up in telemetry;
