@@ -27,10 +27,11 @@ func localBuild(t *testing.T, failing string, args ...string) (ok bool, calls []
 		}
 	}
 	dir := t.TempDir()
-	calls = nil
 	buildFile := filepath.Join(dir, "local-build.env")
-	args = append([]string{"-C", "../..", "--no-print-directory", "local-build",
-		"HELM=" + filepath.Join(bin, "helm"), "LOCAL_BUILD=" + buildFile}, args...)
+	args = append([]string{
+		"-C", "../..", "--no-print-directory", "local-build",
+		"HELM=" + filepath.Join(bin, "helm"), "LOCAL_BUILD=" + buildFile,
+	}, args...)
 	cmd := exec.CommandContext(t.Context(), "make", args...) //nolint:gosec // G204: the test's own arguments
 	cmd.Env = append(os.Environ(),
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
