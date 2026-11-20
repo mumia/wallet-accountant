@@ -35,7 +35,8 @@ func (r renderer) run(dir, name string, args ...string) ([]byte, error) {
 }
 
 // cluster renders clusters/local the way Flux applies it: the `cluster`
-// Kustomization, then every Flux Kustomization it creates, with their
+// and `observability` (the Grafana stack) Kustomizations, then every Flux
+// Kustomization they create, with their
 // patches, components and substitutions. The env repo is copied first, with
 // what `make local-push` adds (deploy/local/stage.sh): the app (clusters/local/
 // build adding ../apps), and placeholders for this Mac's CA and the API spec.
@@ -65,36 +66,57 @@ func (r renderer) cluster(env string) (Found, error) {
 		}
 	}
 
-	all, err := r.run(tmp, r.flux, "build", "kustomization", "cluster", "--path", "./clusters/local",
-		"--kustomization-file", "./clusters/local/flux-system/cluster.yaml", "--dry-run")
-	if err != nil {
-		return Found{}, err
+	// Each entry point, and every Flux Kustomization they create, in turn:
+	// the opt-in Grafana stack (`observability`) creates its own.
+	var all []byte
+	built := map[string]bool{}
+	queue := []fluxKustomization{
+		{name: "cluster", path: "./clusters/local", file: "./clusters/local/flux-system/cluster.yaml"},
+		{name: "observability", path: "./clusters/local/observability", file: "./clusters/local/flux-system/observability.yaml"},
 	}
-	top, err := Extract(all)
-	if err != nil {
-		return Found{}, err
-	}
-	for i, doc := range top.Docs {
-		name := str(doc, "metadata", "name")
-		if !strings.HasPrefix(str(doc, "apiVersion"), "kustomize.toolkit.fluxcd.io/") || doc["kind"] != "Kustomization" || name == "cluster" {
+	for n := 0; len(queue) > 0; n++ {
+		k := queue[0]
+		queue = queue[1:]
+		if built[k.name] {
 			continue
 		}
-		data, err := yaml.Marshal(doc)
-		if err != nil {
-			return Found{}, fmt.Errorf("render: %w", err)
+		built[k.name] = true
+		if k.file == "" {
+			data, err := yaml.Marshal(k.doc)
+			if err != nil {
+				return Found{}, fmt.Errorf("render: %w", err)
+			}
+			k.file = filepath.Join(tmp, fmt.Sprintf("flux-kustomization-%d.yaml", n))
+			if err := os.WriteFile(k.file, data, 0o600); err != nil {
+				return Found{}, fmt.Errorf("render: %w", err)
+			}
 		}
-		file := filepath.Join(tmp, fmt.Sprintf("flux-kustomization-%d.yaml", i))
-		if err := os.WriteFile(file, data, 0o600); err != nil {
-			return Found{}, fmt.Errorf("render: %w", err)
-		}
-		out, err := r.run(tmp, r.flux, "build", "kustomization", name, "--path", "./"+strings.TrimPrefix(str(doc, "spec", "path"), "./"),
-			"--kustomization-file", file, "--dry-run")
+		out, err := r.run(tmp, r.flux, "build", "kustomization", k.name, "--path", k.path,
+			"--kustomization-file", k.file, "--dry-run")
 		if err != nil {
 			return Found{}, err
 		}
 		all = append(append(all, "\n---\n"...), out...)
+		found, err := Extract(out)
+		if err != nil {
+			return Found{}, err
+		}
+		for _, doc := range found.Docs {
+			name := str(doc, "metadata", "name")
+			if !strings.HasPrefix(str(doc, "apiVersion"), "kustomize.toolkit.fluxcd.io/") || doc["kind"] != "Kustomization" || built[name] {
+				continue
+			}
+			queue = append(queue, fluxKustomization{name: name, path: "./" + strings.TrimPrefix(str(doc, "spec", "path"), "./"), doc: doc})
+		}
 	}
 	return Extract(all)
+}
+
+// fluxKustomization is one Flux Kustomization to render: an entry point's
+// file, or a document another one created.
+type fluxKustomization struct {
+	name, path, file string
+	doc              map[string]any
 }
 
 func (r renderer) isLocalChart(c Chart) bool {
