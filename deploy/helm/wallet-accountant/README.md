@@ -89,7 +89,7 @@ Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.
 | `imagePullSecrets` | `[]` | Pull Secrets for the app's and the UI's images |
 | `app.runModes` | `[all]` | `[all]`, or `[api, worker]` to split the app into two Deployments; only `api` serves HTTP |
 | `app.replicas` | `1` | Replicas of each app Deployment |
-| `app.livenessProbe`, `app.readinessProbe` | TCP on the HTTP port | The app has no health endpoint, so the probes check that it accepts connections |
+| `app.livenessProbe`, `app.readinessProbe` | `GET /healthz` on the HTTP port | The app answers `/healthz` with 200 and no token, outside the API (`/api`), so the Gateway never routes it there |
 | `app.resources`, `app.extraEnv`, `app.podAnnotations`, `app.nodeSelector`, `app.tolerations`, `app.affinity` | empty | The usual pod settings. `extraEnv` also goes to `migrate` and the operator pods |
 | `migrate.backoffLimit`, `migrate.activeDeadlineSeconds` | `10`, `1800` | Retries of the migrate Job |
 | `database.mode` | `external` | `external` or `managed` |
@@ -135,7 +135,7 @@ Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.
 
 ## The OIDC ConfigMap
 
-`<release>-wallet-accountant-oidc` holds `issuer`, `audience`, `web-client-id`, `api-clients-client-id` and the UI's `config.json`. Without the Zitadel setup the chart renders it from values. With it, the Job writes it after every install and upgrade, and restarts the UI when `config.json` changes. The chart creates it only once, as a `pre-install` hook with empty client IDs, so the UI can start (Helm waits for the UI to be ready before the post-install Job runs); Helm never updates a hook resource, so it never reverts the Job's client IDs, and leaves the ConfigMap behind on uninstall. Make targets read the client IDs from it:
+`<release>-wallet-accountant-oidc` holds `issuer`, `audience`, `web-client-id`, `api-clients-client-id` and the UI's `config.json`. Without the Zitadel setup the chart renders it from values. With it, the Job writes the client IDs Zitadel generated into its data after every install and upgrade, and restarts the UI when `config.json` changes. Either way it is an ordinary release resource, so `oidc.zitadelSetup.enabled` can be turned on or off on an installed release: with the Job, the chart renders the client IDs the ConfigMap already holds (empty on the first install, so the UI can start before the post-install Job runs), so an upgrade never reverts them, and Flux's drift detection leaves it alone. Make targets read the client IDs from it:
 
 ```sh
 kubectl -n wallet get configmap wa-wallet-accountant-oidc -o jsonpath='{.data.api-clients-client-id}'

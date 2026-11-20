@@ -24,15 +24,17 @@ app:
   # Extra environment variables for every app container, migrate and the
   # operator pods included.
   extraEnv: []
-  # The app has no health endpoint; the probes check that it accepts
-  # connections on its HTTP port. Applied to `all` and `api` only.
+  # The app answers GET /healthz with 200 and no token, outside the API.
+  # Applied to `all` and `api` only.
   livenessProbe:
-    tcpSocket:
+    httpGet:
+      path: /healthz
       port: http
     initialDelaySeconds: 5
     periodSeconds: 10
   readinessProbe:
-    tcpSocket:
+    httpGet:
+      path: /healthz
       port: http
     periodSeconds: 5
   podAnnotations: {}

@@ -75,10 +75,6 @@ spec:
             items:
               - key: config.json
                 path: config.json
-            {{- if .Values.oidc.zitadelSetup.enabled }}
-            # A pre-install hook without client IDs until the setup Job runs.
-            optional: true
-            {{- end }}
         - name: tmp
           emptyDir: {}
 ---

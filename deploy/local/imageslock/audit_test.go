@@ -97,3 +97,38 @@ func TestParseLockRejectsAnImageWithoutDigest(t *testing.T) {
 		t.Fatalf("err = %v, want one naming nginx:1.29.3", err)
 	}
 }
+
+const prodLockFixture = lockFixture + `prod-charts:
+  - name: cert-manager-webhook-ovh
+    source: https://aureq.github.io/cert-manager-webhook-ovh/
+    version: 0.9.19
+prod-images:
+  - ghcr.io/aureq/cert-manager-webhook-ovh:0.9.19@sha256:4444444444444444444444444444444444444444444444444444444444444444
+`
+
+// Production-only entries stay in images.lock, for Renovate, but the local
+// cluster never mirrors them: `list`, which local-prefetch reads, leaves
+// them out.
+func TestProductionOnlyEntriesAreNotListedForPrefetch(t *testing.T) {
+	lock := mustLock(t, prodLockFixture)
+	listed := strings.Join(listLock(lock), "\n")
+	if strings.Contains(listed, "cert-manager-webhook-ovh") {
+		t.Errorf("listed a production-only entry:\n%s", listed)
+	}
+	for _, want := range []string{
+		"chart cert-manager oci://quay.io/jetstack/charts/cert-manager v1.21.3",
+		"image ghcr.io/zitadel/zitadel:v4.19.2@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+		"host-image docker.io/library/golang:1.27.4-alpine@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+	} {
+		if !strings.Contains(listed, want) {
+			t.Errorf("list has no %q:\n%s", want, listed)
+		}
+	}
+}
+
+func TestParseLockChecksProductionOnlyEntriesToo(t *testing.T) {
+	_, err := ParseLock([]byte("prod-images:\n  - nginx:1.29.3\nprod-charts:\n  - name: x\n"))
+	if err == nil || !strings.Contains(err.Error(), "nginx:1.29.3") || !strings.Contains(err.Error(), `chart "x"`) {
+		t.Fatalf("err = %v, want one naming nginx:1.29.3 and chart x", err)
+	}
+}

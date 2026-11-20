@@ -50,8 +50,11 @@ func TestTheAppRunsAllInOneHardenedReplicaWithProbes(t *testing.T) {
 	if got := c.At("securityContext.readOnlyRootFilesystem"); got != true {
 		t.Errorf("readOnlyRootFilesystem = %v, want true", got)
 	}
-	if c.Map("livenessProbe") == nil || c.Map("readinessProbe") == nil {
-		t.Errorf("probes: liveness %v, readiness %v; want both", c.Map("livenessProbe"), c.Map("readinessProbe"))
+	// Both ask the app's /healthz (httpapi.HealthPath) on its HTTP port.
+	for _, probe := range []string{"livenessProbe", "readinessProbe"} {
+		if path, port := c.Str(probe+".httpGet.path"), c.Str(probe+".httpGet.port"); path != "/healthz" || port != "http" {
+			t.Errorf("%s = %v, want GET /healthz on port http", probe, c.Map(probe))
+		}
 	}
 	e := env(c)
 	if got := e["WA_OIDC_ISSUER"].Str("value"); got != "https://auth.example.test" {

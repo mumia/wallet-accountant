@@ -14,7 +14,8 @@
 //	    fails on any images.lock lacks.
 //	imageslock list -lock <images.lock>
 //	    Prints `image <ref>`, `host-image <ref>` and `chart <name> <source>
-//	    <version>` lines, for `make local-prefetch`.
+//	    <version>` lines, for `make local-prefetch`; production-only entries
+//	    (prod-charts:, prod-images:) are left out.
 //	imageslock pin -lock <images.lock>
 //	    Adds the digest to every image line that has none (needs the network).
 package main
@@ -212,22 +213,32 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
-	for _, r := range lock.Images {
-		fmt.Println("image", r)
-	}
-	for _, r := range lock.HostImages {
-		fmt.Println("host-image", r)
-	}
-	for _, c := range lock.Charts {
-		fmt.Println("chart", c.Name, c.Source, c.Version)
+	for _, l := range listLock(lock) {
+		fmt.Println(l)
 	}
 	return nil
+}
+
+// listLock is what the local cluster mirrors: every entry but the
+// production-only ones.
+func listLock(lock Lock) []string {
+	var lines []string
+	for _, r := range lock.Images {
+		lines = append(lines, "image "+r.String())
+	}
+	for _, r := range lock.HostImages {
+		lines = append(lines, "host-image "+r.String())
+	}
+	for _, c := range lock.Charts {
+		lines = append(lines, "chart "+c.Name+" "+c.Source+" "+c.Version)
+	}
+	return lines
 }
 
 var unpinned = regexp.MustCompile(`^(\s*-\s+)([a-z0-9][a-z0-9._/:-]*[A-Za-z0-9_.+-])(\s*(#.*)?)$`)
 
 // runPin adds the digest of the image index upstream serves to every image
-// line under images: or host-images: that has none.
+// line under images:, host-images: or prod-images: that has none.
 func runPin(ctx context.Context, args []string) error {
 	fl := flag.NewFlagSet("pin", flag.ExitOnError)
 	path := fl.String("lock", "images.lock", "images.lock")
@@ -236,28 +247,49 @@ func runPin(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	lines := strings.SplitAfter(string(data), "\n")
-	section := ""
 	r := renderer{ctx: ctx}
-	for i, line := range lines {
-		body := strings.TrimRight(line, "\n")
-		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "#") && strings.Contains(line, ":") {
-			section = strings.TrimSpace(strings.SplitN(line, ":", 2)[0])
-		}
-		m := unpinned.FindStringSubmatch(body)
-		if (section != "images" && section != "host-images") || m == nil || strings.Contains(m[2], "@") {
-			continue
-		}
-		raw, err := r.run("", "docker", "buildx", "imagetools", "inspect", "--raw", m[2])
-		if err != nil {
-			return err
-		}
-		sum := sha256.Sum256(raw)
-		lines[i] = m[1] + m[2] + "@sha256:" + hex.EncodeToString(sum[:]) + m[3] + line[len(body):]
-		fmt.Println("pinned", strings.TrimSpace(lines[i]))
+	pinnedLock, pinned, err := pinLock(string(data), func(ref string) ([]byte, error) {
+		return r.run("", "docker", "buildx", "imagetools", "inspect", "--raw", ref)
+	})
+	for _, p := range pinned {
+		fmt.Println("pinned", p)
 	}
-	if err := os.WriteFile(*path, []byte(strings.Join(lines, "")), 0o600); err != nil {
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(*path, []byte(pinnedLock), 0o600); err != nil {
 		return fmt.Errorf("pin: %w", err)
 	}
 	return nil
+}
+
+// section is a top-level key of images.lock, starting a section.
+var section = regexp.MustCompile(`^[A-Za-z][\w-]*:\s*$`)
+
+// pinLock returns the lock with the digest of the raw manifest inspect
+// returns added to every image under images:, host-images: or prod-images:
+// that has none,
+// and the image lines it pinned.
+func pinLock(lock string, inspect func(ref string) ([]byte, error)) (string, []string, error) {
+	lines := strings.SplitAfter(lock, "\n")
+	current := ""
+	var pinned []string
+	for i, line := range lines {
+		body := strings.TrimRight(line, "\n")
+		if section.MatchString(body) {
+			current = strings.TrimSpace(strings.SplitN(body, ":", 2)[0])
+		}
+		m := unpinned.FindStringSubmatch(body)
+		if (current != "images" && current != "host-images" && current != "prod-images") || m == nil || strings.Contains(m[2], "@") {
+			continue
+		}
+		raw, err := inspect(m[2])
+		if err != nil {
+			return "", pinned, err
+		}
+		sum := sha256.Sum256(raw)
+		lines[i] = m[1] + m[2] + "@sha256:" + hex.EncodeToString(sum[:]) + m[3] + line[len(body):]
+		pinned = append(pinned, strings.TrimSpace(lines[i]))
+	}
+	return strings.Join(lines, ""), pinned, nil
 }

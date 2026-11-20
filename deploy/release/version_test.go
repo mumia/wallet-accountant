@@ -42,6 +42,9 @@ func TestOnlySemverTagsAndMainPublish(t *testing.T) {
 		{"tag", "v01.2.3"},
 		{"tag", "v1.2.3+build.5"},
 		{"tag", "v1.2.3-"},
+		{"tag", "v1.2.3-rc.01"},
+		{"tag", "v1.2.3-00"},
+		{"tag", "v1.2.3-rc..1"},
 		{"tag", "release-1"},
 		{"tag", "v1.2.3 "},
 		{"branch", "feature"},
@@ -71,6 +74,18 @@ func TestPreReleaseTagPublishesImageAndChart(t *testing.T) {
 	want := "image-tag=v2.0.0-rc.1\nchart=true\nchart-version=2.0.0-rc.1\napp-version=v2.0.0-rc.1\n"
 	if stdout != want {
 		t.Errorf("stdout:\n%s\nwant:\n%s", stdout, want)
+	}
+}
+
+// Pre-release identifiers as semver 2.0.0 allows them: alphanumeric ones
+// may start with a zero, numeric ones may not (Helm refuses the chart).
+func TestPreReleaseIdentifiersFollowSemver(t *testing.T) {
+	for _, tag := range []string{"v1.2.3-0", "v1.2.3-rc.10", "v1.2.3-0a.1", "v1.2.3-alpha-1.x-y", "v1.2.3--"} {
+		t.Run(tag, func(t *testing.T) {
+			if stdout, stderr, ok := version(t, "tag", tag); !ok {
+				t.Errorf("version.sh refused it: %s%s", stdout, stderr)
+			}
+		})
 	}
 }
 

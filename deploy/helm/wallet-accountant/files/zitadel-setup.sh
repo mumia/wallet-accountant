@@ -12,9 +12,10 @@
 #   are instance settings, so the token must be an IAM owner's.
 #
 # Zitadel generates the client IDs. They are written, with the issuer, the
-# audience and the UI's config.json, to the ConfigMap OIDC_CONFIGMAP, which the
-# UI mounts and Make targets read. When config.json changes, the UI
-# Deployment UI_DEPLOYMENT (if set) is restarted to load it.
+# audience and the UI's config.json, into the data of the ConfigMap
+# OIDC_CONFIGMAP, which the chart owns, the UI mounts and Make targets read.
+# When config.json changes, the UI Deployment UI_DEPLOYMENT (if set) is
+# restarted to load it.
 #
 # Applications are found by name rather than by a fixed ID, because Zitadel
 # never gives a deleted application's ID out again.
@@ -147,8 +148,8 @@ else
 	log "access tokens last $ACCESS_TOKEN_LIFETIME"
 fi
 
-# The ConfigMap, applied server-side with the in-cluster API and this pod's
-# ServiceAccount.
+# The ConfigMap's data, patched with the in-cluster API and this pod's
+# ServiceAccount. The chart owns the ConfigMap itself.
 sa=/var/run/secrets/kubernetes.io/serviceaccount
 kube() { # METHOD PATH CONTENT_TYPE JSON -> prints the HTTP status
 	curl -sS -o "$out" -w '%{http_code}' -X "$1" \
@@ -158,10 +159,8 @@ kube() { # METHOD PATH CONTENT_TYPE JSON -> prints the HTTP status
 
 config_json="{\"apiBaseUrl\":\"/api\",\"oidc\":{\"audience\":\"$PROJECT_ID\",\"clientId\":\"$web_id\",\"issuer\":\"$ISSUER\",\"postLogoutRedirectPath\":\"$UI_POST_LOGOUT_REDIRECT_PATH\",\"redirectPath\":\"$UI_REDIRECT_PATH\"}}"
 escaped=$(printf '%s' "$config_json" | sed 's/"/\\"/g')
-status=$(kube PATCH "/api/v1/namespaces/$POD_NAMESPACE/configmaps/$OIDC_CONFIGMAP?fieldManager=zitadel-setup&force=true" \
-	application/apply-patch+yaml "{
-	\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\",
-	\"metadata\":{\"name\":\"$OIDC_CONFIGMAP\",\"labels\":{${CONFIGMAP_LABELS:-}}},
+status=$(kube PATCH "/api/v1/namespaces/$POD_NAMESPACE/configmaps/$OIDC_CONFIGMAP?fieldManager=zitadel-setup" \
+	application/merge-patch+json "{
 	\"data\":{
 		\"issuer\":\"$ISSUER\",
 		\"audience\":\"$PROJECT_ID\",
@@ -170,7 +169,20 @@ status=$(kube PATCH "/api/v1/namespaces/$POD_NAMESPACE/configmaps/$OIDC_CONFIGMA
 		\"config.json\":\"$escaped\"
 	}
 }")
-[ "$status" = 200 ] || [ "$status" = 201 ] || fail "writing ConfigMap $OIDC_CONFIGMAP answered $status: $(cat "$out")"
+[ "$status" = 200 ] || fail "writing ConfigMap $OIDC_CONFIGMAP answered $status: $(cat "$out")"
+# Then give up the fields that write took: the chart owns the ConfigMap, and
+# Helm's server-side apply would otherwise refuse to change them (when the
+# setup is turned off, say) for conflicting with this manager. Its entry in
+# managedFields is removed, found by testing each index (a failed test is
+# 422); with no entry (the write changed nothing) there is nothing to remove.
+i=0
+while [ $i -lt 20 ]; do
+	status=$(kube PATCH "/api/v1/namespaces/$POD_NAMESPACE/configmaps/$OIDC_CONFIGMAP" \
+		application/json-patch+json "[{\"op\":\"test\",\"path\":\"/metadata/managedFields/$i/manager\",\"value\":\"zitadel-setup\"},{\"op\":\"remove\",\"path\":\"/metadata/managedFields/$i\"}]")
+	[ "$status" = 422 ] || break
+	i=$((i + 1))
+done
+[ "$status" = 200 ] || [ "$status" = 422 ] || fail "releasing ConfigMap $OIDC_CONFIGMAP's fields answered $status: $(cat "$out")"
 log "wrote the client IDs to ConfigMap $OIDC_CONFIGMAP"
 
 # Restart the UI when its config.json changed; the same annotation is a no-op.

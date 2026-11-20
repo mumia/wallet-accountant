@@ -151,11 +151,15 @@ local-up: ## Create the k3d cluster with its registry, install Flux and reconcil
 	else \
 		$(LOCAL_KUBECTL) -n flux-system delete kustomizations.kustomize.toolkit.fluxcd.io observability --ignore-not-found; \
 	fi
-	$(MAKE) --no-print-directory local-wait
+	@# Not the app: its chart is the last one local-deploy built, which may not
+	@# fit this env repo (a values change); local-deploy builds it and waits on it.
+	$(MAKE) --no-print-directory local-wait LOCAL_WAIT_SKIP=wallet-accountant
 	@# The app reads the flag (the ConfigMap flux-system/observability) when its
-	@# Flux Kustomization reconciles, which may have been before the flag changed.
+	@# Flux Kustomization reconciles, which may have been before the flag
+	@# changed: ask for a reconcile, without waiting on it.
 	@if $(LOCAL_KUBECTL) -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io wallet-accountant >/dev/null 2>&1; then \
-		$(LOCAL_FLUX) reconcile kustomization wallet-accountant --timeout=20m; \
+		$(LOCAL_KUBECTL) -n flux-system annotate --overwrite kustomizations.kustomize.toolkit.fluxcd.io wallet-accountant \
+			reconcile.fluxcd.io/requestedAt="$$(date +%s)"; \
 	fi
 
 local-up-observability: ## Same as local-up, plus the Grafana stack at https://grafana.localhost:18443
@@ -163,6 +167,8 @@ local-up-observability: ## Same as local-up, plus the Grafana stack at https://g
 
 local-down: ## Delete the k3d cluster and its registry (the registry's storage is kept)
 	k3d cluster delete $(LOCAL_CLUSTER)
+	@# The temporary registry an interrupted local-prefetch may have left on the registry's port.
+	docker rm -f $(LOCAL_REGISTRY)-prefetch >/dev/null 2>&1 || true
 
 local-push:
 	@# The env repo's working tree, committed or not, is what Flux applies, with
@@ -177,13 +183,16 @@ local-build: $(HELM)
 	@# come from this working tree, committed or not. Offline: the modules come
 	@# from the module cache (local-prefetch filled it), vendored into bin/vendor
 	@# (-e: a go.mod tool's package may not load; the app's do), and the build
-	@# has no network (Dockerfile).
+	@# has no network (Dockerfile). Every command of the recipe below is its own
+	@# under set -e (never `a && b`, which set -e lets fail), so a failed build
+	@# or push stops it before it records a tag.
 	rm -rf bin/vendor
 	GOFLAGS=-mod=mod GOPROXY=off go mod vendor -e -o bin/vendor
 	@set -e; stamp=$$(date -u +%Y%m%d%H%M%S); tag=local-$$stamp; \
 	version=$$(awk '$$1 == "version:" {print $$2}' $(CHART)/Chart.yaml)-local.$$stamp; \
 	image=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant:$$tag; \
-	docker build --network=none --build-context vendor=bin/vendor -t $$image . && docker push -q $$image; \
+	docker build --network=none --build-context vendor=bin/vendor -t $$image .; \
+	docker push -q $$image; \
 	rm -rf bin/local-chart; \
 	$(HELM) package $(CHART) --destination bin/local-chart --version $$version --app-version $$tag; \
 	$(HELM) push bin/local-chart/wallet-accountant-$$version.tgz oci://localhost:$(LOCAL_REGISTRY_PORT)/charts --plain-http; \
@@ -191,7 +200,8 @@ local-build: $(HELM)
 	echo "local-build: image $$image, chart $$version"; \
 	if [ -n "$(LOCAL_STAND_IN_UI)" ]; then \
 		ui=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-stand-in-ui:$$tag; \
-		docker build -t $$ui $(STAND_IN_UI) && docker push -q $$ui; \
+		docker build -t $$ui $(STAND_IN_UI); \
+		docker push -q $$ui; \
 		printf 'WALLET_ACCOUNTANT_UI_TAG=%s\n' $$tag >> $(LOCAL_BUILD); \
 		echo "local-build: stand-in UI $$ui"; \
 	fi
@@ -218,9 +228,13 @@ local-rebuild: $(HELM) ## Rebuild every fold from the event store in the local c
 	@HELM=$(abspath $(HELM)) deploy/local/operator-pod.sh rebuild
 
 local-wait:
-	@# `cluster` creates the other Kustomizations, so they exist only once it is ready.
+	@# `cluster` creates the other Kustomizations, so they exist only once it is
+	@# ready. Then every one but those LOCAL_WAIT_SKIP names.
 	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io/cluster --for=condition=Ready --timeout=5m
-	$(LOCAL_KUBECTL) -n flux-system wait kustomizations.kustomize.toolkit.fluxcd.io --all --for=condition=Ready --timeout=20m
+	@set -e; names=$$($(LOCAL_KUBECTL) -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io -o name | \
+		grep -v -x -F -e '' $(foreach k,$(LOCAL_WAIT_SKIP),-e kustomization.kustomize.toolkit.fluxcd.io/$(k))); \
+	echo "local-wait: $$names" | tr '\n' ' '; echo; \
+	$(LOCAL_KUBECTL) -n flux-system wait $$names --for=condition=Ready --timeout=20m
 
 local-check: $(HELM) ## Check the running local cluster against ADR-0019 and the env repo (OBSERVABILITY=true: with the Grafana stack)
 	HELM=$(abspath $(HELM)) deploy/local/check.sh
@@ -352,7 +366,10 @@ RENOVATE_ENV_EXPECT := \
 	kubernetes:docker.io/curlimages/curl regex:docker.io/curlimages/curl \
 	kubernetes:registry regex:registry regex:golang regex:quay.io/jetstack/cert-manager-controller \
 	flux:cert-manager-webhook-ovh regex:cert-manager-webhook-ovh regex:ghcr.io/aureq/cert-manager-webhook-ovh \
-	regex:mikefarah/yq regex:ghcr.io/yannh/kubeconform regex:binwiederhier/ntfy
+	regex:mikefarah/yq regex:ghcr.io/yannh/kubeconform regex:binwiederhier/ntfy \
+	regex:k3s-io/k3s regex:tailscale/tailscale regex:fluxcd/flux2 regex:Deuxfleurs/garage \
+	terraform:flux terraform:http terraform:kubernetes terraform:onepassword terraform:ovh \
+	terraform:proxmox terraform:random terraform:tailscale terraform:tls
 
 renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
 	deploy/renovate/check.sh . $(RENOVATE_EXPECT)

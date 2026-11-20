@@ -1,8 +1,8 @@
 {{- /*
 oidc.zitadelSetup (ADR-0022): after every install and upgrade, a Job that
 creates or updates the Zitadel project, `api-clients` and `web`, sets
-15-minute access tokens, and writes the client IDs to the oidc ConfigMap
-(files/zitadel-setup.sh). Its ServiceAccount may write only that ConfigMap
+15-minute access tokens, and writes the client IDs into the data of the oidc
+ConfigMap, which the chart owns (files/zitadel-setup.sh). Its ServiceAccount may write only that ConfigMap
 and restart only the UI Deployment.
 */ -}}
 {{- if .Values.oidc.zitadelSetup.enabled }}
@@ -28,10 +28,6 @@ metadata:
     {{- include "wa.labels" . | nindent 4 }}
     app.kubernetes.io/component: zitadel-setup
 rules:
-  # Server-side apply creates the ConfigMap on the first run.
-  - apiGroups: [""]
-    resources: [configmaps]
-    verbs: [create]
   - apiGroups: [""]
     resources: [configmaps]
     resourceNames: [{{ include "wa.oidcConfigMap" . }}]
@@ -138,8 +134,6 @@ spec:
               value: {{ .Values.oidc.postLogoutRedirectPath | quote }}
             - name: OIDC_CONFIGMAP
               value: {{ include "wa.oidcConfigMap" . }}
-            - name: CONFIGMAP_LABELS
-              value: {{ merge (include "wa.selectorLabels" . | fromYaml) (dict "app.kubernetes.io/managed-by" "zitadel-setup") | toJson | trimPrefix "{" | trimSuffix "}" | quote }}
             - name: UI_DEPLOYMENT
               value: {{ ternary (include "wa.uiName" .) "" .Values.ui.enabled | quote }}
             - name: POD_NAMESPACE
