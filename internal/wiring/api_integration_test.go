@@ -31,6 +31,21 @@ func TestAPIPathWithoutTheAPIPrefixIsNotFound(t *testing.T) {
 	app.Get(t, "/api/me", "").AssertProblem(t, http.StatusUnauthorized, "about:blank")
 }
 
+// The chart's probes ask /healthz, outside the API and without a token:
+// the Gateway never routes it to the app, only the kubelet asks it.
+func TestHealthzAnswersWithoutAToken(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+
+	if res := app.Get(t, "/healthz", ""); res.Status != http.StatusOK {
+		t.Errorf("GET /healthz = %d %s, want 200", res.Status, res.Body)
+	}
+
+	if res := app.Do(t, http.MethodPost, "/healthz", "", nil); res.Status == http.StatusOK {
+		t.Errorf("POST /healthz = 200, want only GET (and HEAD) answered")
+	}
+}
+
 func TestWrongMethodIsProblemJSONWithAllow(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)

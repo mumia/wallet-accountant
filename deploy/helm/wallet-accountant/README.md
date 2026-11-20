@@ -89,7 +89,7 @@ Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.
 | `imagePullSecrets` | `[]` | Pull Secrets for the app's and the UI's images |
 | `app.runModes` | `[all]` | `[all]`, or `[api, worker]` to split the app into two Deployments; only `api` serves HTTP |
 | `app.replicas` | `1` | Replicas of each app Deployment |
-| `app.livenessProbe`, `app.readinessProbe` | TCP on the HTTP port | The app has no health endpoint, so the probes check that it accepts connections |
+| `app.livenessProbe`, `app.readinessProbe` | `GET /healthz` on the HTTP port | The app answers `/healthz` with 200 and no token, outside the API (`/api`), so the Gateway never routes it there |
 | `app.resources`, `app.extraEnv`, `app.podAnnotations`, `app.nodeSelector`, `app.tolerations`, `app.affinity` | empty | The usual pod settings. `extraEnv` also goes to `migrate` and the operator pods |
 | `migrate.backoffLimit`, `migrate.activeDeadlineSeconds` | `10`, `1800` | Retries of the migrate Job |
 | `database.mode` | `external` | `external` or `managed` |
