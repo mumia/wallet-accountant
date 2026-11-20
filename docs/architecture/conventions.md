@@ -187,7 +187,7 @@ cosign verify ghcr.io/mumia/charts/wallet-accountant:1.2.3 \
   --certificate-identity-regexp '^https://github\.com/mumia/wallet-accountant/\.github/workflows/release\.yaml@refs/tags/v'
 ```
 
-**Production enforces the chart's signature, not the image's.** Decided on 2026-11-19 (ticket 09); ticket 11 configures it in `wallet-accountant-deploy`.
+**Production enforces the chart's signature, not the image's.** Decided on 2026-11-19 (ticket 09); `wallet-accountant-deploy` configures it in `clusters/prod/apps.yaml`, and its `clusters/prod/check.sh` checks it.
 
 - Flux verifies the chart before installing it: the chart's source (`OCIRepository` or `HelmRepository`) uses `verify.provider: cosign` with `matchOIDCIdentity` set to the issuer `https://token.actions.githubusercontent.com` and the subject above, which only a release tag of this repository's release workflow matches. Flux does this natively, with no other component. A failed check stops the release and alerts on ntfy like any failed reconciliation.
 - The env repo pins the chart version and leaves `image.tag` empty, so the verified chart decides the image tag.

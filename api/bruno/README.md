@@ -12,6 +12,8 @@ A [Bruno](https://www.usebruno.com) collection for the Wallet Accountant API, in
 4. Send any request. Bruno opens the Zitadel login, signs in with the authorization code flow and PKCE, and puts the access token in `Authorization: Bearer …`. It refreshes the token by itself (`offline_access`). The login is `admin@zitadel.auth.localhost`, with the password in the env repo's `clusters/local/secrets/zitadel/secrets.yaml`.
 5. A new identity is not a User yet: `GET /api/me` answers 403 `/problems/registration-required`. Get an Invitation code with `make local-bootstrap` (or `make dev-bootstrap` in debug mode: both use the cluster's database) and send *Users → Redeem an Invitation* with it.
 
+**Production.** The environment `prod` (`environments/prod.yml`) calls `https://wallet.shire.migmar.eu/api` and signs in to `https://auth.shire.migmar.eu`, with the client ID in `WA_PROD_OAUTH_CLIENT_ID`, which `make prod-bruno-env` writes to `.env` (over Tailscale, with the production kubeconfig). Its certificates are Let's Encrypt's, so Bruno needs no extra CA. The first Instance administrator redeems the code from `make prod-bootstrap`.
+
 Requests that create something (a Household, an Account, a Connection, …) store the new ID in the runtime variable of the same name, such as `household_id`, which the requests under it use in their paths. Every POST sends a fresh `Idempotency-Key`.
 
 ## Signing in

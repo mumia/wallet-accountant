@@ -1,2 +1,4 @@
-# Written by make local-deploy: the client ID Zitadel generated for api-clients.
+# Written by make local-deploy and make prod-bruno-env: the client IDs Zitadel
+# generated for api-clients.
 .env
+.env.new

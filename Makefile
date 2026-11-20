@@ -68,6 +68,12 @@ LOCAL_ORIGIN        := $(if $(filter 443,$(LOCAL_HTTPS_PORT)),,:$(LOCAL_HTTPS_PO
 export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_REGISTRY_CONFIG LOCAL_HTTP_PORT LOCAL_HTTPS_PORT OBSERVABILITY LOCAL_MKCERT_CA LOCAL_ENV_REPO_DIR
 export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD
 
+# Production (the env repo's clusters/prod), reached over Tailscale with the
+# admin kubeconfig infra/homelab writes: `tofu output -raw kubeconfig >
+# ~/.kube/shire.yaml` (the env repo's infra/README.md, step 5).
+PROD_KUBECONFIG     ?= $(HOME)/.kube/shire.yaml
+PROD_CONTEXT        ?= shire
+
 # Debug mode (ADR-0019): `make run` and the other run targets, or an IDE with
 # the same variables, run the app on this Mac against the local cluster's
 # apps-db, Zitadel and collector. The passwords are the env repo's throwaway
@@ -87,6 +93,7 @@ export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 .PHONY: renovate-check
 .PHONY: local-ca local-up local-up-observability local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
 .PHONY: local-bootstrap local-rebuild local-bruno-env local-prefetch images-lock-check images-lock-pin
+.PHONY: prod-check prod-bootstrap prod-bruno-env
 .PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
 help: ## List the targets
@@ -237,10 +244,12 @@ local-deploy: local-build local-push ## Build the app's image and chart from thi
 	$(MAKE) --no-print-directory local-wait local-bruno-env
 
 local-bruno-env:
-	@# The Bruno collection reads the client ID the setup Job generated from api/bruno/.env.
+	@# The Bruno collection reads the client ID the setup Job generated from
+	@# api/bruno/.env; production's (prod-bruno-env) is kept.
 	@client_id=$$($(LOCAL_KUBECTL) -n wallet-accountant get configmap wallet-accountant-oidc -o jsonpath='{.data.api-clients-client-id}') && \
-		test -n "$$client_id" && \
-		printf 'WA_OAUTH_CLIENT_ID=%s\n' "$$client_id" > api/bruno/.env && \
+		test -n "$$client_id" && touch api/bruno/.env && \
+		{ grep -v '^WA_OAUTH_CLIENT_ID=' api/bruno/.env; printf 'WA_OAUTH_CLIENT_ID=%s\n' "$$client_id"; } > api/bruno/.env.new && \
+		mv api/bruno/.env.new api/bruno/.env && \
 		echo "api/bruno/.env: WA_OAUTH_CLIENT_ID=$$client_id"
 
 local-bootstrap: $(HELM) ## Print a bootstrap Invitation code for the first Instance administrator (local cluster; ADR-0017)
@@ -272,6 +281,25 @@ images-lock-pin: ## Add the digest to every image in ENV_REPO's images.lock that
 
 local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost:18443 (valid 24 hours)
 	@$(LOCAL_KUBECTL) -n headlamp create token headlamp --duration=24h
+
+## Production
+
+prod-check: $(HELM) ## Build and check the env repo's clusters/prod without a cluster, and this chart with its values (REQUIRE_ENCRYPTED=1: every Secret sealed)
+	WALLET_ACCOUNTANT_CHART=$(abspath $(CHART)) HELM=$(abspath $(HELM)) "$(ENV_REPO)/clusters/prod/check.sh"
+
+prod-bootstrap: $(HELM) ## Print a bootstrap Invitation code for production's first Instance administrator (ADR-0017), over Tailscale
+	@test -f "$(PROD_KUBECONFIG)" || { echo "No $(PROD_KUBECONFIG): write it as the env repo's infra/README.md (step 5) says."; exit 1; }
+	@# The code goes only to this terminal: the pod and its log are deleted.
+	@KUBECONFIG="$(PROD_KUBECONFIG)" KUBE_CONTEXT=$(PROD_CONTEXT) CHART_REPO=$(CHART_REGISTRY)/wallet-accountant \
+		HELM=$(abspath $(HELM)) deploy/local/operator-pod.sh bootstrap
+
+prod-bruno-env: ## Write production's api-clients client ID to api/bruno/.env (WA_PROD_OAUTH_CLIENT_ID), for Bruno's environment prod
+	@test -f "$(PROD_KUBECONFIG)" || { echo "No $(PROD_KUBECONFIG): write it as the env repo's infra/README.md (step 5) says."; exit 1; }
+	@client_id=$$(kubectl --kubeconfig "$(PROD_KUBECONFIG)" --context $(PROD_CONTEXT) -n wallet-accountant get configmap wallet-accountant-oidc -o jsonpath='{.data.api-clients-client-id}') && \
+		test -n "$$client_id" && touch api/bruno/.env && \
+		{ grep -v '^WA_PROD_OAUTH_CLIENT_ID=' api/bruno/.env; printf 'WA_PROD_OAUTH_CLIENT_ID=%s\n' "$$client_id"; } > api/bruno/.env.new && \
+		mv api/bruno/.env.new api/bruno/.env && \
+		echo "api/bruno/.env: WA_PROD_OAUTH_CLIENT_ID=$$client_id"
 
 ## Build and quality
 
@@ -347,7 +375,9 @@ RENOVATE_ENV_EXPECT := \
 	flux:prometheus flux:loki flux:tempo flux:grafana \
 	regex:prometheus regex:loki regex:tempo regex:grafana \
 	kubernetes:docker.io/curlimages/curl regex:docker.io/curlimages/curl \
-	kubernetes:registry regex:registry regex:golang regex:quay.io/jetstack/cert-manager-controller
+	kubernetes:registry regex:registry regex:golang regex:quay.io/jetstack/cert-manager-controller \
+	flux:cert-manager-webhook-ovh regex:cert-manager-webhook-ovh regex:ghcr.io/aureq/cert-manager-webhook-ovh \
+	regex:mikefarah/yq regex:ghcr.io/yannh/kubeconform regex:binwiederhier/ntfy
 
 renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
 	deploy/renovate/check.sh . $(RENOVATE_EXPECT)
