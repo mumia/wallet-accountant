@@ -33,9 +33,11 @@ tag) ;;
 esac
 
 # vMAJOR.MINOR.PATCH with an optional pre-release (semver 2.0.0). Build
-# metadata (+...) is refused: "+" is not allowed in an OCI tag.
+# metadata (+...) is refused: "+" is not allowed in an OCI tag. A numeric
+# pre-release identifier has no leading zero, or Helm refuses the chart.
 number='(0|[1-9][0-9]*)'
-semver="v$number\.$number\.$number(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?"
+identifier='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+semver="v$number\.$number\.$number(-$identifier(\.$identifier)*)?"
 tag=$ref_name
 if [ "$(printf '%s' "$tag" | wc -l)" -ne 0 ] || ! printf '%s\n' "$tag" | grep -Eqx "$semver"; then
 	fail "tag $tag is not a release tag (vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE)"
