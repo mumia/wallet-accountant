@@ -16,7 +16,9 @@
 # Every upstream copy is checked against the digest images.lock pins. What is
 # already there is skipped without touching the network, so this runs offline
 # once everything is in (`make local-up` runs it first). When the registry is
-# not running (no cluster), a temporary one on the same storage is started.
+# not running (no cluster), a temporary one on the same storage is started,
+# and removed on the way out. Production-only entries (prod-charts:,
+# prod-images:) are not mirrored.
 #
 # Needs docker (with buildx), curl, jq, go and HELM. Environment: ENV_REPO,
 # LOCAL_REGISTRY, LOCAL_REGISTRY_PORT, LOCAL_REGISTRY_DIR, LOCAL_REGISTRY_CONFIG,
@@ -31,12 +33,20 @@ arch=${LOCAL_PLATFORM#*/}
 registry=localhost:$LOCAL_REGISTRY_PORT
 accept="application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
 work=$(mktemp -d)
-temporary=
+# The temporary registry, started when no cluster's registry is running. One
+# an interrupted run left behind would hold the registry's port and pass for
+# the cluster's registry: it is removed first (and by `make local-down`).
+temporary=$LOCAL_REGISTRY-prefetch
+started=
 cleanup() {
 	rm -rf "$work"
-	[ -z "$temporary" ] || docker rm -f "$temporary" >/dev/null 2>&1 || true
+	[ -z "$started" ] || docker rm -f "$temporary" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+docker rm -f "$temporary" >/dev/null 2>&1 || true
 
 list=$(go run ./deploy/local/imageslock list -lock "$ENV_REPO/images.lock")
 
@@ -120,9 +130,9 @@ done
 
 if ! curl -fsS -o /dev/null "http://$registry/v2/" 2>/dev/null; then
 	registry_image=$(awk '$1 == "image:" && $2 ~ /^registry:/ {print $2}' "$ENV_REPO/clusters/local/k3d.yaml")
-	temporary=$LOCAL_REGISTRY-prefetch
 	mkdir -p "$LOCAL_REGISTRY_DIR"
 	echo "prefetch: no registry on $registry; starting $temporary on $LOCAL_REGISTRY_DIR"
+	started=1
 	docker run -d --rm --name "$temporary" -p "$LOCAL_REGISTRY_PORT:5000" \
 		-v "$LOCAL_REGISTRY_DIR:/var/lib/registry" -v "$LOCAL_REGISTRY_CONFIG:/etc/distribution/config.yml:ro" \
 		"${registry_image:?no registry image in k3d.yaml}" >/dev/null

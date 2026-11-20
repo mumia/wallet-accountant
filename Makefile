@@ -163,6 +163,8 @@ local-up-observability: ## Same as local-up, plus the Grafana stack at https://g
 
 local-down: ## Delete the k3d cluster and its registry (the registry's storage is kept)
 	k3d cluster delete $(LOCAL_CLUSTER)
+	@# The temporary registry an interrupted local-prefetch may have left on the registry's port.
+	docker rm -f $(LOCAL_REGISTRY)-prefetch >/dev/null 2>&1 || true
 
 local-push:
 	@# The env repo's working tree, committed or not, is what Flux applies, with
