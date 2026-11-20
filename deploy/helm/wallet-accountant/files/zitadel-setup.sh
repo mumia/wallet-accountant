@@ -170,6 +170,19 @@ status=$(kube PATCH "/api/v1/namespaces/$POD_NAMESPACE/configmaps/$OIDC_CONFIGMA
 	}
 }")
 [ "$status" = 200 ] || fail "writing ConfigMap $OIDC_CONFIGMAP answered $status: $(cat "$out")"
+# Then give up the fields that write took: the chart owns the ConfigMap, and
+# Helm's server-side apply would otherwise refuse to change them (when the
+# setup is turned off, say) for conflicting with this manager. Its entry in
+# managedFields is removed, found by testing each index (a failed test is
+# 422); with no entry (the write changed nothing) there is nothing to remove.
+i=0
+while [ $i -lt 20 ]; do
+	status=$(kube PATCH "/api/v1/namespaces/$POD_NAMESPACE/configmaps/$OIDC_CONFIGMAP" \
+		application/json-patch+json "[{\"op\":\"test\",\"path\":\"/metadata/managedFields/$i/manager\",\"value\":\"zitadel-setup\"},{\"op\":\"remove\",\"path\":\"/metadata/managedFields/$i\"}]")
+	[ "$status" = 422 ] || break
+	i=$((i + 1))
+done
+[ "$status" = 200 ] || [ "$status" = 422 ] || fail "releasing ConfigMap $OIDC_CONFIGMAP's fields answered $status: $(cat "$out")"
 log "wrote the client IDs to ConfigMap $OIDC_CONFIGMAP"
 
 # Restart the UI when its config.json changed; the same annotation is a no-op.
