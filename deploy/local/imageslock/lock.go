@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -13,10 +14,15 @@ import (
 // image (by tag and digest) the local cluster uses (ADR-0019). Images are
 // mirrored into the cluster's registry; host images are pulled into the Mac's
 // Docker, which runs or builds from them (k3d, the Dockerfiles).
+// Production-only charts and images (prod-charts:, prod-images:) are there
+// for Renovate, which bumps them with their manifests; nothing local uses or
+// mirrors them.
 type Lock struct {
 	Charts     []LockedChart `yaml:"charts"`
 	Images     []Ref         `yaml:"-"`
 	HostImages []Ref         `yaml:"-"`
+	ProdCharts []LockedChart `yaml:"-"`
+	ProdImages []Ref         `yaml:"-"`
 }
 
 // LockedChart is one chart entry: its name as the HelmRelease gives it, the
@@ -39,13 +45,15 @@ func ParseLock(data []byte) (Lock, error) {
 		Charts     []LockedChart `yaml:"charts"`
 		Images     []string      `yaml:"images"`
 		HostImages []string      `yaml:"host-images"`
+		ProdCharts []LockedChart `yaml:"prod-charts"`
+		ProdImages []string      `yaml:"prod-images"`
 	}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return Lock{}, fmt.Errorf("images.lock: %w", err)
 	}
-	lock := Lock{Charts: raw.Charts}
+	lock := Lock{Charts: raw.Charts, ProdCharts: raw.ProdCharts}
 	var errs []error
-	for _, c := range raw.Charts {
+	for _, c := range append(slices.Clone(raw.Charts), raw.ProdCharts...) {
 		if c.Name == "" || c.Source == "" || c.Version == "" {
 			errs = append(errs, fmt.Errorf("images.lock: chart %q needs name, source and version", c.Name))
 		}
@@ -67,6 +75,7 @@ func ParseLock(data []byte) (Lock, error) {
 	}
 	lock.Images = parse(raw.Images)
 	lock.HostImages = parse(raw.HostImages)
+	lock.ProdImages = parse(raw.ProdImages)
 	return lock, errors.Join(errs...)
 }
 
