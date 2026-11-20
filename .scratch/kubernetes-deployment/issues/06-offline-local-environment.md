@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `images.lock` in the env repo lists every image (by digest) and every Helm chart (by version) that `clusters/local` uses: k3s, Flux, cert-manager, Traefik, CNPG, Zitadel, the Grafana stack, Headlamp, Swagger UI, the collector, plus the base images this repo's Dockerfile and the stand-in UI use
 - [ ] `make local-prefetch` mirrors them into the k3d registry; Helm charts are mirrored as OCI artifacts and HelmReleases use them through `OCIRepository` or a local `HelmRepository`
