@@ -114,6 +114,33 @@ func TestTheUIServesItsConfigFromValues(t *testing.T) {
 	}
 }
 
+// The contract asks for a read-only root filesystem; a static server such as
+// nginx still writes its pid and temporary files, so /tmp is an emptyDir.
+func TestTheUIHasAWritableTmp(t *testing.T) {
+	t.Parallel()
+	ms := render(t, combination{database: "external", ui: true}.files())
+
+	d := ms.Get(t, "Deployment", "wa-wallet-accountant-ui")
+	var tmpVolume string
+	for _, m := range containers(d)[0].List("volumeMounts") {
+		if mount := asObject(m); mount.Str("mountPath") == "/tmp" {
+			tmpVolume = mount.Str("name")
+		}
+	}
+	if tmpVolume == "" {
+		t.Fatal("no volume mounted on /tmp")
+	}
+	for _, v := range d.List("spec.template.spec.volumes") {
+		if vol := asObject(v); vol.Str("name") == tmpVolume {
+			if _, ok := vol["emptyDir"]; !ok {
+				t.Errorf("/tmp volume = %v, want an emptyDir", vol)
+			}
+			return
+		}
+	}
+	t.Errorf("no volume %q", tmpVolume)
+}
+
 func TestWithoutZitadelSetupTheClientIDsComeFromValues(t *testing.T) {
 	t.Parallel()
 	ms := render(t, minimal.files())

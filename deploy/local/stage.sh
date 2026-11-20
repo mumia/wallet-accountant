@@ -11,12 +11,16 @@
 #   version), as clusters/local/build, which adds the app and the ConfigMap
 #   flux-system/wallet-accountant-build with those versions. Only when the
 #   image is still in the registry; without a build, no app is deployed.
+#   When the build includes the stand-in UI (WALLET_ACCOUNTANT_UI_TAG, from
+#   `make local-deploy LOCAL_STAND_IN_UI=1`), the app's HelmRelease also gets
+#   the UI slot on with that image.
 #
-# Usage: stage.sh <directory>. Needs ENV_REPO, LOCAL_BUILD, LOCAL_REGISTRY_PORT.
+# Usage: stage.sh <directory>. Needs ENV_REPO, LOCAL_BUILD, LOCAL_REGISTRY,
+# LOCAL_REGISTRY_PORT.
 set -eu
 
 stage=${1:?usage: stage.sh <directory>}
-: "${ENV_REPO:?}" "${LOCAL_BUILD:?}" "${LOCAL_REGISTRY_PORT:?}"
+: "${ENV_REPO:?}" "${LOCAL_BUILD:?}" "${LOCAL_REGISTRY:?}" "${LOCAL_REGISTRY_PORT:?}"
 
 rm -rf "$stage"
 mkdir -p "$stage"
@@ -28,6 +32,7 @@ cp api/openapi.yaml "$stage/clusters/local/swagger/openapi.yaml"
 [ -f "$LOCAL_BUILD" ] || exit 0
 WALLET_ACCOUNTANT_VERSION=$(sed -n 's/^WALLET_ACCOUNTANT_VERSION=//p' "$LOCAL_BUILD")
 WALLET_ACCOUNTANT_IMAGE_TAG=$(sed -n 's/^WALLET_ACCOUNTANT_IMAGE_TAG=//p' "$LOCAL_BUILD")
+WALLET_ACCOUNTANT_UI_TAG=$(sed -n 's/^WALLET_ACCOUNTANT_UI_TAG=//p' "$LOCAL_BUILD")
 if ! curl -fsS -o /dev/null \
 	-H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json" \
 	"http://localhost:$LOCAL_REGISTRY_PORT/v2/wallet-accountant/manifests/$WALLET_ACCOUNTANT_IMAGE_TAG"; then
@@ -51,3 +56,31 @@ configMapGenerator:
       disableNameSuffixHash: true
 EOF
 echo "stage: Wallet Accountant $WALLET_ACCOUNTANT_IMAGE_TAG (chart $WALLET_ACCOUNTANT_VERSION)"
+
+[ -n "$WALLET_ACCOUNTANT_UI_TAG" ] || exit 0
+# The stand-in UI (deploy/helm/wallet-accountant/test/stand-in-ui), a test
+# fixture: one more patch on the wallet-accountant Flux Kustomization, which
+# turns the chart's UI slot on with the image local-build pushed.
+cat >>"$stage/clusters/local/build/kustomization.yaml" <<EOF
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: wallet-accountant
+    patch: |
+      - op: add
+        path: /spec/patches/-
+        value:
+          target:
+            kind: HelmRelease
+            name: wallet-accountant
+          patch: |
+            - op: add
+              path: /spec/values/ui
+              value:
+                enabled: true
+                image:
+                  repository: $LOCAL_REGISTRY:5000/wallet-accountant-stand-in-ui
+                  tag: $WALLET_ACCOUNTANT_UI_TAG
+EOF
+echo "stage: with the stand-in UI $WALLET_ACCOUNTANT_UI_TAG"

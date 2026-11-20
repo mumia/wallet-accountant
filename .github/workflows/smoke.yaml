@@ -1,10 +1,23 @@
-# `make smoke` against the self-hosted Compose stack (Zitadel included). Too
-# slow for pull requests, so it runs nightly and on demand.
+# The end-to-end smoke test on the local cluster (spec "CI"): `make
+# local-smoke` creates a k3d cluster online (no prefetch) from the env repo's
+# clusters/local, deploys this commit's image and chart with the stand-in UI
+# through the same local-* path a developer runs, bootstraps, redeems the code
+# as a Zitadel identity, runs the stand-in UI's browser test and tears the
+# cluster down. With it run the chart's helm lint and the images.lock check.
+#
+# It runs on every pull request (ticket 08). A full run took 8 minutes on a
+# developer's Mac; if it takes over ~15 minutes here, move it to pushes to
+# main plus nightly (docs/architecture/conventions.md, "CI").
+#
+# The env repo (mumia/wallet-accountant-deploy) is private: the secret
+# ENV_REPO_DEPLOY_KEY holds a read-only deploy key of it. The repository
+# variable ENV_REPO_REF picks its branch (default main).
 name: Smoke
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
+  pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -15,18 +28,62 @@ permissions:
   contents: read
 
 jobs:
-  smoke:
+  local-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      SMOKE_PROJECT: wallet-accountant-smoke
+      ENV_REPO: ${{ github.workspace }}/wallet-accountant-deploy
+      # The same versions as on a developer's Mac; flux's version is also the
+      # Flux controllers' (env repo, images.lock).
+      # renovate: datasource=github-releases depName=k3d-io/k3d
+      K3D_VERSION: v5.9.0
+      # renovate: datasource=github-releases depName=fluxcd/flux2
+      FLUX_VERSION: v2.10.0
+      # renovate: datasource=github-releases depName=FiloSottile/mkcert
+      MKCERT_VERSION: v1.4.4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: make smoke
-      # smoke.sh removes its project on exit; this covers a cancelled or timed-out job.
+      - name: Check out the env repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: mumia/wallet-accountant-deploy
+          ref: ${{ vars.ENV_REPO_REF || 'main' }}
+          path: wallet-accountant-deploy
+          ssh-key: ${{ secrets.ENV_REPO_DEPLOY_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install k3d, flux and mkcert
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          cd "$HOME/.local/bin"
+          curl -fsSLo k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          curl -fsSL "https://github.com/fluxcd/flux2/releases/download/${FLUX_VERSION}/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz" | tar xz flux
+          curl -fsSLo mkcert "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-amd64"
+          chmod +x k3d flux mkcert
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # The runner has no mkcert CA: this makes a new one, as on a new Mac.
+      - run: make local-ca
+      # helm lint and helm template of the chart, as in CI's lint job.
+      - run: make lint-chart
+      # HOOK (ticket 06): the check that every image and chart a rendered
+      # manifest uses is in the env repo's images.lock. Replace this step with
+      # its Make target once ticket 06 lands.
+      - name: images.lock coverage (ticket 06)
+        run: echo "::warning::the images.lock coverage check (ticket 06) is not wired in yet"
+      - run: make local-smoke
+      - name: Upload the browser test's traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stand-in-ui-results
+          path: bin/stand-in-ui-results
+          if-no-files-found: ignore
+      # local-smoke deletes the cluster on exit; this covers a cancelled job.
       - name: Tear down
         if: always()
-        run: |
-          docker compose -p "$SMOKE_PROJECT" down -v --remove-orphans || true
+        run: k3d cluster delete wallet-accountant || true

@@ -1,8 +1,9 @@
 {{- /*
 The UI slot (docs/architecture/ui-contract.md): a static image on port 8080
 with /healthz, and its runtime config.json mounted at ui.configPath from the
-oidc ConfigMap. With the Zitadel setup Job, that ConfigMap is the Job's, and
-the Job restarts this Deployment when config.json changes.
+oidc ConfigMap. The root filesystem is read-only, with an emptyDir on /tmp.
+With the Zitadel setup Job, that ConfigMap is the Job's, and the Job
+restarts this Deployment when config.json changes.
 */ -}}
 {{- if .Values.ui.enabled }}
 {{- $name := include "wa.uiName" . }}
@@ -63,6 +64,10 @@ spec:
               mountPath: {{ .Values.ui.configPath }}
               subPath: config.json
               readOnly: true
+            # The root filesystem is read-only; the server's pid and
+            # temporary files go here.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: config
           configMap:
@@ -71,9 +76,11 @@ spec:
               - key: config.json
                 path: config.json
             {{- if .Values.oidc.zitadelSetup.enabled }}
-            # The setup Job creates it after the first install.
+            # A pre-install hook without client IDs until the setup Job runs.
             optional: true
             {{- end }}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

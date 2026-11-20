@@ -48,14 +48,20 @@ func TestZitadelSetupIsAPostInstallAndPostUpgradeHookJob(t *testing.T) {
 		t.Errorf("ZITADEL_PAT from Secret %q, want zitadel-setup-pat", got)
 	}
 
-	// The Job writes the oidc ConfigMap, so the chart does not render it,
-	// and the UI starts without it on the first install.
-	if ms.Find("ConfigMap", "wa-wallet-accountant-oidc") != nil {
-		t.Error("the chart renders the oidc ConfigMap the Job owns")
+	// The Job owns the oidc ConfigMap. The chart creates it only once, as a
+	// pre-install hook with no client IDs, which Helm never updates or
+	// deletes afterwards: the UI needs its config.json to start, and Helm
+	// waits for the UI to be ready before it runs the post-install Job.
+	cm := ms.Get(t, "ConfigMap", "wa-wallet-accountant-oidc")
+	annotations := cm.Map("metadata.annotations")
+	if hook, policy := annotations["helm.sh/hook"], annotations["helm.sh/hook-delete-policy"]; hook != "pre-install" || policy != "before-hook-creation" {
+		t.Errorf("oidc ConfigMap hook = %v (delete policy %v), want pre-install (before-hook-creation)", hook, policy)
 	}
-	ui := ms.Get(t, "Deployment", "wa-wallet-accountant-ui")
-	if got := ui.At("spec.template.spec.volumes.0.configMap.optional"); got != true {
-		t.Errorf("the UI's config volume optional = %v, want true", got)
+	if got := cm.Str("data.web-client-id"); got != "" {
+		t.Errorf("web-client-id before the Job = %q, want empty", got)
+	}
+	if raw, _ := cm.Map("data")["config.json"].(string); !strings.Contains(raw, `"clientId":""`) {
+		t.Errorf("config.json before the Job = %s, want an empty clientId", raw)
 	}
 
 	// Its ServiceAccount may write that ConfigMap and restart the UI, nothing else.

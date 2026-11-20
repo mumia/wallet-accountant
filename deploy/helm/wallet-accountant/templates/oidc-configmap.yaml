@@ -1,19 +1,35 @@
 {{- /*
 The OIDC settings the UI's config.json and the Make targets read: issuer,
-audience and both client IDs. With the Zitadel setup Job, the Job writes this
-ConfigMap with the client IDs Zitadel generated, so the chart leaves it out.
+audience and both client IDs.
+
+With the Zitadel setup Job, the Job owns this ConfigMap and writes the client
+IDs Zitadel generated. The chart still creates it once, before anything else
+on install, as a pre-install hook with no client IDs: the UI mounts config.json
+from it and cannot start without it, and Helm waits for the UI to be ready
+before it runs the post-install Job. Helm never updates or deletes a hook
+resource afterwards, so it never reverts the Job's client IDs.
 */ -}}
-{{- if not .Values.oidc.zitadelSetup.enabled }}
+{{- $setup := .Values.oidc.zitadelSetup.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "wa.oidcConfigMap" . }}
   labels:
     {{- include "wa.labels" . | nindent 4 }}
+  {{- if $setup }}
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation
+  {{- end }}
 data:
   issuer: {{ .Values.oidc.issuer | quote }}
   audience: {{ .Values.oidc.audience | quote }}
+  {{- if $setup }}
+  web-client-id: ""
+  api-clients-client-id: ""
+  config.json: {{ include "wa.uiConfig" (list . "") | quote }}
+  {{- else }}
   web-client-id: {{ .Values.oidc.clientIds.web | quote }}
   api-clients-client-id: {{ .Values.oidc.clientIds.apiClients | quote }}
   config.json: {{ include "wa.uiConfig" (list . .Values.oidc.clientIds.web) | quote }}
-{{- end }}
+  {{- end }}

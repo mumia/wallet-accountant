@@ -27,11 +27,12 @@ internal/platform/              event store, Decider runtime, codec, Watermill w
 internal/wiring/                composition root: builds every context and runs a run mode
 internal/apitest/               HTTP test harness: the real app in-process against testcontainers PostgreSQL
 internal/tools/opencollection/  writes api/bruno from api/openapi.yaml
-deploy/local/                   the local k3d cluster's check (`make local-check`), artifact staging and operator pods; the cluster itself is in the env repo (ADR-0019)
+deploy/local/                   the local k3d cluster's check (`make local-check`), smoke test (`make local-smoke`), browser test, artifact staging and operator pods; the cluster itself is in the env repo (ADR-0019)
 compose.dev.yaml                development dependencies; deploy/dev/ holds their files
 compose.yaml, Dockerfile        self-hosting; deploy/selfhosted/ holds the secrets generator, PostgreSQL init,
-                                collector, Tempo and Grafana configuration, and the smoke check
-deploy/helm/wallet-accountant/  the Helm chart (ADR-0020); test/ holds its checks (`make lint-chart`)
+                                collector, Tempo and Grafana configuration
+deploy/helm/wallet-accountant/  the Helm chart (ADR-0020); test/ holds its checks (`make lint-chart`) and, in
+                                test/stand-in-ui/, the stand-in UI test fixture and its Playwright test
 deploy/release/                 version.sh: what a pushed ref publishes (see "Releases")
 ```
 
@@ -90,6 +91,10 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make local-deploy` | Build the image and chart from this working tree with a unique tag (recorded in `bin/local-build.env`), push them to the cluster's registry, push the env repo's working tree as an OCI artifact with that tag in it (`deploy/local/stage.sh`), have Flux roll the app out at `https://wallet.localhost:18443/api`, and write the `api-clients` client ID to `api/bruno/.env` |
 | `make local-bootstrap` / `make local-rebuild` | Run `bootstrap` or `rebuild` as a one-off pod from the chart's pod spec (`deploy/local/operator-pod.sh`); the code goes only to the terminal and the pod is deleted |
 | `make local-check` | Check the running cluster: layout, registry storage, Flux following the artifact, the CA issuer, the Gateway, Headlamp with its Flux plugin, the CoreDNS rewrite and port 18443 inside the cluster, `zitadel-db` and `apps-db` with the Wallet Accountant tenant, and Zitadel (issuer from the Mac and from a pod, v1 login, self-registration off, admin and machine user), and Wallet Accountant (the HelmRelease, the deployed build, `/api/me`, the setup Job's apps and token lifetime, Bruno's `.env` and environment, Swagger UI, the debug-mode ports, bootstrap and rebuild pods, redeeming the code as a Zitadel identity, and `make run` against the cluster) |
+| `make local-deploy LOCAL_STAND_IN_UI=1` | Same as `make local-deploy`, plus the stand-in UI (`deploy/helm/wallet-accountant/test/stand-in-ui`, a test fixture meeting `docs/architecture/ui-contract.md`, never published) in the chart's UI slot at `https://wallet.localhost:18443` |
+| `make local-browser-test` | Against a cluster deployed with the stand-in UI: Playwright, in the `mcr.microsoft.com/playwright` image (no Node.js on the host), checks the UI contract, signs in through the `web` app as a Zitadel user it creates, checks the access token's audience and `/api/me`, and checks that signing out ends the Zitadel session. Traces of a failed run are in `bin/stand-in-ui-results` |
+| `make local-smoke` | The end-to-end test, from nothing (it refuses to run while the cluster exists): `local-up`, `local-deploy LOCAL_STAND_IN_UI=1`, bootstrap, redeem the code as a Zitadel machine user, `/api/me`, the code in no pod's log, `local-browser-test`, then `local-down` (`SMOKE_KEEP=1` keeps the cluster) |
+| `make stand-in-ui-vendor` | Copy oidc-client-ts's browser bundle, at the version the stand-in UI's `e2e/package.json` names, into its `site/vendor` (in Docker). The browser test fails while the two differ |
 | `make local-headlamp-token` | Print a token to sign in to https://headlamp.localhost:18443 |
 | **Self-hosted** (`compose.yaml`; everything in Docker) | |
 | `make up` / `make down` | Start or stop the app, migrations, PostgreSQL, Zitadel and the collector. The first `make up` writes random secrets to `.env` (`deploy/selfhosted/init-env.sh`), and every `make up` makes sure the Zitadel project with the ID `OIDC_AUDIENCE` exists (`deploy/zitadel/setup-project.sh`) |
@@ -97,7 +102,6 @@ Every way of running the project has a Make target. Go tools are pinned in `go.m
 | `make logs` | Follow the app's logs |
 | `make bootstrap` | Run the `bootstrap` run mode once and print the first Instance administrator Invitation code (ADR-0017) |
 | `make compose-rebuild` | Run the `rebuild` run mode against the self-hosted database |
-| `make smoke` | From nothing, `make up` and `make bootstrap` in a separate Compose project on other ports, redeem the code as a real Zitadel identity, check the code reached no log, then remove everything. `SMOKE_UP=up-observability` also checks Tempo, Prometheus and Loki through Grafana, and that the code is not in Loki |
 | **Build and quality** | |
 | `make generate` | Regenerate code from `api/openapi.yaml` (ogen), the Bruno collection in `api/bruno`, and SQL queries (sqlc) |
 | `make lint` | Run golangci-lint (including depguard), vacuum with the Zalando ruleset, `make lint-chart` and `make lint-workflows` |
@@ -123,7 +127,7 @@ GitHub Actions runs `.github/workflows/ci.yaml` on every pull request and on pus
 | `docker-build` | `make docker-build` |
 | `govulncheck` | `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` |
 
-`.github/workflows/smoke.yaml` runs `make smoke` nightly and on demand, outside pull request checks because it is slow. Actions are pinned to commit SHAs. Renovate (`renovate.json`, the Mend Renovate GitHub App) proposes weekly, grouped updates for them, Go modules, the Dockerfile's images, the chart's images and every version that carries a `# renovate: datasource=<d> depName=<name>` comment on the line above it (the Makefile's tools, govulncheck in CI); give any new pin such a comment, with the version as the value of the next line's first `:=`, `=` or `:`. `make renovate-check` validates `renovate.json` here and in the env repo and dry-runs Renovate in Docker. The Go version comes from the `toolchain` line in `go.mod`.
+`.github/workflows/smoke.yaml` runs `make local-smoke` on GitHub's runner (online, no prefetch, with a new mkcert CA from `make local-ca`), after `make lint-chart` and the env repo's `images.lock` check (ticket 06; a marked placeholder step until it lands). It replaced the Compose smoke test. It runs on every pull request, on pushes to `main` and on demand; a full run takes about 8 minutes on a developer's Mac. If it grows past ~15 minutes on GitHub's runner, move it to pushes to `main` plus nightly and say so here. It checks out the private env repo with a read-only deploy key in the secret `ENV_REPO_DEPLOY_KEY`, at the branch in the repository variable `ENV_REPO_REF` (default `main`); on failure it uploads the browser test's traces as the artifact `stand-in-ui-results`. Actions are pinned to commit SHAs. Renovate (`renovate.json`, the Mend Renovate GitHub App) proposes weekly, grouped updates for them, Go modules, the Dockerfile's images, the chart's images and every version that carries a `# renovate: datasource=<d> depName=<name>` comment on the line above it (the Makefile's tools, govulncheck in CI); give any new pin such a comment, with the version as the value of the next line's first `:=`, `=` or `:`. `make renovate-check` validates `renovate.json` here and in the env repo and dry-runs Renovate in Docker. The Go version comes from the `toolchain` line in `go.mod`.
 
 ## Releases
 

@@ -7,7 +7,7 @@ IMAGE         ?= wallet-accountant:local
 
 # Self-hosting (compose.yaml). ENV_FILE holds the secrets; `make up` writes it
 # on first use. Set COMPOSE_PROJECT_NAME or COMPOSE_FILE to run another
-# installation side by side (deploy/selfhosted/smoke.sh does).
+# installation side by side.
 ENV_FILE      ?= .env
 COMPOSE       := docker compose --env-file $(ENV_FILE)
 OBSERVABILITY := COLLECTOR_CONFIG=observability $(COMPOSE) --profile observability
@@ -55,8 +55,17 @@ LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
 LOCAL_BUILD         := bin/local-build.env
 LOCAL_STAGE         := bin/local-artifact
 LOCAL_ORIGIN        := $(if $(filter 443,$(LOCAL_HTTPS_PORT)),,:$(LOCAL_HTTPS_PORT))
+# The stand-in UI (spec "Testing Decisions"): a test fixture meeting the UI
+# contract, deployed by `make local-deploy LOCAL_STAND_IN_UI=1` and driven by
+# a Playwright test in the official image (no Node.js on the host). The
+# image's tag must equal @playwright/test's version in $(STAND_IN_UI)/e2e.
+STAND_IN_UI         := $(CHART)/test/stand-in-ui
+LOCAL_STAND_IN_UI   ?=
+# renovate: datasource=docker depName=mcr.microsoft.com/playwright
+PLAYWRIGHT_VERSION  := v1.65.1-noble
+PLAYWRIGHT_IMAGE    := mcr.microsoft.com/playwright:$(PLAYWRIGHT_VERSION)
 export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_HTTP_PORT LOCAL_HTTPS_PORT
-export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD
+export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD STAND_IN_UI PLAYWRIGHT_IMAGE
 
 # Debug mode (ADR-0019): `make run` and the other run targets, or an IDE with
 # the same variables, run the app on this Mac against the local cluster's
@@ -76,8 +85,8 @@ export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
 .PHONY: renovate-check
 .PHONY: local-ca local-up local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
-.PHONY: local-bootstrap local-rebuild local-bruno-env
-.PHONY: help up up-observability down logs bootstrap compose-rebuild smoke docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
+.PHONY: local-bootstrap local-rebuild local-bruno-env local-browser-test local-smoke stand-in-ui-vendor
+.PHONY: help up up-observability down logs bootstrap compose-rebuild docker-build dev-up dev-down dev-reset run run-api run-worker migrate rebuild dev-bootstrap grafana swagger generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
@@ -106,9 +115,6 @@ bootstrap: ## Print the bootstrap Invitation code for the first Instance adminis
 
 compose-rebuild: ## Rebuild every fold from the event store in the self-hosted database
 	$(COMPOSE) run --rm --no-deps app rebuild
-
-smoke: ## From scratch, run up and bootstrap in a separate Compose project and redeem the code
-	deploy/selfhosted/smoke.sh
 
 ## Development
 
@@ -194,9 +200,15 @@ local-build: $(HELM)
 	$(HELM) package $(CHART) --destination bin/local-chart --version $$version --app-version $$tag; \
 	$(HELM) push bin/local-chart/wallet-accountant-$$version.tgz oci://localhost:$(LOCAL_REGISTRY_PORT)/charts --plain-http; \
 	printf 'WALLET_ACCOUNTANT_VERSION=%s\nWALLET_ACCOUNTANT_IMAGE_TAG=%s\n' $$version $$tag > $(LOCAL_BUILD); \
-	echo "local-build: image $$image, chart $$version"
+	echo "local-build: image $$image, chart $$version"; \
+	if [ -n "$(LOCAL_STAND_IN_UI)" ]; then \
+		ui=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-stand-in-ui:$$tag; \
+		docker build -t $$ui $(STAND_IN_UI) && docker push -q $$ui; \
+		printf 'WALLET_ACCOUNTANT_UI_TAG=%s\n' $$tag >> $(LOCAL_BUILD); \
+		echo "local-build: stand-in UI $$ui"; \
+	fi
 
-local-deploy: local-build local-push ## Build the app's image and chart from this working tree, push them with the env repo's working tree, and have Flux roll them out
+local-deploy: local-build local-push ## Build the app's image and chart from this working tree, push them with the env repo's working tree, and have Flux roll them out (LOCAL_STAND_IN_UI=1 adds the stand-in UI)
 	$(LOCAL_FLUX) reconcile kustomization cluster --with-source --timeout=5m
 	$(LOCAL_FLUX) reconcile kustomization wallet-accountant --timeout=20m
 	$(MAKE) --no-print-directory local-wait local-bruno-env
@@ -222,6 +234,19 @@ local-wait:
 
 local-check: ## Check the running local cluster against ADR-0019 and the env repo
 	deploy/local/check.sh
+
+local-browser-test: ## Run the stand-in UI's Playwright test (in Docker) against a cluster deployed with LOCAL_STAND_IN_UI=1
+	@# Traces and screenshots of a failed run land in bin/stand-in-ui-results.
+	RESULTS_DIR=bin/stand-in-ui-results deploy/local/browser-test.sh
+
+local-smoke: ## From nothing: local-up, deploy with the stand-in UI, bootstrap, redeem as a Zitadel identity, the browser test, then local-down
+	deploy/local/smoke.sh
+
+stand-in-ui-vendor: ## Copy oidc-client-ts's browser bundle, at the version the stand-in UI's e2e/package.json names, into its site/vendor (in Docker)
+	docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$(abspath $(STAND_IN_UI)):/src" -w /tmp $(PLAYWRIGHT_IMAGE) sh -c '\
+		cp /src/e2e/package.json /src/e2e/package-lock.json . && npm ci --no-audit --no-fund --loglevel=error && \
+		cp node_modules/oidc-client-ts/dist/browser/oidc-client-ts.min.js /src/site/vendor/ && \
+		cp node_modules/oidc-client-ts/LICENSE /src/site/vendor/oidc-client-ts.LICENSE'
 
 local-headlamp-token: ## Print a token to sign in to https://headlamp.localhost:18443 (valid 24 hours)
 	@$(LOCAL_KUBECTL) -n headlamp create token headlamp --duration=24h
@@ -290,8 +315,12 @@ RENOVATE_EXPECT := \
 	github-actions:actions/checkout github-actions:actions/setup-go \
 	dockerfile:golang dockerfile:gcr.io/distroless/static-debian13 \
 	helm-values:otel/opentelemetry-collector-contrib helm-values:curlimages/curl \
-	regex:helm.sh/helm/v4 regex:github.com/yannh/kubeconform regex:golang.org/x/vuln
+	regex:helm.sh/helm/v4 regex:github.com/yannh/kubeconform regex:golang.org/x/vuln \
+	dockerfile:nginxinc/nginx-unprivileged regex:mcr.microsoft.com/playwright \
+	npm:@playwright/test npm:oidc-client-ts \
+	regex:k3d-io/k3d regex:FiloSottile/mkcert regex:fluxcd/flux2
 RENOVATE_ENV_EXPECT := \
+	regex:nginxinc/nginx-unprivileged \
 	flux:quay.io/jetstack/charts/cert-manager flux:headlamp \
 	kubernetes:ghcr.io/headlamp-k8s/headlamp-plugin-flux kubernetes:rancher/k3s kubernetes:swaggerapi/swagger-ui \
 	regex:swaggerapi/swagger-ui \

@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- The stand-in UI: a test fixture, never shipped (spec "Testing Decisions"). -->
+<html lang="en" data-testid="stand-in-ui">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Wallet Accountant stand-in UI</title>
+</head>
+<body>
+	<h1>Wallet Accountant stand-in UI</h1>
+	<p>Status: <span data-testid="status">loading</span></p>
+	<p>
+		<button id="sign-in" type="button" disabled>Sign in</button>
+		<button id="check-session" type="button" disabled>Check session</button>
+		<button id="sign-out" type="button" disabled>Sign out</button>
+	</p>
+	<p>Zitadel session: <span data-testid="session">unknown</span></p>
+	<p>GET /api/me: <span data-testid="me-status"></span></p>
+	<pre data-testid="me"></pre>
+	<pre data-testid="error"></pre>
+	<script src="/vendor/oidc-client-ts.min.js"></script>
+	<script src="/app.js"></script>
+</body>
+</html>
