@@ -57,15 +57,20 @@ func TestAnAccountFoldLoadsAsSaved(t *testing.T) {
 		Closed: map[string]domain.MonthClose{
 			"2026-01": {StatementBalance: dec("87.7"), ClosedAt: closedAt, ClosedBy: closedBy},
 		},
+		OpenMonth: "2026-02",
+		Live:      map[string]int{"2026-01": 1, "2026-02": 1, "2026-04": 3},
 	}
 
 	second := first
 	second.Months = map[string]sharedkernel.Decimal{"2026-01": dec("85.7"), "2026-02": dec("3000"), "2026-03": dec("-2")}
 	second.Uncategorised = map[string]int{"2026-02": 1}
 	second.Closed = map[string]domain.MonthClose{
-		"2026-01": {StatementBalance: dec("87.7"), ClosedAt: closedAt, ClosedBy: closedBy, Flagged: true},
+		"2026-01": {StatementBalance: dec("87.7"), ClosedAt: closedAt, ClosedBy: closedBy},
 		"2026-02": {StatementBalance: dec("3087.7"), ClosedAt: closedAt, ClosedBy: closedBy},
 	}
+	second.OpenMonth = "2026-03"
+	// A month whose Live count went to none is gone.
+	second.Live = map[string]int{"2026-01": 2, "2026-03": 1}
 
 	for version, state := range []domain.AccountState{first, second} {
 		err := store.InTx(t.Context(), scope, func(ctx context.Context, tx *eventstore.Tx) error {

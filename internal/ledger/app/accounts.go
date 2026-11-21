@@ -24,7 +24,6 @@ const (
 	AccountTransactionRecategorisedType = "io.walletaccountant.ledger.account.transactionrecategorised.v1"
 	AccountOpeningBalanceReversedType   = "io.walletaccountant.ledger.account.openingbalancereversed.v1"
 	AccountMonthClosedType              = "io.walletaccountant.ledger.account.monthclosed.v1"
-	AccountMonthFlaggedType             = "io.walletaccountant.ledger.account.monthflagged.v1"
 )
 
 // ErrAccountNotFound is returned for an Account that is not in the Household.
@@ -43,7 +42,6 @@ func NewAccountAggregate(folds eventstore.FoldStore[domain.AccountState]) Accoun
 	eventstore.Register[domain.AccountEvent, domain.TransactionRecategorised](codec, AccountTransactionRecategorisedType)
 	eventstore.Register[domain.AccountEvent, domain.OpeningBalanceReversed](codec, AccountOpeningBalanceReversedType)
 	eventstore.Register[domain.AccountEvent, domain.MonthClosed](codec, AccountMonthClosedType)
-	eventstore.Register[domain.AccountEvent, domain.MonthFlagged](codec, AccountMonthFlaggedType)
 
 	return AccountAggregate{
 		StreamType: AccountStreamType,
@@ -54,7 +52,9 @@ func NewAccountAggregate(folds eventstore.FoldStore[domain.AccountState]) Accoun
 		// 3: the Uncategorised count per Booking month.
 		// 4: the Month close per Booking month.
 		// 5: a closed month flagged by every change that touches it.
-		FoldSchemaVersion: 5,
+		// 6: the Open month and the unreversed Transactions per Booking
+		// month; flags gone (ADR-0024).
+		FoldSchemaVersion: 6,
 	}
 }
 
@@ -206,7 +206,7 @@ func accountOf(id uuid.UUID, s domain.AccountState) Account {
 	a := Account{
 		ID: id, Name: s.Name, Kind: s.Kind, Currency: s.Currency, StartDate: s.StartDate,
 		AwaitingFirstStatementImport: s.AwaitingFirstStatementImport,
-		OpenMonth:                    s.OpenMonth(),
+		OpenMonth:                    s.OpenMonth,
 	}
 
 	if s.HasBalance() {

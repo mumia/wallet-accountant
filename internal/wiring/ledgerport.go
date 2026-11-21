@@ -104,18 +104,6 @@ func (l ingestionLedger) ReverseOpeningBalance(ctx context.Context, tx *eventsto
 	return err //nolint:wrapcheck // already wrapped by the Ledger
 }
 
-// FlagClosedMonths implements ingestionapp.Ledger.
-func (l ingestionLedger) FlagClosedMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
-	bookingDates []time.Time,
-) error {
-	err := l.months.FlagClosedMonths(ctx, tx, account, bookingDates)
-	if errors.Is(err, ledgerapp.ErrAccountNotFound) {
-		return ingestionapp.ErrAccountNotFound
-	}
-
-	return err //nolint:wrapcheck // already wrapped by the Ledger
-}
-
 // ledgerIngestion is the Ledger's Ingestion port, served by Ingestion's
 // application services.
 type ledgerIngestion struct {

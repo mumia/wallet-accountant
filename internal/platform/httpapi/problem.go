@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ogen-go/ogen/ogenerrors"
 	"github.com/ogen-go/ogen/validate"
@@ -64,6 +65,20 @@ func MonthConflict(typ, title, detail, bookingMonth, openMonth string) *oas.Mont
 
 	return out
 }
+
+// MonthWords writes a Booking month (YYYY-MM) as problem copy writes it:
+// "January 2026". A month that doesn't parse is written as given.
+func MonthWords(month string) string {
+	m, err := time.Parse("2006-01", month)
+	if err != nil {
+		return month
+	}
+
+	return m.Format("January 2006")
+}
+
+// DateWords writes a date as problem copy writes it: "1 December 2026".
+func DateWords(d time.Time) string { return d.Format("2 January 2006") }
 
 // NotFoundProblem is the 404 of a resource the caller may not know exists.
 // It says nothing more, so it never confirms that the resource exists.

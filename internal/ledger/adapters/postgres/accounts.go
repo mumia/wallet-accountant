@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,10 +30,10 @@ func (AccountFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (
 	)
 
 	err := tx.QueryRow(ctx, `SELECT name, kind, currency, start_date, awaiting_first_statement_import,
-		opening_balance_transaction_id, version, schema_version
+		opening_balance_transaction_id, open_month, version, schema_version
 		FROM accounts WHERE household_id = $1 AND id = $2`, tx.HouseholdID(), id).
 		Scan(&f.State.Name, &f.State.Kind, &f.State.Currency, &f.State.StartDate,
-			&f.State.AwaitingFirstStatementImport, &opening, &f.Version, &f.SchemaVersion)
+			&f.State.AwaitingFirstStatementImport, &opening, &f.State.OpenMonth, &f.Version, &f.SchemaVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return eventstore.Fold[domain.AccountState]{}, false, nil
 	}
@@ -56,12 +55,12 @@ func (AccountFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (
 	return f, true, nil
 }
 
-// loadMonths reads the Account's net change, Uncategorised count and
-// Month close per Booking month into s; each map stays nil when it has no
-// month.
+// loadMonths reads the Account's net change, Uncategorised count,
+// unreversed Transactions and Month close per Booking month into s; each
+// map stays nil when it has no month.
 func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *domain.AccountState) error {
-	rows, err := tx.Query(ctx, `SELECT booking_month, net_change::text, uncategorised, statement_balance::text,
-			closed_at, closed_by, flagged
+	rows, err := tx.Query(ctx, `SELECT booking_month, net_change::text, uncategorised, live, statement_balance::text,
+			closed_at, closed_by
 		FROM account_months WHERE household_id = $1 AND account_id = $2`, tx.HouseholdID(), account)
 	if err != nil {
 		return fmt.Errorf("load account months: %w", err)
@@ -71,14 +70,13 @@ func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *do
 	for rows.Next() {
 		var (
 			month, change string
-			count         int
+			count, live   int
 			statement     *string
 			closedAt      *time.Time
 			closedBy      *uuid.UUID
-			flagged       bool
 		)
 
-		if err := rows.Scan(&month, &change, &count, &statement, &closedAt, &closedBy, &flagged); err != nil {
+		if err := rows.Scan(&month, &change, &count, &live, &statement, &closedAt, &closedBy); err != nil {
 			return fmt.Errorf("load account months: %w", err)
 		}
 
@@ -101,8 +99,16 @@ func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *do
 			s.Uncategorised[month] = count
 		}
 
+		if live != 0 {
+			if s.Live == nil {
+				s.Live = map[string]int{}
+			}
+
+			s.Live[month] = live
+		}
+
 		if statement != nil {
-			if s.Closed, err = closeOf(s.Closed, month, *statement, closedAt, closedBy, flagged); err != nil {
+			if s.Closed, err = closeOf(s.Closed, month, *statement, closedAt, closedBy); err != nil {
 				return err
 			}
 		}
@@ -117,14 +123,13 @@ func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *do
 
 // closeOf adds a stored Month close to closes.
 func closeOf(closes map[string]domain.MonthClose, month, statement string, closedAt *time.Time, closedBy *uuid.UUID,
-	flagged bool,
 ) (map[string]domain.MonthClose, error) {
 	balance, err := sharedkernel.ParseDecimal(statement)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
 
-	c := domain.MonthClose{StatementBalance: balance, Flagged: flagged}
+	c := domain.MonthClose{StatementBalance: balance}
 	if closedAt != nil {
 		c.ClosedAt = closedAt.UTC()
 	}
@@ -153,18 +158,18 @@ func (AccountFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f
 
 	args := []any{
 		tx.HouseholdID(), id, s.Name, s.Kind, s.Currency, s.StartDate, s.AwaitingFirstStatementImport,
-		opening, f.Version, f.SchemaVersion,
+		opening, f.Version, f.SchemaVersion, s.OpenMonth,
 	}
 	q := `INSERT INTO accounts (household_id, id, name, kind, currency, start_date, awaiting_first_statement_import,
-	          opening_balance_transaction_id, version, schema_version)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING`
+	          opening_balance_transaction_id, version, schema_version, open_month)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
 		args = append(args, expected)
 		q = `UPDATE accounts SET name = $3, kind = $4, currency = $5, start_date = $6,
 		         awaiting_first_statement_import = $7, opening_balance_transaction_id = $8, version = $9,
-		         schema_version = $10
-		     WHERE household_id = $1 AND id = $2 AND version = $11`
+		         schema_version = $10, open_month = $11
+		     WHERE household_id = $1 AND id = $2 AND version = $12`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
@@ -199,13 +204,16 @@ func saveMonths(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.A
 		set[m] = struct{}{}
 	}
 
+	for m := range s.Live {
+		set[m] = struct{}{}
+	}
+
 	var (
 		months, changes []string
 		statements      []*string
-		counts          []int
+		counts, lives   []int
 		closedAts       []*time.Time
 		closedBys       []*uuid.UUID
-		flags           []bool
 	)
 
 	for month := range set {
@@ -231,24 +239,25 @@ func saveMonths(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.A
 		months = append(months, month)
 		changes = append(changes, s.Months[month].String())
 		counts = append(counts, s.Uncategorised[month])
+		lives = append(lives, s.Live[month])
 		statements = append(statements, statement)
 		closedAts = append(closedAts, closedAt)
 		closedBys = append(closedBys, closedBy)
-		flags = append(flags, c.Flagged)
 	}
 
 	if _, err := tx.Exec(ctx, `INSERT INTO account_months AS m (household_id, account_id, booking_month, net_change,
-			uncategorised, statement_balance, closed_at, closed_by, flagged)
-		SELECT $1, $2, u.month, u.change::numeric, u.count, u.statement::numeric, u.closed_at, u.closed_by, u.flagged
-		FROM unnest($3::text[], $4::text[], $5::int[], $6::text[], $7::timestamptz[], $8::uuid[], $9::bool[])
-			AS u (month, change, count, statement, closed_at, closed_by, flagged)
+			uncategorised, live, statement_balance, closed_at, closed_by)
+		SELECT $1, $2, u.month, u.change::numeric, u.count, u.live, u.statement::numeric, u.closed_at, u.closed_by
+		FROM unnest($3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::timestamptz[], $9::uuid[])
+			AS u (month, change, count, live, statement, closed_at, closed_by)
 		ON CONFLICT (account_id, booking_month) DO UPDATE SET net_change = EXCLUDED.net_change,
-			uncategorised = EXCLUDED.uncategorised, statement_balance = EXCLUDED.statement_balance,
-			closed_at = EXCLUDED.closed_at, closed_by = EXCLUDED.closed_by, flagged = EXCLUDED.flagged
-		WHERE (m.net_change, m.uncategorised, m.statement_balance, m.closed_at, m.closed_by, m.flagged)
-			IS DISTINCT FROM (EXCLUDED.net_change, EXCLUDED.uncategorised, EXCLUDED.statement_balance,
-				EXCLUDED.closed_at, EXCLUDED.closed_by, EXCLUDED.flagged)`,
-		tx.HouseholdID(), id, months, changes, counts, statements, closedAts, closedBys, flags); err != nil {
+			uncategorised = EXCLUDED.uncategorised, live = EXCLUDED.live,
+			statement_balance = EXCLUDED.statement_balance, closed_at = EXCLUDED.closed_at,
+			closed_by = EXCLUDED.closed_by
+		WHERE (m.net_change, m.uncategorised, m.live, m.statement_balance, m.closed_at, m.closed_by)
+			IS DISTINCT FROM (EXCLUDED.net_change, EXCLUDED.uncategorised, EXCLUDED.live,
+				EXCLUDED.statement_balance, EXCLUDED.closed_at, EXCLUDED.closed_by)`,
+		tx.HouseholdID(), id, months, changes, counts, lives, statements, closedAts, closedBys); err != nil {
 		return fmt.Errorf("save account months: %w", err)
 	}
 
@@ -272,10 +281,9 @@ var _ app.AccountReader = AccountReader{}
 // one.
 func (AccountReader) Accounts(ctx context.Context, tx *eventstore.Tx) ([]app.Account, error) {
 	rows, err := tx.Query(ctx, `SELECT a.id, a.name, a.kind, a.currency, a.start_date, a.awaiting_first_statement_import,
+			a.open_month,
 			(SELECT COALESCE(sum(m.net_change), 0)::text FROM account_months m
-			  WHERE m.household_id = a.household_id AND m.account_id = a.id),
-			ARRAY(SELECT m.booking_month FROM account_months m
-			  WHERE m.household_id = a.household_id AND m.account_id = a.id AND m.closed_at IS NOT NULL)
+			  WHERE m.household_id = a.household_id AND m.account_id = a.id)
 		FROM accounts a WHERE a.household_id = $1 ORDER BY a.id`, tx.HouseholdID())
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
@@ -285,15 +293,12 @@ func (AccountReader) Accounts(ctx context.Context, tx *eventstore.Tx) ([]app.Acc
 		var (
 			a       app.Account
 			balance string
-			closed  []string
 		)
 
-		if err := r.Scan(&a.ID, &a.Name, &a.Kind, &a.Currency, &a.StartDate, &a.AwaitingFirstStatementImport, &balance,
-			&closed); err != nil {
+		if err := r.Scan(&a.ID, &a.Name, &a.Kind, &a.Currency, &a.StartDate, &a.AwaitingFirstStatementImport,
+			&a.OpenMonth, &balance); err != nil {
 			return a, err //nolint:wrapcheck // wrapped below
 		}
-
-		a.OpenMonth = domain.FirstOpenMonth(a.StartDate, func(month string) bool { return slices.Contains(closed, month) })
 
 		if !a.AwaitingFirstStatementImport {
 			d, err := sharedkernel.ParseDecimal(balance)

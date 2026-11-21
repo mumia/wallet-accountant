@@ -14,14 +14,18 @@ import (
 )
 
 var (
-	// ErrMonthAlreadyClosed is returned for closing a month twice.
+	// ErrMonthAlreadyClosed is returned, as a *domain.MonthError, for
+	// closing a month before the Open month.
 	ErrMonthAlreadyClosed = domain.ErrMonthAlreadyClosed
+	// ErrMonthNotOpenYet is returned, as a *domain.MonthError, for closing
+	// a month after the Open month.
+	ErrMonthNotOpenYet = domain.ErrMonthNotOpenYet
+	// ErrMonthNotEnded is returned, as a *domain.MonthError, for closing
+	// the Open month before it has ended.
+	ErrMonthNotEnded = domain.ErrMonthNotEnded
 	// ErrMonthBeforeStartDate is returned for closing a month before the
 	// Account's start date.
 	ErrMonthBeforeStartDate = domain.ErrMonthBeforeStartDate
-	// ErrMonthNotStarted is returned for closing a month later than the
-	// current one.
-	ErrMonthNotStarted = domain.ErrMonthNotStarted
 	// ErrMonthCloseRefused is returned, as a *domain.MonthCloseRefusedError,
 	// for a month that can't close yet.
 	ErrMonthCloseRefused = domain.ErrMonthCloseRefused
@@ -112,8 +116,9 @@ func (m *Months) Status(ctx context.Context, household, account uuid.UUID, month
 	return out, nil
 }
 
-// Close closes the Account's Booking month with the Statement balance, in
-// one transaction: Ingestion's pending and Suspected duplicate Imported
+// Close closes the Account's Open month with the Statement balance, once
+// it has ended by the server's clock in UTC, and opens the month after it
+// (ADR-0024). It runs in one transaction: Ingestion's pending and Suspected duplicate Imported
 // transactions and Balance checks are read through its port, holding the
 // Account's Statement imports, and the Account Decider checks every close
 // condition, refusing with all that fail as a *domain.MonthCloseRefusedError.
@@ -160,34 +165,6 @@ func (m *Months) Close(ctx context.Context, household, account uuid.UUID, month 
 	return out, nil
 }
 
-// FlagClosedMonths flags, in the caller's transaction, each closed Booking
-// month of the Account that one of the dates falls in: Ingestion changed
-// Imported transactions there without booking anything, by voiding a
-// Statement import (spec story 62; consistency map: Void Statement
-// import). Open and already flagged months record nothing.
-func (m *Months) FlagClosedMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, dates []time.Time) error {
-	seen := map[string]bool{}
-
-	for _, d := range dates {
-		month := d.Format(domain.MonthLayout)
-		if seen[month] {
-			continue
-		}
-
-		seen[month] = true
-
-		if _, err := m.accounts.Execute(ctx, tx, account, domain.FlagMonth{Month: d}); err != nil {
-			if errors.Is(err, domain.ErrAccountNotAdded) {
-				return ErrAccountNotFound
-			}
-
-			return fmt.Errorf("flag month %s of account %s: %w", month, account, err)
-		}
-	}
-
-	return nil
-}
-
 func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, imports domain.MonthImports) AccountMonth {
 	key := month.Format(domain.MonthLayout)
 
@@ -203,10 +180,10 @@ func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, i
 		ReopenBlocked: true,
 	}
 
-	switch open := s.OpenMonth(); {
-	case key < open:
+	switch {
+	case key < s.OpenMonth:
 		out.State = MonthClosed
-	case key == open:
+	case key == s.OpenMonth:
 		out.State = MonthOpen
 	default:
 		out.State = MonthNotOpenYet

@@ -18,6 +18,8 @@ import (
 const (
 	MonthCloseRefusedType                   = "/problems/month-close-refused"
 	MonthAlreadyClosedType                  = "/problems/month-already-closed"
+	MonthNotOpenYetType                     = "/problems/month-not-open-yet"
+	MonthNotEndedType                       = "/problems/month-not-ended"
 	AccountAwaitingFirstStatementImportType = "/problems/account-awaiting-first-statement-import"
 	InvalidMonthCloseType                   = "/problems/invalid-month-close"
 )
@@ -77,6 +79,9 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 	conflict := func(typ, title, detail string) (oas.CloseAccountMonthRes, error) {
 		return httpapi.MonthConflict(typ, title, detail, "", ""), nil
 	}
+	monthConflict := func(typ, title, detail string, e *domain.MonthError) (oas.CloseAccountMonthRes, error) {
+		return httpapi.MonthConflict(typ, title, detail, e.Month, e.OpenMonth), nil
+	}
 	invalid := func(detail string) (oas.CloseAccountMonthRes, error) {
 		return &oas.MonthCloseProblem{
 			Type: InvalidMonthCloseType, Title: "Invalid Month close", Status: http.StatusUnprocessableEntity,
@@ -84,16 +89,29 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 		}, nil
 	}
 
-	var refused *domain.MonthCloseRefusedError
+	var (
+		refused  *domain.MonthCloseRefusedError
+		monthErr *domain.MonthError
+	)
+
+	errors.As(err, &monthErr)
 
 	switch {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound):
 		return new(oas.CloseAccountMonthNotFound(httpapi.NotFoundProblem())), nil
 	case errors.As(err, &refused):
 		return refusedProblem(refused, req)
-	case errors.Is(err, app.ErrMonthAlreadyClosed):
-		return conflict(MonthAlreadyClosedType, "Month already closed",
-			"The month is already closed; its Statement balance is kept.")
+	case errors.Is(err, app.ErrMonthAlreadyClosed) && monthErr != nil:
+		return monthConflict(MonthAlreadyClosedType, "Month already closed",
+			httpapi.MonthWords(monthErr.Month)+" is already closed; its Statement balance is kept.", monthErr)
+	case errors.Is(err, app.ErrMonthNotOpenYet) && monthErr != nil:
+		return monthConflict(MonthNotOpenYetType, "Month not open yet",
+			fmt.Sprintf("%s isn't open yet. Close %s first.",
+				httpapi.MonthWords(monthErr.Month), httpapi.MonthWords(monthErr.OpenMonth)), monthErr)
+	case errors.Is(err, app.ErrMonthNotEnded) && monthErr != nil:
+		return monthConflict(MonthNotEndedType, "Month not ended",
+			fmt.Sprintf("%s can be closed from %s.",
+				httpapi.MonthWords(monthErr.Month), httpapi.DateWords(month.AddDate(0, 1, 0))), monthErr)
 	case errors.Is(err, app.ErrAwaitingFirstStatementImport):
 		return conflict(AccountAwaitingFirstStatementImportType, "Account awaiting its first Statement import",
 			"The Account has no balance until its first Statement import is confirmed.")
@@ -103,8 +121,6 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 		return invalid("The Statement balance has more decimal places than the Account currency.")
 	case errors.Is(err, app.ErrMonthBeforeStartDate):
 		return invalid("The month is before the Account's start date.")
-	case errors.Is(err, app.ErrMonthNotStarted):
-		return invalid("The month hasn't started yet, so it has no Statement balance to close with.")
 	case err != nil:
 		return nil, fmt.Errorf("close account month: %w", err)
 	}

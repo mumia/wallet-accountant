@@ -50,9 +50,10 @@ type Contexts struct {
 }
 
 // NewContexts builds every bounded context's application services on pool,
-// which connects as wa_app, wiring each cross-context port.
-func NewContexts(pool *pgxpool.Pool) Contexts {
-	store := eventstore.NewStore(pool)
+// which connects as wa_app, wiring each cross-context port. now is the
+// clock their transactions read (tx.Now), time.Now outside tests.
+func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
+	store := eventstore.NewStore(pool, eventstore.WithClock(now))
 
 	// Households seeds Internal Categories through the Ledger, and the Ledger
 	// runs its requests through Households' request transaction.
