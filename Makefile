@@ -245,7 +245,7 @@ IMAGESLOCK := go run ./deploy/local/imageslock
 # Dockerfiles whose base images images.lock must list (the Mac's Docker builds from them).
 LOCK_DOCKERFILES := Dockerfile $(STAND_IN_UI)/Dockerfile
 
-images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts with the env repo's values, Flux, k3d, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock, or the flux CLI is not flux-version
+images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts with the env repo's values, Flux, k3d and its k3s release's own images, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock, or the flux CLI is not flux-version
 	$(IMAGESLOCK) check -env "$(ENV_REPO)" -helm $(HELM) -chart $(CHART) $(foreach f,$(LOCK_DOCKERFILES),-dockerfile $(f))
 
 flux-version: ## Print the Flux release ENV_REPO pins (infra/homelab's flux_version): the flux CLI every check, CI and the local cluster use
