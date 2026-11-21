@@ -5,7 +5,8 @@
 //	imageslock check  -env <env repo> -helm <helm> [-chart <dir>] [-dockerfile <file>]...
 //	    Renders what clusters/local applies (every Flux Kustomization, with
 //	    `flux build --dry-run`, and every HelmRelease's chart, with `helm
-//	    template`), plus `flux install`, the k3d config and the Dockerfiles,
+//	    template`), plus `flux install`, the k3d config, the k3d node's k3s
+//	    release's own images (its k3s-images.txt) and the Dockerfiles,
 //	    and fails when an image or chart is missing from images.lock, a Flux
 //	    source fetches from outside the cluster's registry, or k3s's
 //	    registries.yaml lets a pull reach an upstream registry. The flux CLI
@@ -163,6 +164,20 @@ func runCheck(ctx context.Context, args []string) error {
 		}
 		images = append(images, found.Images...)
 	}
+	// k3s's own images, which no manifest names: the k3d node's release's list.
+	k3d, err := Extract(k3dConfig)
+	if err != nil {
+		return err
+	}
+	release, ok := K3sRelease(k3d.Images)
+	if !ok {
+		return errors.New("clusters/local/k3d.yaml: no rancher/k3s node image")
+	}
+	k3sImages, err := K3sImages(ctx, k3sReleases, release)
+	if err != nil {
+		return err
+	}
+	images = append(images, k3sImages...)
 	for _, f := range files {
 		data, err := readFile(f)
 		if err != nil {
