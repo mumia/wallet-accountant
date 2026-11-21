@@ -93,7 +93,7 @@ export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
 .PHONY: renovate-check
 .PHONY: local-ca local-up local-up-observability local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
-.PHONY: local-bootstrap local-rebuild local-bruno-env local-prefetch images-lock-check images-lock-pin local-browser-test local-smoke stand-in-ui-vendor
+.PHONY: local-bootstrap local-rebuild local-bruno-env local-prefetch images-lock-check images-lock-pin flux-version local-browser-test local-smoke stand-in-ui-vendor
 .PHONY: prod-check prod-bootstrap prod-bruno-env
 .PHONY: help docker-build run run-api run-worker migrate rebuild dev-bootstrap generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
@@ -245,8 +245,11 @@ IMAGESLOCK := go run ./deploy/local/imageslock
 # Dockerfiles whose base images images.lock must list (the Mac's Docker builds from them).
 LOCK_DOCKERFILES := Dockerfile $(STAND_IN_UI)/Dockerfile
 
-images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts, Flux, k3d, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock
+images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts with the env repo's values, Flux, k3d, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock, or the flux CLI is not flux-version
 	$(IMAGESLOCK) check -env "$(ENV_REPO)" -helm $(HELM) -chart $(CHART) $(foreach f,$(LOCK_DOCKERFILES),-dockerfile $(f))
+
+flux-version: ## Print the Flux release ENV_REPO pins (infra/homelab's flux_version): the flux CLI every check, CI and the local cluster use
+	@$(IMAGESLOCK) flux-version -env "$(ENV_REPO)"
 
 images-lock-pin: ## Add the digest to every image in ENV_REPO's images.lock that has none (online)
 	$(IMAGESLOCK) pin -lock "$(ENV_REPO)/images.lock"
@@ -353,7 +356,7 @@ RENOVATE_EXPECT := \
 	regex:helm.sh/helm/v4 regex:github.com/yannh/kubeconform regex:golang.org/x/vuln \
 	dockerfile:nginxinc/nginx-unprivileged regex:mcr.microsoft.com/playwright \
 	npm:@playwright/test npm:oidc-client-ts \
-	regex:k3d-io/k3d regex:FiloSottile/mkcert regex:fluxcd/flux2
+	regex:k3d-io/k3d regex:FiloSottile/mkcert
 RENOVATE_ENV_EXPECT := \
 	regex:nginxinc/nginx-unprivileged \
 	flux:quay.io/jetstack/charts/cert-manager flux:headlamp \

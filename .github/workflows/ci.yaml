@@ -130,10 +130,16 @@ jobs:
           go-version-file: go.mod
           cache: true
       # `flux install --export` is rendered too: the CLI's version is the Flux
-      # whose controllers images.lock pins.
+      # whose controllers images.lock pins, which the env repo pins
+      # (infra/homelab's flux_version; `make flux-version`).
+      - name: Read the env repo's Flux version
+        id: flux
+        run: |
+          version=$(make -s flux-version ENV_REPO=bin/env-repo)
+          echo "version=${version#v}" >> "$GITHUB_OUTPUT"
       - uses: fluxcd/flux2/action@3fa784edd773d56630bb9f62645e08f70c2cff0a # v2.10.0
         with:
-          version: 2.10.0
+          version: ${{ steps.flux.outputs.version }}
       - run: make images-lock-check ENV_REPO=bin/env-repo
 
   docker-build:

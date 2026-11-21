@@ -8,7 +8,11 @@
 //	    template`), plus `flux install`, the k3d config and the Dockerfiles,
 //	    and fails when an image or chart is missing from images.lock, a Flux
 //	    source fetches from outside the cluster's registry, or k3s's
-//	    registries.yaml lets a pull reach an upstream registry.
+//	    registries.yaml lets a pull reach an upstream registry. The flux CLI
+//	    must be the Flux the env repo pins (FluxVersionFile).
+//	imageslock flux-version -env <env repo>
+//	    Prints the Flux release the env repo pins (FluxVersionFile), for CI
+//	    to install that flux CLI.
 //	imageslock covers -lock <images.lock>
 //	    Reads image references on stdin (a running node's images, say) and
 //	    fails on any images.lock lacks.
@@ -39,7 +43,7 @@ const localRegistry = "wa-registry:5000"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: imageslock check|covers|list|pin [flags]")
+		fmt.Fprintln(os.Stderr, "usage: imageslock check|covers|flux-version|list|pin [flags]")
 		os.Exit(2)
 	}
 	ctx := context.Background()
@@ -49,6 +53,8 @@ func main() {
 		err = runCheck(ctx, args)
 	case "covers":
 		err = runCovers(args)
+	case "flux-version":
+		err = runFluxVersion(args)
 	case "list":
 		err = runList(args)
 	case "pin":
@@ -135,6 +141,17 @@ func runCheck(ctx context.Context, args []string) error {
 		}
 		images = append(images, found.Images...)
 	}
+	pinnedFlux, err := envFluxVersion(*env)
+	if err != nil {
+		return err
+	}
+	fluxClient, err := r.run("", r.flux, "version", "--client")
+	if err != nil {
+		return err
+	}
+	if err := FluxCLIMatches(pinnedFlux, fluxClient); err != nil {
+		return err
+	}
 	fluxInstall, err := r.run("", r.flux, "install", "--export")
 	if err != nil {
 		return err
@@ -171,6 +188,29 @@ func runCheck(ctx context.Context, args []string) error {
 		return fmt.Errorf("%d problem(s); the env repo's README (\"Offline\") says how to add an entry", len(problems))
 	}
 	fmt.Printf("imageslock: %d image references and %d charts, all in images.lock and mirrored\n", len(images), len(charts))
+	return nil
+}
+
+func envFluxVersion(env string) (string, error) {
+	data, err := readFile(filepath.Join(env, FluxVersionFile))
+	if err != nil {
+		return "", err
+	}
+	return FluxVersion(data)
+}
+
+func runFluxVersion(args []string) error {
+	fl := flag.NewFlagSet("flux-version", flag.ExitOnError)
+	env := fl.String("env", "", "the env repo checkout (wallet-accountant-deploy)")
+	_ = fl.Parse(args)
+	if *env == "" {
+		return errors.New("flux-version: -env is required")
+	}
+	v, err := envFluxVersion(*env)
+	if err != nil {
+		return err
+	}
+	fmt.Println(v)
 	return nil
 }
 
