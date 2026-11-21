@@ -23,7 +23,56 @@ http:
     data:
       - name: csv_mapping
         type: text
-        value: '&{4 0    <nil> [0x3341eee30e0 0x3341eee3180 0x3341eee3360 0x3341eee3400 0x3341eee35e0 0x3341eee3680 0x3341eee3860 0x3341eee3900 0x3341eee3ae0 0x3341eee3b80 0x3341eee3d60 0x3341eee3e00 0x3341ef00140 0x3341ef001e0 0x3341ef003c0 0x3341ef00460 0x3341ef00640 0x3341ef006e0 0x3341ef78d20 0x3341ef78dc0]    0 0}'
+        value: |-
+          {
+            "encoding": "WINDOWS_1252",
+            "delimiter": ";",
+            "has_header_row": false,
+            "skip_leading_lines": 0,
+            "date_format": "DD/MM/YYYY",
+            "decimal_separator": ",",
+            "thousands_separator": ".",
+            "amount_layout": "SIGNED",
+            "positive_amount_means": "MONEY_IN",
+            "columns": {
+              "booking_date": {
+                "header": "Amount",
+                "position": 3
+              },
+              "description": {
+                "header": "Amount",
+                "position": 3
+              },
+              "amount": {
+                "header": "Amount",
+                "position": 3
+              },
+              "debit": {
+                "header": "Amount",
+                "position": 3
+              },
+              "credit": {
+                "header": "Amount",
+                "position": 3
+              },
+              "transaction_date": {
+                "header": "Amount",
+                "position": 3
+              },
+              "value_date": {
+                "header": "Amount",
+                "position": 3
+              },
+              "payee": {
+                "header": "Amount",
+                "position": 3
+              },
+              "bank_transaction_id": {
+                "header": "Amount",
+                "position": 3
+              }
+            }
+          }
         description: How a bank lays out its statement CSV.
       - name: file
         type: file
