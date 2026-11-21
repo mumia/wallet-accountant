@@ -82,6 +82,18 @@ type AccountReader interface {
 	// Accounts returns every Account of the Household the transaction is set
 	// to, in the order they were added.
 	Accounts(ctx context.Context, tx *eventstore.Tx) ([]Account, error)
+	// MonthsForShare returns the Account's start date and Open month,
+	// locking its fold row FOR SHARE until the transaction ends; false if
+	// it isn't one of the Household's.
+	MonthsForShare(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (AccountMonths, bool, error)
+}
+
+// AccountMonths is where an Account's months stand: every month from the
+// start date's month up to the Open month is closed, and every month after
+// it is not open yet (ADR-0024).
+type AccountMonths struct {
+	StartDate time.Time
+	OpenMonth string
 }
 
 // NewAccount is the request to add an Account.
@@ -184,6 +196,25 @@ func (a *Accounts) AccountExists(ctx context.Context, tx *eventstore.Tx, account
 	}
 
 	return found, nil
+}
+
+// MonthsForShare returns the Account's start date and Open month in the
+// caller's transaction, locking its fold row FOR SHARE: a Close or Reopen
+// of the Account waits until the transaction ends, so a check against the
+// Open month holds for the whole transaction (consistency map: Keep or
+// Discard Imported transaction). ErrAccountNotFound if it isn't one of the
+// Household's.
+func (a *Accounts) MonthsForShare(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (AccountMonths, error) {
+	m, found, err := a.reader.MonthsForShare(ctx, tx, account)
+	if err != nil {
+		return AccountMonths{}, err //nolint:wrapcheck // already wrapped by the adapter
+	}
+
+	if !found {
+		return AccountMonths{}, ErrAccountNotFound
+	}
+
+	return m, nil
 }
 
 // AccountForImport returns the Account as a Statement import needs it, read

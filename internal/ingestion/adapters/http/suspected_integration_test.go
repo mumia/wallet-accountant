@@ -238,11 +238,17 @@ func TestAWaitingBalanceCheckPassesOnceEverySuspectedDuplicateIsDecided(t *testi
 		t.Errorf("pending = %+v, want the first file's three, the kept coffee and the groceries", got.Items)
 	}
 
+	// The kept coffee is booked in February, Accepted once January is
+	// closed.
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.closed(t, "2026-01", "2510.50")
+
 	f.pending["kept coffee"] = kept
 	f.accepted(t, "kept coffee", nil)
 
-	if got := f.imported(t, "?state=ACCEPTED"); len(got.Items) != 1 || got.Items[0].ImportedTransactionID != kept.ImportedTransactionID {
-		t.Errorf("accepted = %+v, want the kept coffee", got.Items)
+	if got := f.imported(t, "?state=ACCEPTED"); len(got.Items) != 3 ||
+		got.Items[2].ImportedTransactionID != kept.ImportedTransactionID {
+		t.Errorf("accepted = %+v, want the rent, the salary and the kept coffee", got.Items)
 	}
 }
 
@@ -343,9 +349,10 @@ func TestUndecidedSuspectedDuplicatesDontCountInALaterBalanceCheck(t *testing.T)
 }
 
 // A Keep and a Discard of an import's last Suspected duplicate at the same
-// moment: one of them decides it and runs the waiting check; the other
-// then finds it decided, so a Keep is refused and a Discard Discards the
-// now pending row without running the check again. Neither fails.
+// moment: exactly one of them decides it and runs the waiting check. The
+// other then finds it decided: a Keep is refused as no longer a Suspected
+// duplicate, and a Discard of the now pending row is refused because it is
+// booked in February, which isn't open yet (ADR-0024).
 func TestKeepingAndDiscardingTheLastSuspectedDuplicateConcurrently(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
@@ -376,14 +383,16 @@ func TestKeepingAndDiscardingTheLastSuspectedDuplicateConcurrently(t *testing.T)
 			decisions.Wait()
 
 			keep, discard := responses[0], responses[1]
-			if discard.Status != http.StatusOK {
-				t.Errorf("round %d: discard = %d %s, want 200 whichever ran first", round, discard.Status, discard.Body)
-			}
 
 			want := "PASSED" // the coffee was a repeat
 			if keep.Status == http.StatusOK {
 				want = "FAILED" // kept first, against the Export balance
+				discard.AssertProblem(t, http.StatusConflict, "/problems/month-not-open-yet")
 			} else {
+				if discard.Status != http.StatusOK {
+					t.Errorf("round %d: discard = %d %s, want 200 when it ran first", round, discard.Status, discard.Body)
+				}
+
 				keep.AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-not-suspected-duplicate")
 			}
 

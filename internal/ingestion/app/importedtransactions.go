@@ -43,7 +43,51 @@ var (
 	// ErrInternalCategory is returned for accepting with an Internal
 	// Category other than Uncategorised.
 	ErrInternalCategory = errors.New("internal categories other than uncategorised can't be chosen")
+	// ErrMonthClosed is returned, as a *MonthError, for accepting, keeping
+	// or Discarding a row booked in a closed month: its amounts are locked
+	// until it is reopened (ADR-0024).
+	ErrMonthClosed = errors.New("month closed")
+	// ErrMonthNotOpenYet is returned, as a *MonthError, for accepting or
+	// Discarding a pending row booked after the Open month (ADR-0024).
+	ErrMonthNotOpenYet = errors.New("month not open yet")
 )
+
+// MonthError is a refusal about the Booking month (YYYY-MM) of a row that
+// names it and its Account's Open month. Err is the refusal itself.
+type MonthError struct {
+	Err       error
+	Month     string
+	OpenMonth string
+}
+
+func (e *MonthError) Error() string {
+	return fmt.Sprintf("%s: %s (the open month is %s)", e.Err, e.Month, e.OpenMonth)
+}
+
+func (e *MonthError) Unwrap() error { return e.Err }
+
+// monthOf is the Booking month of the row, written YYYY-MM.
+func monthOf(row domain.ImportedTransactionState) string { return row.BookingDate.Format("2006-01") }
+
+// closedMonth refuses the row with ErrMonthClosed when it is booked before
+// the Open month; nil otherwise.
+func closedMonth(row domain.ImportedTransactionState, openMonth string) error {
+	if month := monthOf(row); month < openMonth {
+		return &MonthError{Err: ErrMonthClosed, Month: month, OpenMonth: openMonth}
+	}
+
+	return nil
+}
+
+// notOpenYet refuses the row with ErrMonthNotOpenYet when it is booked
+// after the Open month; nil otherwise.
+func notOpenYet(row domain.ImportedTransactionState, openMonth string) error {
+	if month := monthOf(row); month > openMonth {
+		return &MonthError{Err: ErrMonthNotOpenYet, Month: month, OpenMonth: openMonth}
+	}
+
+	return nil
+}
 
 // ImportedTransaction is an Imported transaction as the API sees it.
 // Resembles is the earlier Imported transaction a Suspected duplicate
@@ -109,13 +153,15 @@ func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Led
 	}
 }
 
-// Accept Accepts a pending Imported transaction and, through the Ledger in
-// the same database transaction, books it with exactly its amount: to the
-// Category, or to Uncategorised when category is nil. The Imported
-// transaction, the Ledger Transaction and the Account each check their own
-// version, and a conflict retries the whole transaction with the same
-// Transaction ID (ADR-0011, ADR-0013; consistency map: Accept imported
-// transaction).
+// Accept Accepts a pending Imported transaction booked in its Account's
+// Open month and, through the Ledger in the same database transaction,
+// books it with exactly its amount: to the Category, or to Uncategorised
+// when category is nil. A row in a closed month, then one in a month not
+// open yet, is refused before its own state is checked, and the Ledger
+// checks the month again as it books. The Imported transaction, the Ledger
+// Transaction and the Account each check their own version, and a conflict
+// retries the whole transaction with the same Transaction ID (ADR-0011,
+// ADR-0013, ADR-0024; consistency map: Accept imported transaction).
 func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, category *uuid.UUID,
 ) (ImportedTransaction, error) {
 	transaction, err := sharedkernel.NewID()
@@ -126,6 +172,30 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 	var accepted ImportedTransaction
 
 	err = s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		fold, found, err := s.rows.Folds.Load(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !found {
+			return ErrImportedTransactionNotFound
+		}
+
+		// Not locked: the booking below writes the Account's fold, whose
+		// version catches a Close or Reopen that ran meanwhile.
+		account, err := s.ledger.ImportAccount(ctx, tx, fold.State.AccountID)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		if err := closedMonth(fold.State, account.OpenMonth); err != nil {
+			return err
+		}
+
+		if err := notOpenYet(fold.State, account.OpenMonth); err != nil {
+			return err
+		}
+
 		res, err := s.rows.Execute(ctx, tx, id, domain.AcceptImportedTransaction{TransactionID: transaction})
 		if errors.Is(err, domain.ErrImportedTransactionNotImported) {
 			return ErrImportedTransactionNotFound
@@ -200,25 +270,34 @@ func (s *ImportedTransactions) MonthImportsForClose(ctx context.Context, tx *eve
 }
 
 // Discard Discards a pending Imported transaction or a Suspected
-// duplicate so it never reaches the Ledger. Discarded is final
-// (consistency map: Keep or Discard Imported transaction).
+// duplicate so it never reaches the Ledger. Discarded is final. A row in a
+// closed month is refused first, then the row's own state is checked, and
+// then a pending row in a month not open yet is refused; a Suspected
+// duplicate there can be Discarded, so its import's waiting Balance check
+// can run and the Open month can close (ADR-0024; consistency map: Keep or
+// Discard Imported transaction).
 func (s *ImportedTransactions) Discard(ctx context.Context, household, id uuid.UUID) (ImportedTransaction, error) {
-	return s.decide(ctx, household, id, "discard", domain.DiscardImportedTransaction{})
+	return s.decide(ctx, household, id, "discard", domain.DiscardImportedTransaction{}, true)
 }
 
 // Keep keeps a Suspected duplicate as a real transaction: it becomes
-// pending (consistency map: Keep or Discard Imported transaction).
+// pending. A row in a closed month is refused before its own state is
+// checked; a Suspected duplicate in a month not open yet can be kept
+// (ADR-0024; consistency map: Keep or Discard Imported transaction).
 func (s *ImportedTransactions) Keep(ctx context.Context, household, id uuid.UUID) (ImportedTransaction, error) {
-	return s.decide(ctx, household, id, "keep", domain.KeepImportedTransaction{})
+	return s.decide(ctx, household, id, "keep", domain.KeepImportedTransaction{}, false)
 }
 
 // decide keeps or Discards an Imported transaction. Deciding a Suspected
 // duplicate locks its Account's Statement imports first, so of two
 // decisions on one import's last Suspected duplicates exactly one sees none
 // left and runs the import's waiting Balance check, in the same
-// transaction (ADR-0018).
+// transaction (ADR-0018). The Account's Open month is read with its fold
+// locked FOR SHARE, so it can't close or reopen before this commits: a row
+// in a closed month is refused, and with pendingNotOpenYet a pending row in
+// a month not open yet too, after the Decider checked its state.
 func (s *ImportedTransactions) decide(ctx context.Context, household, id uuid.UUID, action string,
-	cmd domain.ImportedTransactionCommand,
+	cmd domain.ImportedTransactionCommand, pendingNotOpenYet bool,
 ) (ImportedTransaction, error) {
 	var decided ImportedTransaction
 
@@ -248,9 +327,26 @@ func (s *ImportedTransactions) decide(ctx context.Context, household, id uuid.UU
 			suspected = fold.State.State == domain.ImportedSuspectedDuplicate
 		}
 
+		months, err := s.ledger.AccountMonthsForShare(ctx, tx, fold.State.AccountID)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		if err := closedMonth(fold.State, months.OpenMonth); err != nil {
+			return err
+		}
+
 		res, err := s.rows.Execute(ctx, tx, id, cmd)
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		// The Decider accepted the row's state, so a pending row is one
+		// that was pending, not a Suspected duplicate.
+		if pendingNotOpenYet && !suspected {
+			if err := notOpenYet(fold.State, months.OpenMonth); err != nil {
+				return err
+			}
 		}
 
 		if suspected {

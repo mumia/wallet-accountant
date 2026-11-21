@@ -45,6 +45,23 @@ var importedStatesIn = map[string]domain.ImportedState{
 	"DISCARDED":           domain.ImportedDiscarded,
 }
 
+// monthRefusal is the 409 of a row refused for its Booking month (closed,
+// or not open yet), or nil for any other error.
+func monthRefusal(err error) *oas.MonthProblem {
+	e, ok := errors.AsType[*app.MonthError](err)
+
+	switch {
+	case !ok:
+		return nil
+	case errors.Is(e.Err, app.ErrMonthClosed):
+		return httpapi.MonthClosed(e.Month, e.OpenMonth)
+	case errors.Is(e.Err, app.ErrMonthNotOpenYet):
+		return httpapi.MonthNotOpenYet(e.Month, e.OpenMonth)
+	default:
+		return nil
+	}
+}
+
 // AcceptImportedTransaction implements acceptImportedTransaction.
 func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, req oas.OptImportedTransactionAcceptance,
 	params oas.AcceptImportedTransactionParams,
@@ -55,6 +72,9 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 	}
 
 	accepted, err := h.imported.Accept(ctx, params.HouseholdID, params.ImportedTransactionID, category)
+	if p := monthRefusal(err); p != nil {
+		return p, nil
+	}
 
 	switch {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound),
@@ -96,6 +116,9 @@ func (h *StatementImportHandler) DiscardImportedTransaction(ctx context.Context,
 	params oas.DiscardImportedTransactionParams,
 ) (oas.DiscardImportedTransactionRes, error) {
 	discarded, err := h.imported.Discard(ctx, params.HouseholdID, params.ImportedTransactionID)
+	if p := monthRefusal(err); p != nil {
+		return p, nil
+	}
 
 	switch {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound):
@@ -125,6 +148,9 @@ func (h *StatementImportHandler) KeepImportedTransaction(ctx context.Context,
 	params oas.KeepImportedTransactionParams,
 ) (oas.KeepImportedTransactionRes, error) {
 	kept, err := h.imported.Keep(ctx, params.HouseholdID, params.ImportedTransactionID)
+	if p := monthRefusal(err); p != nil {
+		return p, nil
+	}
 
 	switch {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound):

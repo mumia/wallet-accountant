@@ -317,3 +317,21 @@ func (AccountReader) Accounts(ctx context.Context, tx *eventstore.Tx) ([]app.Acc
 
 	return list, nil
 }
+
+// MonthsForShare implements app.AccountReader.
+func (AccountReader) MonthsForShare(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+) (app.AccountMonths, bool, error) {
+	var m app.AccountMonths
+
+	err := tx.QueryRow(ctx, `SELECT start_date, open_month FROM accounts WHERE household_id = $1 AND id = $2
+		FOR SHARE`, tx.HouseholdID(), account).Scan(&m.StartDate, &m.OpenMonth)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return app.AccountMonths{}, false, nil
+	}
+
+	if err != nil {
+		return app.AccountMonths{}, false, fmt.Errorf("lock account %s: %w", account, err)
+	}
+
+	return m, true, nil
+}

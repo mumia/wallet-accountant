@@ -21,6 +21,14 @@ var (
 	// ErrMonthNotEnded is returned, as a *MonthError, for closing the Open
 	// month before it has ended, by the server's clock in UTC (ADR-0024).
 	ErrMonthNotEnded = errors.New("month not ended")
+	// ErrMonthClosed is returned, as a *MonthError, for booking, reversing
+	// or reopening anything in a month before the Open month: a closed
+	// month's amounts are locked until it is reopened (ADR-0024).
+	ErrMonthClosed = errors.New("month closed")
+	// ErrUncategorisedInClosedMonth is returned, as a *MonthError, for
+	// moving a Transaction of a closed month to Uncategorised: its close
+	// checked that nothing there was Uncategorised (ADR-0024).
+	ErrUncategorisedInClosedMonth = errors.New("uncategorised in a closed month")
 	// ErrMonthBeforeStartDate is returned for closing a month before the
 	// Account's start date, where its history doesn't reach.
 	ErrMonthBeforeStartDate = errors.New("month is before the account's start date")
@@ -147,6 +155,16 @@ type MonthClosed struct {
 }
 
 func (MonthClosed) isAccountEvent() {}
+
+// lockedMonth refuses a change of a Booking month (MonthLayout) before the
+// Open month with err, as a *MonthError; nil for any other month.
+func (s AccountState) lockedMonth(month string, err error) error {
+	if month < s.OpenMonth {
+		return &MonthError{Err: err, Month: month, OpenMonth: s.OpenMonth}
+	}
+
+	return nil
+}
 
 // NextMonth is the Booking month (MonthLayout) after month, December
 // rolling into January.

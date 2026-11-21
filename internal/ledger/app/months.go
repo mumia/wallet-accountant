@@ -23,6 +23,12 @@ var (
 	// ErrMonthNotEnded is returned, as a *domain.MonthError, for closing
 	// the Open month before it has ended.
 	ErrMonthNotEnded = domain.ErrMonthNotEnded
+	// ErrMonthClosed is returned, as a *domain.MonthError, for booking or
+	// reversing anything in a closed month.
+	ErrMonthClosed = domain.ErrMonthClosed
+	// ErrUncategorisedInClosedMonth is returned, as a *domain.MonthError,
+	// for moving a Transaction of a closed month to Uncategorised.
+	ErrUncategorisedInClosedMonth = domain.ErrUncategorisedInClosedMonth
 	// ErrMonthBeforeStartDate is returned for closing a month before the
 	// Account's start date.
 	ErrMonthBeforeStartDate = domain.ErrMonthBeforeStartDate
