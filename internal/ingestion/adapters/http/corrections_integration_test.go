@@ -227,37 +227,37 @@ func TestReversingThenDiscarding(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
 
-	coffee := f.accepted(t, "Coffee", nil)
+	salary := f.accepted(t, "Salary", nil)
 
-	f.discard(t, "Coffee").AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-already-accepted")
+	f.discard(t, "Salary").AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-already-accepted")
 
-	f.reversed(t, coffee.TransactionID)
+	f.reversed(t, salary.TransactionID)
 
 	var d importedTransaction
-	f.discard(t, "Coffee").AssertJSON(t, http.StatusOK, &d)
+	f.discard(t, "Salary").AssertJSON(t, http.StatusOK, &d)
 
-	if d.State != "DISCARDED" || d.ImportedTransactionID != f.pending["Coffee"].ImportedTransactionID {
-		t.Errorf("discarded = %+v, want the coffee DISCARDED", d)
+	if d.State != "DISCARDED" || d.ImportedTransactionID != f.pending["Salary"].ImportedTransactionID {
+		t.Errorf("discarded = %+v, want the salary DISCARDED", d)
 	}
 
-	if got := f.imported(t, "?state=DISCARDED"); len(got.Items) != 1 || got.Items[0].Description != "Coffee" {
-		t.Errorf("discarded = %+v, want the coffee", got.Items)
+	if got := f.imported(t, "?state=DISCARDED"); len(got.Items) != 1 || got.Items[0].Description != "Salary" {
+		t.Errorf("discarded = %+v, want the salary", got.Items)
 	}
 
 	if got := f.imported(t, "?state=PENDING"); len(got.Items) != 2 {
-		t.Errorf("pending = %+v, want Rent and Salary", got.Items)
+		t.Errorf("pending = %+v, want Rent and Coffee", got.Items)
 	}
 
 	f.assertBalance(t, "510.50")
 
-	f.accept(t, "Coffee", nil).AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-discarded")
-	f.discard(t, "Coffee").AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-already-discarded")
+	f.accept(t, "Salary", nil).AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-discarded")
+	f.discard(t, "Salary").AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-already-discarded")
 
 	// A pending row is Discarded without ever being Accepted.
-	f.discard(t, "Salary").AssertJSON(t, http.StatusOK, &d)
+	f.discard(t, "Rent").AssertJSON(t, http.StatusOK, &d)
 
 	if d.State != "DISCARDED" {
-		t.Errorf("discarded salary = %+v", d)
+		t.Errorf("discarded rent = %+v", d)
 	}
 
 	f.app.Do(t, http.MethodPost, "/api/households/"+f.household+"/imported-transactions/0198f0a0-0000-7000-8000-000000000999/discard",
@@ -271,24 +271,24 @@ func TestADiscardedRowIsLeftOutOfLaterBalanceChecks(t *testing.T) {
 	app := apitest.Start(t)
 	f := newLaterImportFixture(t, app, "alice")
 
-	var coffee string
+	var salary string
 
 	for _, i := range f.imported(t, "?state=PENDING").Items {
-		if i.Description == "Coffee" {
-			coffee = i.ImportedTransactionID
+		if i.Description == "Salary" {
+			salary = i.ImportedTransactionID
 		}
 	}
 
-	app.Do(t, http.MethodPost, "/api/households/"+f.household+"/imported-transactions/"+coffee+"/discard", f.token, nil).
+	app.Do(t, http.MethodPost, "/api/households/"+f.household+"/imported-transactions/"+salary+"/discard", f.token, nil).
 		AssertJSON(t, http.StatusOK, &importedTransaction{})
 
-	// 510.50 - 1000.00 + 3000.00 (the coffee Discarded) + the file's coffee
-	// and groceries (-10.50 - 45.10) = 2454.90.
+	// 510.50 - 1000.00 - 10.50 (the salary Discarded) + the file's salary
+	// and groceries (3000.00 - 45.10) = 2454.90.
 	var si statementImport
 	f.upload(t, "", overlapping, "2454.90", "").AssertJSON(t, http.StatusCreated, &si)
 
 	if si.RowsImported != 2 || si.RowsSkippedAsCertainRepeats != 1 || si.BalanceCheck != "PASSED" {
-		t.Errorf("statement import = %+v, want the coffee imported again, the salary skipped, the check passed", si)
+		t.Errorf("statement import = %+v, want the salary imported again, the coffee skipped, the check passed", si)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestCorrectionsAreRefused(t *testing.T) {
 	cats := f.categories(t)
 	groceries := f.createCategory(t, "Groceries", "EXPENSE")
 	opening := f.openingBalanceTransaction(t)
-	coffee := f.accepted(t, "Coffee", nil)
+	rent := f.accepted(t, "Rent", nil)
 	salary := f.accepted(t, "Salary", nil)
 
 	f.setCategory(t, salary.TransactionID, cats["Opening balance"].CategoryID).
@@ -321,11 +321,11 @@ func TestCorrectionsAreRefused(t *testing.T) {
 	f.setCategory(t, opening, groceries).
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/opening-balance-transaction")
 
-	r := f.reversed(t, coffee.TransactionID)
+	r := f.reversed(t, rent.TransactionID)
 
-	f.reverse(t, coffee.TransactionID).AssertProblem(t, http.StatusConflict, "/problems/transaction-already-reversed")
+	f.reverse(t, rent.TransactionID).AssertProblem(t, http.StatusConflict, "/problems/transaction-already-reversed")
 	f.reverse(t, r.TransactionID).AssertProblem(t, http.StatusUnprocessableEntity, "/problems/transaction-is-a-reversal")
-	f.setCategory(t, coffee.TransactionID, groceries).
+	f.setCategory(t, rent.TransactionID, groceries).
 		AssertProblem(t, http.StatusConflict, "/problems/transaction-reversed")
 	f.setCategory(t, r.TransactionID, groceries).
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/transaction-is-a-reversal")
@@ -336,7 +336,7 @@ func TestCorrectionsAreRefused(t *testing.T) {
 
 	listed := f.listed(t, "")
 	if len(listed) != 4 {
-		t.Fatalf("transactions = %+v, want the Opening balance, the salary, the coffee and its reversal", listed)
+		t.Fatalf("transactions = %+v, want the Opening balance, the salary, the rent and its reversal", listed)
 	}
 
 	for _, l := range listed {

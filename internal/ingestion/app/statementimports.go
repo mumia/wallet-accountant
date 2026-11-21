@@ -71,11 +71,22 @@ func (e *DuplicateImportError) Error() string {
 	return fmt.Sprintf("statement file already imported as %s", e.Earlier)
 }
 
-// ImportAccount is an Account as a Statement import needs it.
+// ImportAccount is an Account as a Statement import needs it. OpenMonth
+// is its Open month (YYYY-MM): every month before it is closed, every month
+// after it not open yet (ADR-0024).
 type ImportAccount struct {
 	Currency                     sharedkernel.Currency
 	StartDate                    time.Time
 	AwaitingFirstStatementImport bool
+	OpenMonth                    string
+}
+
+// AccountMonths is where an Account's months stand: every month from the
+// start date's month up to OpenMonth (YYYY-MM) is closed, and every month
+// after it is not open yet (ADR-0024).
+type AccountMonths struct {
+	StartDate time.Time
+	OpenMonth string
 }
 
 // Ledger is the Ledger port a Statement import calls in its own
@@ -83,6 +94,11 @@ type ImportAccount struct {
 type Ledger interface {
 	// ImportAccount returns the Account, or ErrAccountNotFound.
 	ImportAccount(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (ImportAccount, error)
+	// AccountMonthsForShare returns the Account's start date and Open
+	// month, locking its fold FOR SHARE in the caller's transaction, so a
+	// Close or Reopen of the Account waits until it ends; or
+	// ErrAccountNotFound.
+	AccountMonthsForShare(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (AccountMonths, error)
 	// RecordOpeningBalance records the Account's Opening balance
 	// Transaction on its start date, or returns
 	// ErrOpeningBalanceAlreadyRecorded.

@@ -161,21 +161,21 @@ func TestAcceptingWithACategoryBooksItThere(t *testing.T) {
 	uncategorised := f.categories(t)["Uncategorised"].CategoryID
 
 	rent := f.accepted(t, "Rent", map[string]any{"category_id": housing})
-	coffee := f.accepted(t, "Coffee", map[string]any{"category_id": uncategorised})
+	salary := f.accepted(t, "Salary", map[string]any{"category_id": uncategorised})
 
-	if rent.State != "ACCEPTED" || coffee.State != "ACCEPTED" {
-		t.Errorf("rent = %+v, coffee = %+v, want both ACCEPTED", rent, coffee)
+	if rent.State != "ACCEPTED" || salary.State != "ACCEPTED" {
+		t.Errorf("rent = %+v, salary = %+v, want both ACCEPTED", rent, salary)
 	}
 
 	if got := f.getAccount(t); got.Balance == nil {
 		t.Fatal("the Account has no balance")
 	} else {
-		assertMoney(t, "balance", *got.Balance, "-500.00")
+		assertMoney(t, "balance", *got.Balance, "2510.50")
 	}
 
 	jan := f.transactions(t, "?booking_month=2026-01")
-	if len(jan.Items) != 2 {
-		t.Fatalf("January = %+v, want the Opening balance and the rent", jan.Items)
+	if len(jan.Items) != 3 {
+		t.Fatalf("January = %+v, want the Opening balance, the rent and the salary", jan.Items)
 	}
 
 	// Both are booked on 2026-01-01: the Opening balance was recorded first.
@@ -186,14 +186,14 @@ func TestAcceptingWithACategoryBooksItThere(t *testing.T) {
 		assertMoney(t, "rent", r.Amount, "-1000.00")
 	}
 
-	feb := f.transactions(t, "?booking_month=2026-02")
-	if len(feb.Items) != 1 || feb.Items[0].CategoryID != uncategorised || feb.Items[0].CategoryName != "Uncategorised" {
-		t.Errorf("February = %+v, want the coffee in Uncategorised", feb.Items)
+	if s := jan.Items[2]; s.TransactionID != salary.TransactionID || s.CategoryID != uncategorised ||
+		s.CategoryName != "Uncategorised" {
+		t.Errorf("salary = %+v, want it in Uncategorised", s)
 	}
 
 	if got := f.imported(t, "?state=ACCEPTED"); len(got.Items) != 2 || got.Items[0].Description != "Rent" ||
-		got.Items[1].Description != "Coffee" {
-		t.Errorf("accepted = %+v, want Rent and Coffee", got.Items)
+		got.Items[1].Description != "Salary" {
+		t.Errorf("accepted = %+v, want Rent and Salary", got.Items)
 	}
 }
 
@@ -259,10 +259,8 @@ func TestConcurrentAcceptsBookEachRowOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range n {
 		wg.Go(func() {
-			description := "Salary"
-			if i%2 == 1 {
-				description = []string{"Rent", "Coffee"}[i%4/2]
-			}
+			// Both in January, the Open month.
+			description := []string{"Salary", "Rent"}[i%2]
 
 			statuses[i] = f.accept(t, description, nil).Status
 		})
@@ -282,18 +280,18 @@ func TestConcurrentAcceptsBookEachRowOnce(t *testing.T) {
 		}
 	}
 
-	if ok != 3 {
+	if ok != 2 {
 		t.Errorf("statuses = %v, want one 200 per row", statuses)
 	}
 
-	if got := f.transactions(t, ""); len(got.Items) != 4 {
+	if got := f.transactions(t, ""); len(got.Items) != 3 {
 		t.Errorf("transactions = %+v, want the Opening balance and each row once", got.Items)
 	}
 
 	if got := f.getAccount(t); got.Balance == nil {
 		t.Fatal("the Account has no balance")
 	} else {
-		assertMoney(t, "balance", *got.Balance, "2500.00")
+		assertMoney(t, "balance", *got.Balance, "2510.50")
 	}
 }
 
@@ -364,9 +362,10 @@ func TestTheTransactionListPagesThroughAcceptedTransactions(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
 
-	for _, d := range []string{"Coffee", "Salary", "Rent"} {
-		f.accepted(t, d, nil)
-	}
+	// February's coffee is Accepted once January is closed.
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Salary", "Rent")
+	f.closed(t, "2026-01", "2510.50")
+	f.accepted(t, "Coffee", nil)
 
 	var (
 		got    []string
@@ -421,7 +420,7 @@ func TestAcceptsSurviveARebuild(t *testing.T) {
 	f := newAcceptFixture(t, app, "alice")
 
 	f.accepted(t, "Rent", map[string]any{"category_id": f.createCategory(t, "Housing", "EXPENSE")})
-	f.accepted(t, "Coffee", nil)
+	f.accepted(t, "Salary", nil)
 
 	before := []any{f.getAccount(t), f.transactions(t, ""), f.imported(t, "")}
 
@@ -433,5 +432,5 @@ func TestAcceptsSurviveARebuild(t *testing.T) {
 	}
 
 	// The rebuilt Imported transaction still knows it is Accepted.
-	f.accept(t, "Coffee", nil).AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-already-accepted")
+	f.accept(t, "Salary", nil).AssertProblem(t, http.StatusConflict, "/problems/imported-transaction-already-accepted")
 }

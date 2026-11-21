@@ -256,7 +256,8 @@ func TestClosingAMonth(t *testing.T) {
 func TestMonthsCloseInOrder(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary", "Coffee")
+	housing := f.createCategory(t, "Housing", "EXPENSE")
+	f.acceptAll(t, housing, "Rent", "Salary")
 
 	p := monthConflict(t, f.closeMonth(t, "2026-02", "2500.00"), "/problems/month-not-open-yet")
 	if p.Title != "Month not open yet" || p.Detail != "February 2026 isn't open yet. Close January 2026 first." ||
@@ -265,9 +266,10 @@ func TestMonthsCloseInOrder(t *testing.T) {
 	}
 
 	assertMonth(t, f.month(t, "2026-01"), "OPEN", 0, 0, 0)
-	assertMonth(t, f.month(t, "2026-02"), "NOT_OPEN_YET", 0, 0, 0)
+	assertMonth(t, f.month(t, "2026-02"), "NOT_OPEN_YET", 1, 0, 0)
 
 	f.closed(t, "2026-01", "2510.50")
+	f.acceptAll(t, housing, "Coffee")
 	assertMonth(t, f.closed(t, "2026-02", "2500.00"), "CLOSED", 0, 0, 0)
 	assertMonth(t, f.month(t, "2026-03"), "OPEN", 0, 0, 0)
 
@@ -452,9 +454,11 @@ func TestAnImportWithRowsOnlyAfterTheMonthDoesntRefuseTheClose(t *testing.T) {
 		t.Fatalf("import = %+v, want its check waiting", si)
 	}
 
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary", "Coffee")
+	housing := f.createCategory(t, "Housing", "EXPENSE")
+	f.acceptAll(t, housing, "Rent", "Salary")
 
 	assertMonth(t, f.closed(t, "2026-01", "2510.50"), "CLOSED", 0, 0, 0)
+	f.acceptAll(t, housing, "Coffee")
 
 	// February, which the import has rows in, is stopped by it.
 	p := f.refusedClose(t, "2026-02", "2500.00")
@@ -571,8 +575,8 @@ func TestAClosedMonthSurvivesARebuild(t *testing.T) {
 	app := apitest.Start(t)
 	f := newAcceptFixture(t, app, "alice")
 	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
-	f.accepted(t, "Coffee", nil)
 	f.closed(t, "2026-01", "2510.50")
+	f.accepted(t, "Coffee", nil)
 
 	before := []accountMonth{f.month(t, "2026-01"), f.month(t, "2026-02")}
 

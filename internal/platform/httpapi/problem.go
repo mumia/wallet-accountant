@@ -66,6 +66,25 @@ func MonthConflict(typ, title, detail, bookingMonth, openMonth string) *oas.Mont
 	return out
 }
 
+// Problem types about a month and the Account's Open month (ADR-0024).
+const (
+	MonthClosedType     = "/problems/month-closed"
+	MonthNotOpenYetType = "/problems/month-not-open-yet"
+)
+
+// MonthClosed is the 409 of a change to a closed Booking month (YYYY-MM).
+func MonthClosed(month, openMonth string) *oas.MonthProblem {
+	return MonthConflict(MonthClosedType, "Month closed",
+		MonthWords(month)+" is closed. Reopen it to change its entries.", month, openMonth)
+}
+
+// MonthNotOpenYet is the 409 of a Booking month (YYYY-MM) after the
+// Account's Open month.
+func MonthNotOpenYet(month, openMonth string) *oas.MonthProblem {
+	return MonthConflict(MonthNotOpenYetType, "Month not open yet",
+		fmt.Sprintf("%s isn't open yet. Close %s first.", MonthWords(month), MonthWords(openMonth)), month, openMonth)
+}
+
 // MonthWords writes a Booking month (YYYY-MM) as problem copy writes it:
 // "January 2026". A month that doesn't parse is written as given.
 func MonthWords(month string) string {

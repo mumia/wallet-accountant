@@ -335,8 +335,11 @@ func recordOpeningBalance(s AccountState, c RecordOpeningBalance) ([]AccountEven
 }
 
 // bookTransaction moves the balance of an Account that has its Opening
-// balance, on or after its start date.
+// balance, on or after its start date, in its Open month only: a closed
+// month is locked and a later one isn't open yet (ADR-0024).
 func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) {
+	month := c.BookingDate.Format(MonthLayout)
+
 	switch {
 	case !s.Added:
 		return nil, ErrAccountNotAdded
@@ -347,6 +350,10 @@ func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) 
 	case c.BookingDate.Before(s.StartDate):
 		return nil, fmt.Errorf("%w: %s is before %s", ErrBookedBeforeStartDate,
 			c.BookingDate.Format(DateLayout), s.StartDate.Format(DateLayout))
+	case month < s.OpenMonth:
+		return nil, s.lockedMonth(month, ErrMonthClosed)
+	case month > s.OpenMonth:
+		return nil, &MonthError{Err: ErrMonthNotOpenYet, Month: month, OpenMonth: s.OpenMonth}
 	}
 
 	currency, err := sharedkernel.ParseCurrency(s.Currency)
@@ -367,13 +374,17 @@ func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) 
 }
 
 // bookReversal moves the balance back by a reversal of a Transaction the
-// Account booked.
+// Account booked, unless its month is closed (ADR-0024).
 func bookReversal(s AccountState, c BookReversal) ([]AccountEvent, error) {
 	switch {
 	case !s.Added:
 		return nil, ErrAccountNotAdded
 	case c.BookingDate.IsZero():
 		return nil, ErrBookingDateRequired
+	}
+
+	if err := s.lockedMonth(c.BookingDate.Format(MonthLayout), ErrMonthClosed); err != nil {
+		return nil, err
 	}
 
 	currency, err := sharedkernel.ParseCurrency(s.Currency)
@@ -395,13 +406,21 @@ func bookReversal(s AccountState, c BookReversal) ([]AccountEvent, error) {
 }
 
 // recategoriseTransaction records a Category change of a Transaction the
-// Account booked.
+// Account booked. In a closed month any Category but Uncategorised can be
+// chosen: its close checked that nothing there was Uncategorised
+// (ADR-0024).
 func recategoriseTransaction(s AccountState, c RecategoriseTransaction) ([]AccountEvent, error) {
 	switch {
 	case !s.Added:
 		return nil, ErrAccountNotAdded
 	case c.BookingDate.IsZero():
 		return nil, ErrBookingDateRequired
+	}
+
+	if c.Uncategorised && !c.WasUncategorised {
+		if err := s.lockedMonth(c.BookingDate.Format(MonthLayout), ErrUncategorisedInClosedMonth); err != nil {
+			return nil, err
+		}
 	}
 
 	return []AccountEvent{TransactionRecategorised{
@@ -412,7 +431,9 @@ func recategoriseTransaction(s AccountState, c RecategoriseTransaction) ([]Accou
 	}}, nil
 }
 
-// reopenOpeningBalance takes back the Account's own Opening balance.
+// reopenOpeningBalance takes back the Account's own Opening balance,
+// unless the start date's month is closed. Ingestion refuses that Void
+// first; this is the backstop (ADR-0024).
 func reopenOpeningBalance(s AccountState, c ReopenOpeningBalance) ([]AccountEvent, error) {
 	switch {
 	case !s.Added:
@@ -421,6 +442,10 @@ func reopenOpeningBalance(s AccountState, c ReopenOpeningBalance) ([]AccountEven
 		return nil, ErrAwaitingFirstStatementImport
 	case c.TransactionID != s.OpeningBalanceTransactionID:
 		return nil, ErrNotTheOpeningBalanceTransaction
+	}
+
+	if err := s.lockedMonth(s.StartDate.Format(MonthLayout), ErrMonthClosed); err != nil {
+		return nil, err
 	}
 
 	return []AccountEvent{OpeningBalanceReversed(c)}, nil

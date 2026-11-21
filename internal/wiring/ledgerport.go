@@ -45,7 +45,45 @@ func (l ingestionLedger) ImportAccount(ctx context.Context, tx *eventstore.Tx, a
 
 	return ingestionapp.ImportAccount{
 		Currency: currency, StartDate: a.StartDate, AwaitingFirstStatementImport: a.AwaitingFirstStatementImport,
+		OpenMonth: a.OpenMonth,
 	}, nil
+}
+
+// AccountMonthsForShare implements ingestionapp.Ledger.
+func (l ingestionLedger) AccountMonthsForShare(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+) (ingestionapp.AccountMonths, error) {
+	m, err := l.accounts.MonthsForShare(ctx, tx, account)
+	if errors.Is(err, ledgerapp.ErrAccountNotFound) {
+		return ingestionapp.AccountMonths{}, ingestionapp.ErrAccountNotFound
+	}
+
+	if err != nil {
+		return ingestionapp.AccountMonths{}, err //nolint:wrapcheck // already wrapped by the Ledger
+	}
+
+	return ingestionapp.AccountMonths{StartDate: m.StartDate, OpenMonth: m.OpenMonth}, nil
+}
+
+// monthError is the Ledger's refusal about a month in Ingestion's terms,
+// or nil when err isn't one.
+func monthError(err error) error {
+	e, ok := errors.AsType[*ledgerdomain.MonthError](err)
+	if !ok {
+		return nil
+	}
+
+	out := &ingestionapp.MonthError{Month: e.Month, OpenMonth: e.OpenMonth}
+
+	switch {
+	case errors.Is(e.Err, ledgerdomain.ErrMonthClosed):
+		out.Err = ingestionapp.ErrMonthClosed
+	case errors.Is(e.Err, ledgerdomain.ErrMonthNotOpenYet):
+		out.Err = ingestionapp.ErrMonthNotOpenYet
+	default:
+		return nil
+	}
+
+	return fmt.Errorf("%w: %w", out, err)
 }
 
 // RecordOpeningBalance implements ingestionapp.Ledger.
@@ -81,6 +119,12 @@ func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b 
 		Description:         r.Description,
 		Payee:               r.Payee,
 	})
+
+	if m := monthError(err); m != nil {
+		// Ingestion checked the month first; this is a Close that ran
+		// meanwhile.
+		return m
+	}
 
 	switch {
 	case errors.Is(err, ledgerapp.ErrCategoryNotFound):

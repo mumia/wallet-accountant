@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/mumia/wallet-accountant/internal/ledger/app"
+	"github.com/mumia/wallet-accountant/internal/ledger/domain"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi/oas"
 )
@@ -20,12 +21,14 @@ const (
 	TransactionIsAReversalType     = "/problems/transaction-is-a-reversal"
 	TransactionAlreadyReversedType = "/problems/transaction-already-reversed"
 	TransactionReversedType        = "/problems/transaction-reversed"
+	UncategorisedInClosedMonthType = "/problems/uncategorised-in-closed-month"
 )
 
-// correction is how a refused correction is answered: 404, or a problem
-// whose status says whether it is a conflict.
+// correction is how a refused correction is answered: 404, a 409 about a
+// month, or a problem whose status says whether it is a conflict.
 type correction struct {
 	notFound bool
+	month    *oas.MonthProblem
 	problem  oas.Problem
 }
 
@@ -36,9 +39,17 @@ func correctionRefusal(err error) (correction, bool) {
 		return correction{problem: httpapi.Problem(status, typ, title, detail)}, true
 	}
 
+	monthErr, _ := errors.AsType[*domain.MonthError](err)
+
 	switch {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrTransactionNotFound):
 		return correction{notFound: true}, true
+	case errors.Is(err, app.ErrMonthClosed) && monthErr != nil:
+		return correction{month: httpapi.MonthClosed(monthErr.Month, monthErr.OpenMonth)}, true
+	case errors.Is(err, app.ErrUncategorisedInClosedMonth) && monthErr != nil:
+		return refused(http.StatusUnprocessableEntity, UncategorisedInClosedMonthType, "Uncategorised in a closed month",
+			httpapi.MonthWords(monthErr.Month)+" is closed, so its Transactions can't go back to Uncategorised. "+
+				"Pick another Category.")
 	case errors.Is(err, app.ErrTransactionAlreadyReversed):
 		return refused(http.StatusConflict, TransactionAlreadyReversedType, "Transaction already reversed",
 			"The Transaction is already reversed.")
@@ -71,6 +82,10 @@ func (h *TransactionHandler) ChangeTransaction(ctx context.Context, req *oas.Tra
 		switch {
 		case c.notFound:
 			return new(oas.ChangeTransactionNotFound(httpapi.NotFoundProblem())), nil
+		case c.month != nil:
+			// Only Reverse books anything, so a Category change never
+			// meets a closed month's lock.
+			return nil, fmt.Errorf("change transaction: %w", err)
 		case c.problem.Status == http.StatusConflict:
 			return new(oas.ChangeTransactionConflict(c.problem)), nil
 		default:
@@ -93,6 +108,8 @@ func (h *TransactionHandler) ReverseTransaction(ctx context.Context, params oas.
 		switch {
 		case c.notFound:
 			return new(oas.ReverseTransactionNotFound(httpapi.NotFoundProblem())), nil
+		case c.month != nil:
+			return c.month, nil
 		case c.problem.Status == http.StatusConflict:
 			return &oas.MonthProblem{Type: c.problem.Type, Title: c.problem.Title, Status: c.problem.Status, Detail: c.problem.Detail}, nil
 		default:

@@ -18,7 +18,6 @@ import (
 const (
 	MonthCloseRefusedType                   = "/problems/month-close-refused"
 	MonthAlreadyClosedType                  = "/problems/month-already-closed"
-	MonthNotOpenYetType                     = "/problems/month-not-open-yet"
 	MonthNotEndedType                       = "/problems/month-not-ended"
 	AccountAwaitingFirstStatementImportType = "/problems/account-awaiting-first-statement-import"
 	InvalidMonthCloseType                   = "/problems/invalid-month-close"
@@ -105,9 +104,7 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 		return monthConflict(MonthAlreadyClosedType, "Month already closed",
 			httpapi.MonthWords(monthErr.Month)+" is already closed; its Statement balance is kept.", monthErr)
 	case errors.Is(err, app.ErrMonthNotOpenYet) && monthErr != nil:
-		return monthConflict(MonthNotOpenYetType, "Month not open yet",
-			fmt.Sprintf("%s isn't open yet. Close %s first.",
-				httpapi.MonthWords(monthErr.Month), httpapi.MonthWords(monthErr.OpenMonth)), monthErr)
+		return httpapi.MonthNotOpenYet(monthErr.Month, monthErr.OpenMonth), nil
 	case errors.Is(err, app.ErrMonthNotEnded) && monthErr != nil:
 		return monthConflict(MonthNotEndedType, "Month not ended",
 			fmt.Sprintf("%s can be closed from %s.",
