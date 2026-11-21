@@ -118,7 +118,7 @@ func newImportFixture(t *testing.T, app *apitest.App, subject string) importFixt
 	t.Helper()
 
 	f := newFixture(t, app, subject)
-	c := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
+	c := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
 
 	return importFixture{fixture: f, connection: c.ConnectionID}
 }
@@ -420,7 +420,7 @@ func TestConfirmingIsRefused(t *testing.T) {
 	t.Run("a Connection without a mapping", func(t *testing.T) {
 		t.Parallel()
 		f := newImportFixture(t, app, "no-mapping")
-		f.connection = f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT"}).ConnectionID
+		f.connection = f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"}).ConnectionID
 
 		f.preview(t, statement, "1", "1").AssertProblem(t, http.StatusUnprocessableEntity, "/problems/csv-mapping-required")
 		f.assertNothingImported(t)

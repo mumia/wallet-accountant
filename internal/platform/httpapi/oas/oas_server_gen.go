@@ -18,8 +18,10 @@ type Handler interface {
 	// Discarded one 409 `/problems/imported-transaction-discarded`; a Suspected duplicate, not yet kept,
 	// gets 409 `/problems/imported-transaction-suspected-duplicate`; any other Internal Category gets 422
 	// `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
-	// `/problems/invalid-category`. Retrying with the same Idempotency-Key and body returns the original
-	// result and never books twice.
+	// `/problems/invalid-category`. A row booked in a closed month gets 409 `/problems/month-closed`, and
+	// one booked in a month that isn't open yet 409 `/problems/month-not-open-yet` (ADR-0024); both name
+	// the `booking_month`, and the second also the Account's `open_month`. Retrying with the same
+	// Idempotency-Key and body returns the original result and never books twice.
 	//
 	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/accept
 	AcceptImportedTransaction(ctx context.Context, req OptImportedTransactionAcceptance, params AcceptImportedTransactionParams) (AcceptImportedTransactionRes, error)
@@ -32,6 +34,14 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/accounts
 	AddAccount(ctx context.Context, req *AccountCreation, params AddAccountParams) (AddAccountRes, error)
+	// ChangeAccount implements changeAccount operation.
+	//
+	// Renames the Account. Only its name can change; its kind, Account currency and start date are fixed.
+	// A name of only spaces gets 422 `/problems/invalid-account`, and an empty or too long one 400. Names
+	// needn't be unique. The same name again records nothing.
+	//
+	// PATCH /households/{household_id}/accounts/{account_id}
+	ChangeAccount(ctx context.Context, req *AccountChange, params ChangeAccountParams) (ChangeAccountRes, error)
 	// ChangeCategory implements changeCategory operation.
 	//
 	// Renames the Category when `name` is given, and moves it when `parent_id` is given: under that
@@ -43,6 +53,16 @@ type Handler interface {
 	//
 	// PATCH /households/{household_id}/categories/{category_id}
 	ChangeCategory(ctx context.Context, req *CategoryChange, params ChangeCategoryParams) (ChangeCategoryRes, error)
+	// ChangeConnection implements changeConnection operation.
+	//
+	// Renames the Connection. The name is trimmed, 1 to 100 characters, and unique within the Account
+	// ignoring case: a name already used by another of its Connections gets 422
+	// `/problems/connection-name-taken`, one of only spaces 422 `/problems/invalid-connection`, and an
+	// empty or too long one 400. The same name again records nothing. The CSV mapping is saved apart, by
+	// `saveCsvMapping`.
+	//
+	// PATCH /households/{household_id}/accounts/{account_id}/connections/{connection_id}
+	ChangeConnection(ctx context.Context, req *ConnectionChange, params ChangeConnectionParams) (ChangeConnectionRes, error)
 	// ChangeTransaction implements changeTransaction operation.
 	//
 	// Sets the Category on the non-Account side of the Transaction, for example to categorise one Accepted
@@ -52,14 +72,19 @@ type Handler interface {
 	// `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
 	// `/problems/invalid-category`. A reversed Transaction gets 409 `/problems/transaction-reversed`; a
 	// reversal gets 422 `/problems/transaction-is-a-reversal`, and the Opening balance Transaction 422
-	// `/problems/opening-balance-transaction`.
+	// `/problems/opening-balance-transaction`. In a closed month the Category can still change, but not to
+	// Uncategorised: that gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024).
 	//
 	// PATCH /households/{household_id}/transactions/{transaction_id}
 	ChangeTransaction(ctx context.Context, req *TransactionChange, params ChangeTransactionParams) (ChangeTransactionRes, error)
 	// CloseAccountMonth implements closeAccountMonth operation.
 	//
-	// Closes the Booking month with the Statement balance, the closing balance on the bank statement. The
-	// close is refused with 422 `/problems/month-close-refused`, listing every failed condition in
+	// Closes the Account's open month with the Statement balance, the closing balance on the bank
+	// statement, and opens the month after it (December rolls into January). Months close one at a time,
+	// in order (ADR-0024). Only the open month can close: a month that isn't open yet gets 409
+	// `/problems/month-not-open-yet`, naming the `booking_month` and the Account's `open_month`, and the
+	// open month gets 409 `/problems/month-not-ended` until it has ended, by the server's clock in UTC.
+	// The close is refused with 422 `/problems/month-close-refused`, listing every failed condition in
 	// `reasons` at once, while any Imported transaction booked in the month is pending or an undecided
 	// Suspected duplicate, any Transaction booked in it is in Uncategorised, a Statement import with rows
 	// in or before the month has its Balance check waiting or failed (voided imports don't count), or the
@@ -68,8 +93,7 @@ type Handler interface {
 	// that is wrong (ADR-0018). A month already closed gets 409 `/problems/month-already-closed`, and an
 	// Account awaiting its first Statement import 409 `/problems/account-awaiting-first-statement-import`.
 	// A Statement balance in another currency than the Account's, or with more decimal places than it has,
-	// a month before the Account's start date, or a month that hasn't started yet gets 422
-	// `/problems/invalid-month-close`.
+	// or a month before the Account's start date gets 422 `/problems/invalid-month-close`.
 	//
 	// POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/close
 	CloseAccountMonth(ctx context.Context, req *MonthClosing, params CloseAccountMonthParams) (CloseAccountMonthRes, error)
@@ -86,10 +110,12 @@ type Handler interface {
 	CreateCategory(ctx context.Context, req *CategoryCreation, params CreateCategoryParams) (CreateCategoryRes, error)
 	// CreateConnection implements createConnection operation.
 	//
-	// Creates a statement file import Connection for the Account, optionally with the CSV mapping of the
-	// bank's statement files. Live bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
-	// 422 with the problem type `/problems/invalid-connection`. An invalid mapping gets 422 with
-	// `/problems/invalid-csv-mapping`, and nothing is created.
+	// Creates a statement file import Connection for the Account, with a name and optionally the CSV
+	// mapping of the bank's statement files. The name is trimmed, 1 to 100 characters, and unique within
+	// the Account ignoring case: a name already used gets 422 `/problems/connection-name-taken`. Live bank
+	// feeds are not supported yet; a `BANK_FEED` or unknown kind, or a name of only spaces, gets 422 with
+	// the problem type `/problems/invalid-connection`; an empty or too long name gets 400. An invalid
+	// mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is created.
 	//
 	// POST /households/{household_id}/accounts/{account_id}/connections
 	CreateConnection(ctx context.Context, req *ConnectionCreation, params CreateConnectionParams) (CreateConnectionRes, error)
@@ -116,7 +142,10 @@ type Handler interface {
 	// doesn't count in later Balance checks. Deciding the last Suspected duplicate of a Statement import
 	// runs its waiting Balance check. One already Discarded gets 409
 	// `/problems/imported-transaction-already-discarded`, and an Accepted one 409
-	// `/problems/imported-transaction-already-accepted` (reverse its Transaction first).
+	// `/problems/imported-transaction-already-accepted` (reverse its Transaction first). One booked in a
+	// closed month gets 409 `/problems/month-closed`. A pending row booked in a month that isn't open yet
+	// gets 409 `/problems/month-not-open-yet`, but a Suspected duplicate there can still be Discarded
+	// (ADR-0024). Both problems name the `booking_month`, and the second also the Account's `open_month`.
 	//
 	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/discard
 	DiscardImportedTransaction(ctx context.Context, params DiscardImportedTransactionParams) (DiscardImportedTransactionRes, error)
@@ -129,12 +158,14 @@ type Handler interface {
 	GetAccount(ctx context.Context, params GetAccountParams) (GetAccountRes, error)
 	// GetAccountMonth implements getAccountMonth operation.
 	//
-	// Returns one Booking month of the Account (months are decided by Booking date): whether it is `OPEN`
-	// or `CLOSED`, the Statement balance it closed with, the computed closing balance (the Opening balance
-	// plus every month up to this one; absent while the Account awaits its first Statement import), how
-	// many of its Imported transactions are pending or undecided Suspected duplicates, how many of its
-	// Transactions are in Uncategorised, and whether it changed after it closed. It is always current: it
-	// is read in the request's own transaction.
+	// Returns one Booking month of the Account (months are decided by Booking date): whether it is
+	// `CLOSED`, the Account's one `OPEN` month, or `NOT_OPEN_YET` (ADR-0024); the Statement balance it
+	// closed with; the computed closing balance (the Opening balance plus every month up to this one;
+	// absent while the Account awaits its first Statement import); how many of its Imported transactions
+	// are pending or undecided Suspected duplicates; how many of its Transactions are in Uncategorised;
+	// the Statement imports whose Balance check stops it closing; and whether it can be reopened now. Any
+	// month from the start date's month on can be read, a later one as `NOT_OPEN_YET`; a month before the
+	// start date's month gets 404. It is always current: it is read in the request's own transaction.
 	//
 	// GET /households/{household_id}/accounts/{account_id}/months/{booking_month}
 	GetAccountMonth(ctx context.Context, params GetAccountMonthParams) (GetAccountMonthRes, error)
@@ -159,10 +190,24 @@ type Handler interface {
 	// like any other row, and still shows what it resembled. Deciding the last Suspected duplicate of a
 	// Statement import runs its waiting Balance check, recorded as passed or failed. An Imported
 	// transaction that isn't a Suspected duplicate gets 409
-	// `/problems/imported-transaction-not-suspected-duplicate`.
+	// `/problems/imported-transaction-not-suspected-duplicate`. One booked in a closed month gets 409
+	// `/problems/month-closed`. A Suspected duplicate booked in a month that isn't open yet can still be
+	// kept, so its Statement import's Balance check never waits on a month that can't open (ADR-0024).
 	//
 	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/keep
 	KeepImportedTransaction(ctx context.Context, params KeepImportedTransactionParams) (KeepImportedTransactionRes, error)
+	// ListAccountMonths implements listAccountMonths operation.
+	//
+	// Returns every Booking month of the Account, newest first and unpaged, each as on `getAccountMonth`.
+	// The months run from the start date's month to the later of the current calendar month (UTC) and the
+	// latest Booking month holding a non-Discarded Imported transaction. The Account has exactly one
+	// `OPEN` month; the months before it are `CLOSED` and those after it `NOT_OPEN_YET` (ADR-0024). It
+	// answers from the Account's creation: before its first Statement import, the start date's month is
+	// `OPEN` and the rest are `NOT_OPEN_YET`. It is always current: it is read in the request's own
+	// transaction.
+	//
+	// GET /households/{household_id}/accounts/{account_id}/months
+	ListAccountMonths(ctx context.Context, params ListAccountMonthsParams) (ListAccountMonthsRes, error)
 	// ListAccountTransactions implements listAccountTransactions operation.
 	//
 	// Lists the Account's Transactions as a single-entry list (ADR-0001): each with its signed amount on
@@ -258,6 +303,19 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports/previews
 	PreviewStatementImport(ctx context.Context, req *StatementImportPreviewUploadMultipart, params PreviewStatementImportParams) (PreviewStatementImportRes, error)
+	// ReopenAccountMonth implements reopenAccountMonth operation.
+	//
+	// Takes back the Account's latest Month close (ADR-0024). The month becomes the open month again, its
+	// Statement balance is dropped, and the month after it goes back to `NOT_OPEN_YET`: the month must be
+	// closed again with its Statement balance. Reopen is refused with 409
+	// `/problems/month-reopen-refused`, listing every failed condition in `reasons` at once: the month
+	// isn't closed (`NOT_CLOSED`), it isn't the Account's latest closed month (`NOT_LATEST_CLOSED`), or
+	// the open month has Accepted Transactions that aren't reversed
+	// (`OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS`, with the `open_month` and the `accepted` count): reverse
+	// them first. Retrying with the same Idempotency-Key returns the original result.
+	//
+	// POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/reopen
+	ReopenAccountMonth(ctx context.Context, params ReopenAccountMonthParams) (ReopenAccountMonthRes, error)
 	// ReverseTransaction implements reverseTransaction operation.
 	//
 	// Reverses a mistaken Transaction without editing or deleting it (ADR-0018): a reversing Transaction
@@ -267,7 +325,8 @@ type Handler interface {
 	// be Accepted again or Discarded. A Transaction already reversed gets 409
 	// `/problems/transaction-already-reversed`; a reversal gets 422 `/problems/transaction-is-a-reversal`,
 	// and the Opening balance Transaction 422 `/problems/opening-balance-transaction` (only voiding the
-	// first Statement import changes it).
+	// first Statement import changes it). A Transaction booked in a closed month gets 409
+	// `/problems/month-closed`, naming the `booking_month`: Reopen back to it first (ADR-0024).
 	//
 	// POST /households/{household_id}/transactions/{transaction_id}/reverse
 	ReverseTransaction(ctx context.Context, params ReverseTransactionParams) (ReverseTransactionRes, error)
@@ -280,29 +339,46 @@ type Handler interface {
 	//
 	// PUT /households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping
 	SaveCsvMapping(ctx context.Context, req *CsvMapping, params SaveCsvMappingParams) (SaveCsvMappingRes, error)
+	// TestCsvMapping implements testCsvMapping operation.
+	//
+	// Reads a sample statement file with an unsaved CSV mapping, exactly as an upload would read it, and
+	// returns the first 10 readable rows, how many rows are readable, and every unreadable line with its
+	// reason. Amounts are read in the Account currency. Rows before the Account's start date are shown
+	// too: this tests the mapping, not an import. It records nothing and doesn't keep the sample. An
+	// invalid mapping gets 422 `/problems/invalid-csv-mapping`, whose detail lists every problem, and a
+	// file with no rows at all 422 `/problems/empty-statement-file`.
+	//
+	// POST /households/{household_id}/accounts/{account_id}/csv-mapping-tests
+	TestCsvMapping(ctx context.Context, req *CsvMappingTestUploadMultipart, params TestCsvMappingParams) (TestCsvMappingRes, error)
 	// UploadStatementImport implements uploadStatementImport operation.
 	//
 	// Imports a statement file through the Connection: every row booked on or after the Account's start
-	// date becomes a pending Imported transaction, and the rows before it are ignored and counted. The
-	// first import of an Account needs the `preview_id` of its preview (422 `/problems/preview-required`
-	// without it). It is recomputed from the uploaded file, its Export balance and the Connection's
-	// current mapping version, and a difference gets 422 `/problems/preview-mismatch`. The first import
-	// also records the Opening balance Transaction on the start date, in the same transaction; an Account
-	// that got its Opening balance since the preview gets 409
-	// `/problems/opening-balance-already-recorded`. A file with an unreadable row is refused whole (422
-	// `/problems/unreadable-statement-file`), and a file already imported through the Connection gets 409
-	// `/problems/duplicate-statement-import`.
+	// date becomes a pending Imported transaction, and the rows before it are ignored and counted
+	// (`rows_ignored_before_start_date`). Rows booked in a closed month are ignored too, before any other
+	// test, and counted (`rows_ignored_in_closed_months`). Rows booked in a month that isn't open yet
+	// become pending Imported transactions that can't be Accepted or Discarded until their month opens
+	// (ADR-0024). The first import of an Account needs the `preview_id` of its preview (422
+	// `/problems/preview-required` without it). It is recomputed from the uploaded file, its Export
+	// balance and the Connection's current mapping version, and a difference gets 422
+	// `/problems/preview-mismatch`. The first import also records the Opening balance Transaction on the
+	// start date, in the same transaction; an Account that got its Opening balance since the preview gets
+	// 409 `/problems/opening-balance-already-recorded`. A file with an unreadable row is refused whole
+	// (422 `/problems/unreadable-statement-file`), and a file already imported through the Connection gets
+	// 409 `/problems/duplicate-statement-import`.
 	//
 	// A later import takes its Export balance once and no `preview_id` (409
 	// `/problems/opening-balance-already-recorded` with one). A row whose bank transaction ID, Booking
 	// date and amount all equal those of an earlier Imported transaction of the Account is skipped as a
 	// certain repeat and counted. The import then runs its Balance check (ADR-0018): the Account's Opening
 	// balance plus every non-Discarded Imported transaction, the new rows included, must equal the Export
-	// balance. Otherwise the whole import is refused with 422 `/problems/balance-check-failed`, giving the
-	// expected balance, the Export balance and the difference, and nothing is recorded. Amounts, an empty
-	// file and a Connection without a mapping are refused as by the preview. Retrying with the same
-	// Idempotency-Key and the same file and fields returns the original result, however the form is
-	// rebuilt.
+	// balance. Rows ignored in closed months count only through the Imported transactions already
+	// recorded. Otherwise the whole import is refused with 422 `/problems/balance-check-failed`, giving
+	// the expected balance, the Export balance and the difference, and nothing is recorded. When some of
+	// the rows ignored in closed months are neither certain repeats nor look like an earlier Imported
+	// transaction, the problem also gives `rows_in_closed_months_not_in_books`, and its `detail` names the
+	// closed months to Reopen before importing again. Amounts, an empty file and a Connection without a
+	// mapping are refused as by the preview. Retrying with the same Idempotency-Key and the same file and
+	// fields returns the original result, however the form is rebuilt.
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports
 	UploadStatementImport(ctx context.Context, req *StatementImportUploadMultipart, params UploadStatementImportParams) (UploadStatementImportRes, error)
@@ -315,7 +391,13 @@ type Handler interface {
 	// import again: that is the only way to change an Opening balance. Only the Account's latest
 	// non-voided import can be voided (409 `/problems/not-the-latest-statement-import`), only while none
 	// of its rows are Accepted (409 `/problems/statement-import-has-accepted-rows`: reverse their
-	// Transactions first), and only once (409 `/problems/statement-import-already-voided`).
+	// Transactions first), only while it doesn't touch a closed month (409
+	// `/problems/statement-import-touches-closed-month`, naming the earliest such `booking_month`: Reopen
+	// back to it first), and only once (409 `/problems/statement-import-already-voided`). An import
+	// touches a closed month when any Imported transaction it recorded, in any state, is booked in one, or
+	// when it is the Account's first import and the start date's month is closed (ADR-0024). Rows it
+	// ignored don't count. `void_blocked_by` on the Statement import says beforehand which of these
+	// refusals apply.
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports/{statement_import_id}/void
 	VoidStatementImport(ctx context.Context, params VoidStatementImportParams) (VoidStatementImportRes, error)

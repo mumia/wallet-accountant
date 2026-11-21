@@ -37,7 +37,9 @@ func findAuthorization(h http.Header, prefix string) (string, bool) {
 var operationRolesBearerAuth = map[string][]string{
 	AcceptImportedTransactionOperation:  []string{},
 	AddAccountOperation:                 []string{},
+	ChangeAccountOperation:              []string{},
 	ChangeCategoryOperation:             []string{},
+	ChangeConnectionOperation:           []string{},
 	ChangeTransactionOperation:          []string{},
 	CloseAccountMonthOperation:          []string{},
 	CreateCategoryOperation:             []string{},
@@ -50,6 +52,7 @@ var operationRolesBearerAuth = map[string][]string{
 	GetHouseholdOperation:               []string{},
 	GetMeOperation:                      []string{},
 	KeepImportedTransactionOperation:    []string{},
+	ListAccountMonthsOperation:          []string{},
 	ListAccountTransactionsOperation:    []string{},
 	ListAccountsOperation:               []string{},
 	ListCategoriesOperation:             []string{},
@@ -61,8 +64,10 @@ var operationRolesBearerAuth = map[string][]string{
 	ListStatementImportsOperation:       []string{},
 	MarkNotificationReadOperation:       []string{},
 	PreviewStatementImportOperation:     []string{},
+	ReopenAccountMonthOperation:         []string{},
 	ReverseTransactionOperation:         []string{},
 	SaveCsvMappingOperation:             []string{},
+	TestCsvMappingOperation:             []string{},
 	UploadStatementImportOperation:      []string{},
 	VoidStatementImportOperation:        []string{},
 }

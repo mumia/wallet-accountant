@@ -68,6 +68,13 @@ type Account struct {
 	StartDate                    time.Time
 	AwaitingFirstStatementImport bool
 	Balance                      *sharedkernel.Decimal
+	// OpenMonth is the Account's one open Booking month (MonthLayout).
+	OpenMonth string
+	// Pending and SuspectedDuplicates count the Account's Imported
+	// transactions in those states, in every month. They stay 0 until
+	// ticket 08 of .scratch/ui-first-slice-backend reads them.
+	Pending             int
+	SuspectedDuplicates int
 }
 
 // AccountReader reads the Household's Account folds.
@@ -199,6 +206,7 @@ func accountOf(id uuid.UUID, s domain.AccountState) Account {
 	a := Account{
 		ID: id, Name: s.Name, Kind: s.Kind, Currency: s.Currency, StartDate: s.StartDate,
 		AwaitingFirstStatementImport: s.AwaitingFirstStatementImport,
+		OpenMonth:                    s.OpenMonth(),
 	}
 
 	if s.HasBalance() {

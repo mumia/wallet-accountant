@@ -45,7 +45,12 @@ runtime:
 docs: |-
   Imports a statement file through the Connection: every row booked on
   or after the Account's start date becomes a pending Imported
-  transaction, and the rows before it are ignored and counted. The
+  transaction, and the rows before it are ignored and counted
+  (`rows_ignored_before_start_date`). Rows booked in a closed month are
+  ignored too, before any other test, and counted
+  (`rows_ignored_in_closed_months`). Rows booked in a month that isn't
+  open yet become pending Imported transactions that can't be Accepted
+  or Discarded until their month opens (ADR-0024). The
   first import of an Account needs the `preview_id` of its preview
   (422 `/problems/preview-required` without it). It is recomputed from
   the uploaded file, its Export balance and the Connection's current
@@ -65,9 +70,15 @@ docs: |-
   certain repeat and counted. The import then runs its Balance check
   (ADR-0018): the Account's Opening balance plus every non-Discarded
   Imported transaction, the new rows included, must equal the Export
-  balance. Otherwise the whole import is refused with 422
-  `/problems/balance-check-failed`, giving the expected balance, the
-  Export balance and the difference, and nothing is recorded. Amounts, an empty
+  balance. Rows ignored in closed months count only through the
+  Imported transactions already recorded. Otherwise the whole import
+  is refused with 422 `/problems/balance-check-failed`, giving the
+  expected balance, the Export balance and the difference, and nothing
+  is recorded. When some of the rows ignored in closed months are
+  neither certain repeats nor look like an earlier Imported
+  transaction, the problem also gives
+  `rows_in_closed_months_not_in_books`, and its `detail` names the
+  closed months to Reopen before importing again. Amounts, an empty
   file and a Connection without a mapping are refused as by the
   preview. Retrying with the same Idempotency-Key and the same file and
   fields returns the original result, however the form is rebuilt.

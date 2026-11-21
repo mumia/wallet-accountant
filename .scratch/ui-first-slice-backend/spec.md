@@ -167,7 +167,7 @@ When a request breaks several rules, the refusal follows this order:
 
 - **Name**:
   - `ConnectionCreated` gains `name`, and the new `ConnectionRenamed{Name}` event (type `…ingestion.connection.renamed.v1`) comes from `RenameConnection`.
-  - Names are trimmed and must be 1–100 characters, otherwise `ErrConnectionNameInvalid` → 422 `invalid-connection`. The same name again records nothing.
+  - Names are trimmed and must be 1–100 characters, otherwise `ErrConnectionNameInvalid` → 422 `invalid-connection`. The schema's `minLength`/`maxLength` refuse an empty or too long name with 400 before the handler runs, so the 422 is in practice a name of only spaces. The same applies to an Account name. The same name again records nothing.
   - Uniqueness is guarded by a unique index on the Connection lookup rows, `(household_id, account_id, lower(name))`. Its violation maps to 422 `connection-name-taken`.
   - There is no data to keep, so the migration may assume no Connections exist (reset a dev database that has some).
 - **Encoding**:

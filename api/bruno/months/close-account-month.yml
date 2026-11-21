@@ -1,7 +1,7 @@
 info:
   name: Close an Account's month
   type: http
-  seq: 2
+  seq: 3
 http:
   method: POST
   url: '{{baseUrl}}/households/:household_id/accounts/:account_id/months/:booking_month/close'
@@ -33,8 +33,14 @@ http:
       }
   auth: inherit
 docs: |-
-  Closes the Booking month with the Statement balance, the closing
-  balance on the bank statement. The close is refused with 422
+  Closes the Account's open month with the Statement balance, the
+  closing balance on the bank statement, and opens the month after it
+  (December rolls into January). Months close one at a time, in order
+  (ADR-0024). Only the open month can close: a month that isn't open
+  yet gets 409 `/problems/month-not-open-yet`, naming the
+  `booking_month` and the Account's `open_month`, and the open month
+  gets 409 `/problems/month-not-ended` until it has ended, by the
+  server's clock in UTC. The close is refused with 422
   `/problems/month-close-refused`, listing every failed condition in
   `reasons` at once, while any Imported transaction booked in the month
   is pending or an undecided Suspected duplicate, any Transaction booked
@@ -48,8 +54,7 @@ docs: |-
   first Statement import 409
   `/problems/account-awaiting-first-statement-import`. A Statement
   balance in another currency than the Account's, or with more decimal
-  places than it has, a month before the Account's start date, or a month
-  that hasn't started yet gets
+  places than it has, or a month before the Account's start date gets
   422 `/problems/invalid-month-close`.
 
   Operation `closeAccountMonth`.

@@ -37,6 +37,8 @@ docs: |-
   gets 409 `/problems/transaction-already-reversed`; a reversal gets
   422 `/problems/transaction-is-a-reversal`, and the Opening balance
   Transaction 422 `/problems/opening-balance-transaction` (only
-  voiding the first Statement import changes it).
+  voiding the first Statement import changes it). A Transaction booked
+  in a closed month gets 409 `/problems/month-closed`, naming the
+  `booking_month`: Reopen back to it first (ADR-0024).
 
   Operation `reverseTransaction`.

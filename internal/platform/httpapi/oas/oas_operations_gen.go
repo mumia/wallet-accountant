@@ -8,7 +8,9 @@ type OperationName = string
 const (
 	AcceptImportedTransactionOperation  OperationName = "AcceptImportedTransaction"
 	AddAccountOperation                 OperationName = "AddAccount"
+	ChangeAccountOperation              OperationName = "ChangeAccount"
 	ChangeCategoryOperation             OperationName = "ChangeCategory"
+	ChangeConnectionOperation           OperationName = "ChangeConnection"
 	ChangeTransactionOperation          OperationName = "ChangeTransaction"
 	CloseAccountMonthOperation          OperationName = "CloseAccountMonth"
 	CreateCategoryOperation             OperationName = "CreateCategory"
@@ -21,6 +23,7 @@ const (
 	GetHouseholdOperation               OperationName = "GetHousehold"
 	GetMeOperation                      OperationName = "GetMe"
 	KeepImportedTransactionOperation    OperationName = "KeepImportedTransaction"
+	ListAccountMonthsOperation          OperationName = "ListAccountMonths"
 	ListAccountTransactionsOperation    OperationName = "ListAccountTransactions"
 	ListAccountsOperation               OperationName = "ListAccounts"
 	ListCategoriesOperation             OperationName = "ListCategories"
@@ -32,8 +35,10 @@ const (
 	ListStatementImportsOperation       OperationName = "ListStatementImports"
 	MarkNotificationReadOperation       OperationName = "MarkNotificationRead"
 	PreviewStatementImportOperation     OperationName = "PreviewStatementImport"
+	ReopenAccountMonthOperation         OperationName = "ReopenAccountMonth"
 	ReverseTransactionOperation         OperationName = "ReverseTransaction"
 	SaveCsvMappingOperation             OperationName = "SaveCsvMapping"
+	TestCsvMappingOperation             OperationName = "TestCsvMapping"
 	UploadStatementImportOperation      OperationName = "UploadStatementImport"
 	VoidStatementImportOperation        OperationName = "VoidStatementImport"
 )

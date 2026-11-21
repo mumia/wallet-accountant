@@ -9,8 +9,16 @@ type AddAccountRes interface {
 	addAccountRes()
 }
 
+type ChangeAccountRes interface {
+	changeAccountRes()
+}
+
 type ChangeCategoryRes interface {
 	changeCategoryRes()
+}
+
+type ChangeConnectionRes interface {
+	changeConnectionRes()
 }
 
 type ChangeTransactionRes interface {
@@ -61,6 +69,10 @@ type KeepImportedTransactionRes interface {
 	keepImportedTransactionRes()
 }
 
+type ListAccountMonthsRes interface {
+	listAccountMonthsRes()
+}
+
 type ListAccountTransactionsRes interface {
 	listAccountTransactionsRes()
 }
@@ -105,12 +117,20 @@ type PreviewStatementImportRes interface {
 	previewStatementImportRes()
 }
 
+type ReopenAccountMonthRes interface {
+	reopenAccountMonthRes()
+}
+
 type ReverseTransactionRes interface {
 	reverseTransactionRes()
 }
 
 type SaveCsvMappingRes interface {
 	saveCsvMappingRes()
+}
+
+type TestCsvMappingRes interface {
+	testCsvMappingRes()
 }
 
 type UploadStatementImportRes interface {

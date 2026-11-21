@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -272,7 +273,9 @@ var _ app.AccountReader = AccountReader{}
 func (AccountReader) Accounts(ctx context.Context, tx *eventstore.Tx) ([]app.Account, error) {
 	rows, err := tx.Query(ctx, `SELECT a.id, a.name, a.kind, a.currency, a.start_date, a.awaiting_first_statement_import,
 			(SELECT COALESCE(sum(m.net_change), 0)::text FROM account_months m
-			  WHERE m.household_id = a.household_id AND m.account_id = a.id)
+			  WHERE m.household_id = a.household_id AND m.account_id = a.id),
+			ARRAY(SELECT m.booking_month FROM account_months m
+			  WHERE m.household_id = a.household_id AND m.account_id = a.id AND m.closed_at IS NOT NULL)
 		FROM accounts a WHERE a.household_id = $1 ORDER BY a.id`, tx.HouseholdID())
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
@@ -282,11 +285,15 @@ func (AccountReader) Accounts(ctx context.Context, tx *eventstore.Tx) ([]app.Acc
 		var (
 			a       app.Account
 			balance string
+			closed  []string
 		)
 
-		if err := r.Scan(&a.ID, &a.Name, &a.Kind, &a.Currency, &a.StartDate, &a.AwaitingFirstStatementImport, &balance); err != nil {
+		if err := r.Scan(&a.ID, &a.Name, &a.Kind, &a.Currency, &a.StartDate, &a.AwaitingFirstStatementImport, &balance,
+			&closed); err != nil {
 			return a, err //nolint:wrapcheck // wrapped below
 		}
+
+		a.OpenMonth = domain.FirstOpenMonth(a.StartDate, func(month string) bool { return slices.Contains(closed, month) })
 
 		if !a.AwaitingFirstStatementImport {
 			d, err := sharedkernel.ParseDecimal(balance)

@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel/decider"
@@ -31,6 +33,9 @@ var (
 	// ErrUnknownConnectionKind is returned for a kind that is not a
 	// Connection kind.
 	ErrUnknownConnectionKind = errors.New("unknown connection kind")
+	// ErrConnectionNameInvalid is returned for a Connection name that is
+	// blank or longer than ConnectionNameMaxLength once trimmed.
+	ErrConnectionNameInvalid = errors.New("connection name must be 1 to 100 characters")
 	// ErrBankFeedsNotSupported is returned for creating a live bank feed.
 	ErrBankFeedsNotSupported = errors.New("bank feed connections are not supported yet")
 )
@@ -41,6 +46,7 @@ var (
 type ConnectionState struct {
 	Created        bool
 	AccountID      sharedkernel.ID
+	Name           string
 	Kind           ConnectionKind
 	CSVMapping     *CSVMapping
 	MappingVersion int
@@ -54,6 +60,7 @@ type (
 	// optionally with the CSV mapping of its statement files.
 	CreateConnection struct {
 		AccountID  sharedkernel.ID
+		Name       string
 		Kind       ConnectionKind
 		CSVMapping *CSVMapping
 	}
@@ -74,6 +81,7 @@ type (
 	// ConnectionCreated is recorded when a Connection is created.
 	ConnectionCreated struct {
 		AccountID sharedkernel.ID `json:"accountid"`
+		Name      string          `json:"name"`
 		Kind      ConnectionKind  `json:"kind"`
 	}
 
@@ -118,6 +126,11 @@ func createConnection(s ConnectionState, c CreateConnection) ([]ConnectionEvent,
 		return nil, ErrConnectionAccountRequired
 	}
 
+	name, err := connectionName(c.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	switch c.Kind {
 	case ConnectionKindStatementFileImport:
 	case connectionKindBankFeed:
@@ -126,7 +139,7 @@ func createConnection(s ConnectionState, c CreateConnection) ([]ConnectionEvent,
 		return nil, fmt.Errorf("%w: %q", ErrUnknownConnectionKind, c.Kind)
 	}
 
-	events := []ConnectionEvent{ConnectionCreated{AccountID: c.AccountID, Kind: c.Kind}}
+	events := []ConnectionEvent{ConnectionCreated{AccountID: c.AccountID, Name: name, Kind: c.Kind}}
 
 	if c.CSVMapping != nil {
 		saved, err := saveMapping(s, *c.CSVMapping)
@@ -140,6 +153,20 @@ func createConnection(s ConnectionState, c CreateConnection) ([]ConnectionEvent,
 	return events, nil
 }
 
+// ConnectionNameMaxLength is the longest Connection name, in characters.
+const ConnectionNameMaxLength = 100
+
+// connectionName is a Connection name trimmed, refused when blank or too
+// long. Uniqueness within the Account is the fold store's.
+func connectionName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > ConnectionNameMaxLength {
+		return "", ErrConnectionNameInvalid
+	}
+
+	return name, nil
+}
+
 func saveMapping(s ConnectionState, m CSVMapping) ([]ConnectionEvent, error) {
 	if err := m.Validate(); err != nil {
 		return nil, err
@@ -151,7 +178,7 @@ func saveMapping(s ConnectionState, m CSVMapping) ([]ConnectionEvent, error) {
 func evolveConnection(s ConnectionState, e decider.Envelope[ConnectionEvent]) ConnectionState {
 	switch ev := e.Event.(type) {
 	case ConnectionCreated:
-		s.Created, s.AccountID, s.Kind = true, ev.AccountID, ev.Kind
+		s.Created, s.AccountID, s.Name, s.Kind = true, ev.AccountID, ev.Name, ev.Kind
 	case CSVMappingSaved:
 		m := ev.CSVMapping
 		s.CSVMapping, s.MappingVersion = &m, ev.MappingVersion

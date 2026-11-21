@@ -15,44 +15,6 @@ import (
 	"github.com/ogen-go/ogen/validate"
 )
 
-// Encode encodes AcceptImportedTransactionConflict as json.
-func (s *AcceptImportedTransactionConflict) Encode(e *jx.Encoder) {
-	unwrapped := (*Problem)(s)
-
-	unwrapped.Encode(e)
-}
-
-// Decode decodes AcceptImportedTransactionConflict from json.
-func (s *AcceptImportedTransactionConflict) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode AcceptImportedTransactionConflict to nil")
-	}
-	var unwrapped Problem
-	if err := func() error {
-		if err := unwrapped.Decode(d); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "alias")
-	}
-	*s = AcceptImportedTransactionConflict(unwrapped)
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *AcceptImportedTransactionConflict) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *AcceptImportedTransactionConflict) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
 // Encode encodes AcceptImportedTransactionNotFound as json.
 func (s *AcceptImportedTransactionNotFound) Encode(e *jx.Encoder) {
 	unwrapped := (*Problem)(s)
@@ -206,9 +168,21 @@ func (s *Account) encodeFields(e *jx.Encoder) {
 			s.Balance.Encode(e)
 		}
 	}
+	{
+		e.FieldStart("open_month")
+		e.Str(s.OpenMonth)
+	}
+	{
+		e.FieldStart("pending")
+		e.Int32(s.Pending)
+	}
+	{
+		e.FieldStart("suspected_duplicates")
+		e.Int32(s.SuspectedDuplicates)
+	}
 }
 
-var jsonFieldsNameOfAccount = [7]string{
+var jsonFieldsNameOfAccount = [10]string{
 	0: "account_id",
 	1: "name",
 	2: "kind",
@@ -216,6 +190,9 @@ var jsonFieldsNameOfAccount = [7]string{
 	4: "start_date",
 	5: "awaiting_first_statement_import",
 	6: "balance",
+	7: "open_month",
+	8: "pending",
+	9: "suspected_duplicates",
 }
 
 // Decode decodes Account from json.
@@ -223,7 +200,7 @@ func (s *Account) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode Account to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -305,6 +282,42 @@ func (s *Account) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"balance\"")
 			}
+		case "open_month":
+			requiredBitSet[0] |= 1 << 7
+			if err := func() error {
+				v, err := d.Str()
+				s.OpenMonth = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"open_month\"")
+			}
+		case "pending":
+			requiredBitSet[1] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int32()
+				s.Pending = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"pending\"")
+			}
+		case "suspected_duplicates":
+			requiredBitSet[1] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int32()
+				s.SuspectedDuplicates = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"suspected_duplicates\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -314,8 +327,9 @@ func (s *Account) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
-		0b00111111,
+	for i, mask := range [2]uint8{
+		0b10111111,
+		0b00000011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -357,6 +371,102 @@ func (s *Account) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *Account) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *AccountChange) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *AccountChange) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("name")
+		e.Str(s.Name)
+	}
+}
+
+var jsonFieldsNameOfAccountChange = [1]string{
+	0: "name",
+}
+
+// Decode decodes AccountChange from json.
+func (s *AccountChange) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode AccountChange to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "name":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Str()
+				s.Name = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode AccountChange")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000001,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfAccountChange) {
+					name = jsonFieldsNameOfAccountChange[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *AccountChange) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *AccountChange) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -702,22 +812,31 @@ func (s *AccountMonth) encodeFields(e *jx.Encoder) {
 		e.Int32(s.Uncategorised)
 	}
 	{
-		e.FieldStart("flagged")
-		e.Bool(s.Flagged)
+		e.FieldStart("unchecked_statement_imports")
+		e.ArrStart()
+		for _, elem := range s.UncheckedStatementImports {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("reopen_blocked")
+		e.Bool(s.ReopenBlocked)
 	}
 }
 
-var jsonFieldsNameOfAccountMonth = [10]string{
-	0: "account_id",
-	1: "booking_month",
-	2: "state",
-	3: "statement_balance",
-	4: "closed_at",
-	5: "computed_balance",
-	6: "pending",
-	7: "suspected_duplicates",
-	8: "uncategorised",
-	9: "flagged",
+var jsonFieldsNameOfAccountMonth = [11]string{
+	0:  "account_id",
+	1:  "booking_month",
+	2:  "state",
+	3:  "statement_balance",
+	4:  "closed_at",
+	5:  "computed_balance",
+	6:  "pending",
+	7:  "suspected_duplicates",
+	8:  "uncategorised",
+	9:  "unchecked_statement_imports",
+	10: "reopen_blocked",
 }
 
 // Decode decodes AccountMonth from json.
@@ -831,17 +950,35 @@ func (s *AccountMonth) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"uncategorised\"")
 			}
-		case "flagged":
+		case "unchecked_statement_imports":
 			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
+				s.UncheckedStatementImports = make([]UncheckedStatementImport, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem UncheckedStatementImport
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.UncheckedStatementImports = append(s.UncheckedStatementImports, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"unchecked_statement_imports\"")
+			}
+		case "reopen_blocked":
+			requiredBitSet[1] |= 1 << 2
+			if err := func() error {
 				v, err := d.Bool()
-				s.Flagged = bool(v)
+				s.ReopenBlocked = bool(v)
 				if err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"flagged\"")
+				return errors.Wrap(err, "decode field \"reopen_blocked\"")
 			}
 		default:
 			return d.Skip()
@@ -854,7 +991,7 @@ func (s *AccountMonth) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11000111,
-		0b00000011,
+		0b00000111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -896,6 +1033,112 @@ func (s *AccountMonth) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *AccountMonth) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *AccountMonthList) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *AccountMonthList) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("items")
+		e.ArrStart()
+		for _, elem := range s.Items {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfAccountMonthList = [1]string{
+	0: "items",
+}
+
+// Decode decodes AccountMonthList from json.
+func (s *AccountMonthList) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode AccountMonthList to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "items":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				s.Items = make([]AccountMonth, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem AccountMonth
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Items = append(s.Items, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"items\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode AccountMonthList")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000001,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfAccountMonthList) {
+					name = jsonFieldsNameOfAccountMonthList[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *AccountMonthList) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *AccountMonthList) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -949,9 +1192,15 @@ func (s *AccountTransaction) encodeFields(e *jx.Encoder) {
 			s.ReversedByTransactionID.Encode(e)
 		}
 	}
+	{
+		if s.ImportedTransactionID.Set {
+			e.FieldStart("imported_transaction_id")
+			s.ImportedTransactionID.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfAccountTransaction = [9]string{
+var jsonFieldsNameOfAccountTransaction = [10]string{
 	0: "transaction_id",
 	1: "amount",
 	2: "booking_date",
@@ -961,6 +1210,7 @@ var jsonFieldsNameOfAccountTransaction = [9]string{
 	6: "category_name",
 	7: "reversal_of_transaction_id",
 	8: "reversed_by_transaction_id",
+	9: "imported_transaction_id",
 }
 
 // Decode decodes AccountTransaction from json.
@@ -1073,6 +1323,16 @@ func (s *AccountTransaction) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"reversed_by_transaction_id\"")
+			}
+		case "imported_transaction_id":
+			if err := func() error {
+				s.ImportedTransactionID.Reset()
+				if err := s.ImportedTransactionID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"imported_transaction_id\"")
 			}
 		default:
 			return d.Skip()
@@ -2006,6 +2266,120 @@ func (s *CategoryTree) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes ChangeAccountNotFound as json.
+func (s *ChangeAccountNotFound) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ChangeAccountNotFound from json.
+func (s *ChangeAccountNotFound) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ChangeAccountNotFound to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ChangeAccountNotFound(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ChangeAccountNotFound) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ChangeAccountNotFound) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ChangeAccountUnauthorized as json.
+func (s *ChangeAccountUnauthorized) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ChangeAccountUnauthorized from json.
+func (s *ChangeAccountUnauthorized) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ChangeAccountUnauthorized to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ChangeAccountUnauthorized(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ChangeAccountUnauthorized) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ChangeAccountUnauthorized) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ChangeAccountUnprocessableEntity as json.
+func (s *ChangeAccountUnprocessableEntity) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ChangeAccountUnprocessableEntity from json.
+func (s *ChangeAccountUnprocessableEntity) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ChangeAccountUnprocessableEntity to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ChangeAccountUnprocessableEntity(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ChangeAccountUnprocessableEntity) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ChangeAccountUnprocessableEntity) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes ChangeCategoryConflict as json.
 func (s *ChangeCategoryConflict) Encode(e *jx.Encoder) {
 	unwrapped := (*Problem)(s)
@@ -2154,6 +2528,120 @@ func (s *ChangeCategoryUnprocessableEntity) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *ChangeCategoryUnprocessableEntity) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ChangeConnectionNotFound as json.
+func (s *ChangeConnectionNotFound) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ChangeConnectionNotFound from json.
+func (s *ChangeConnectionNotFound) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ChangeConnectionNotFound to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ChangeConnectionNotFound(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ChangeConnectionNotFound) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ChangeConnectionNotFound) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ChangeConnectionUnauthorized as json.
+func (s *ChangeConnectionUnauthorized) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ChangeConnectionUnauthorized from json.
+func (s *ChangeConnectionUnauthorized) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ChangeConnectionUnauthorized to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ChangeConnectionUnauthorized(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ChangeConnectionUnauthorized) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ChangeConnectionUnauthorized) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ChangeConnectionUnprocessableEntity as json.
+func (s *ChangeConnectionUnprocessableEntity) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ChangeConnectionUnprocessableEntity from json.
+func (s *ChangeConnectionUnprocessableEntity) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ChangeConnectionUnprocessableEntity to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ChangeConnectionUnprocessableEntity(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ChangeConnectionUnprocessableEntity) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ChangeConnectionUnprocessableEntity) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -2348,44 +2836,6 @@ func (s *CloseAccountMonthBadRequest) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
-// Encode encodes CloseAccountMonthConflict as json.
-func (s *CloseAccountMonthConflict) Encode(e *jx.Encoder) {
-	unwrapped := (*Problem)(s)
-
-	unwrapped.Encode(e)
-}
-
-// Decode decodes CloseAccountMonthConflict from json.
-func (s *CloseAccountMonthConflict) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode CloseAccountMonthConflict to nil")
-	}
-	var unwrapped Problem
-	if err := func() error {
-		if err := unwrapped.Decode(d); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "alias")
-	}
-	*s = CloseAccountMonthConflict(unwrapped)
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *CloseAccountMonthConflict) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *CloseAccountMonthConflict) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
 // Encode encodes CloseAccountMonthNotFound as json.
 func (s *CloseAccountMonthNotFound) Encode(e *jx.Encoder) {
 	unwrapped := (*Problem)(s)
@@ -2476,6 +2926,10 @@ func (s *Connection) encodeFields(e *jx.Encoder) {
 		json.EncodeUUID(e, s.ConnectionID)
 	}
 	{
+		e.FieldStart("name")
+		s.Name.Encode(e)
+	}
+	{
 		e.FieldStart("account_id")
 		json.EncodeUUID(e, s.AccountID)
 	}
@@ -2497,12 +2951,13 @@ func (s *Connection) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfConnection = [5]string{
+var jsonFieldsNameOfConnection = [6]string{
 	0: "connection_id",
-	1: "account_id",
-	2: "kind",
-	3: "csv_mapping",
-	4: "csv_mapping_version",
+	1: "name",
+	2: "account_id",
+	3: "kind",
+	4: "csv_mapping",
+	5: "csv_mapping_version",
 }
 
 // Decode decodes Connection from json.
@@ -2526,8 +2981,18 @@ func (s *Connection) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"connection_id\"")
 			}
-		case "account_id":
+		case "name":
 			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				if err := s.Name.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		case "account_id":
+			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
 				v, err := json.DecodeUUID(d)
 				s.AccountID = v
@@ -2539,7 +3004,7 @@ func (s *Connection) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"account_id\"")
 			}
 		case "kind":
-			requiredBitSet[0] |= 1 << 2
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				if err := s.Kind.Decode(d); err != nil {
 					return err
@@ -2578,7 +3043,7 @@ func (s *Connection) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000111,
+		0b00001111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2625,6 +3090,100 @@ func (s *Connection) UnmarshalJSON(data []byte) error {
 }
 
 // Encode implements json.Marshaler.
+func (s *ConnectionChange) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *ConnectionChange) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("name")
+		s.Name.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfConnectionChange = [1]string{
+	0: "name",
+}
+
+// Decode decodes ConnectionChange from json.
+func (s *ConnectionChange) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ConnectionChange to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "name":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Name.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode ConnectionChange")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000001,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfConnectionChange) {
+					name = jsonFieldsNameOfConnectionChange[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ConnectionChange) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ConnectionChange) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
 func (s *ConnectionCreation) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
@@ -2633,6 +3192,10 @@ func (s *ConnectionCreation) Encode(e *jx.Encoder) {
 
 // encodeFields encodes fields.
 func (s *ConnectionCreation) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("name")
+		s.Name.Encode(e)
+	}
 	{
 		e.FieldStart("kind")
 		s.Kind.Encode(e)
@@ -2645,9 +3208,10 @@ func (s *ConnectionCreation) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfConnectionCreation = [2]string{
-	0: "kind",
-	1: "csv_mapping",
+var jsonFieldsNameOfConnectionCreation = [3]string{
+	0: "name",
+	1: "kind",
+	2: "csv_mapping",
 }
 
 // Decode decodes ConnectionCreation from json.
@@ -2659,8 +3223,18 @@ func (s *ConnectionCreation) Decode(d *jx.Decoder) error {
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
-		case "kind":
+		case "name":
 			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Name.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		case "kind":
+			requiredBitSet[0] |= 1 << 1
 			if err := func() error {
 				if err := s.Kind.Decode(d); err != nil {
 					return err
@@ -2689,7 +3263,7 @@ func (s *ConnectionCreation) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000001,
+		0b00000011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2877,6 +3451,46 @@ func (s *ConnectionList) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *ConnectionList) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ConnectionName as json.
+func (s ConnectionName) Encode(e *jx.Encoder) {
+	unwrapped := string(s)
+
+	e.Str(unwrapped)
+}
+
+// Decode decodes ConnectionName from json.
+func (s *ConnectionName) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ConnectionName to nil")
+	}
+	var unwrapped string
+	if err := func() error {
+		v, err := d.Str()
+		unwrapped = string(v)
+		if err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ConnectionName(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s ConnectionName) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ConnectionName) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -3664,6 +4278,12 @@ func (s *CsvMapping) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *CsvMapping) encodeFields(e *jx.Encoder) {
 	{
+		if s.Encoding.Set {
+			e.FieldStart("encoding")
+			s.Encoding.Encode(e)
+		}
+	}
+	{
 		if s.Delimiter.Set {
 			e.FieldStart("delimiter")
 			s.Delimiter.Encode(e)
@@ -3719,16 +4339,17 @@ func (s *CsvMapping) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfCsvMapping = [9]string{
-	0: "delimiter",
-	1: "has_header_row",
-	2: "skip_leading_lines",
-	3: "date_format",
-	4: "decimal_separator",
-	5: "thousands_separator",
-	6: "amount_layout",
-	7: "positive_amount_means",
-	8: "columns",
+var jsonFieldsNameOfCsvMapping = [10]string{
+	0: "encoding",
+	1: "delimiter",
+	2: "has_header_row",
+	3: "skip_leading_lines",
+	4: "date_format",
+	5: "decimal_separator",
+	6: "thousands_separator",
+	7: "amount_layout",
+	8: "positive_amount_means",
+	9: "columns",
 }
 
 // Decode decodes CsvMapping from json.
@@ -3740,6 +4361,16 @@ func (s *CsvMapping) Decode(d *jx.Decoder) error {
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
+		case "encoding":
+			if err := func() error {
+				s.Encoding.Reset()
+				if err := s.Encoding.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"encoding\"")
+			}
 		case "delimiter":
 			if err := func() error {
 				s.Delimiter.Reset()
@@ -3850,6 +4481,156 @@ func (s *CsvMapping) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *CsvMapping) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *CsvMappingTest) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *CsvMappingTest) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("rows")
+		e.ArrStart()
+		for _, elem := range s.Rows {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("readable_row_count")
+		e.Int32(s.ReadableRowCount)
+	}
+	{
+		e.FieldStart("unreadable_rows")
+		e.ArrStart()
+		for _, elem := range s.UnreadableRows {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfCsvMappingTest = [3]string{
+	0: "rows",
+	1: "readable_row_count",
+	2: "unreadable_rows",
+}
+
+// Decode decodes CsvMappingTest from json.
+func (s *CsvMappingTest) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode CsvMappingTest to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "rows":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				s.Rows = make([]ParsedStatementRow, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem ParsedStatementRow
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Rows = append(s.Rows, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rows\"")
+			}
+		case "readable_row_count":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int32()
+				s.ReadableRowCount = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"readable_row_count\"")
+			}
+		case "unreadable_rows":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				s.UnreadableRows = make([]RowError, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem RowError
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.UnreadableRows = append(s.UnreadableRows, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"unreadable_rows\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode CsvMappingTest")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfCsvMappingTest) {
+					name = jsonFieldsNameOfCsvMappingTest[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *CsvMappingTest) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *CsvMappingTest) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -4107,44 +4888,6 @@ func (s *CurrencyList) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *CurrencyList) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes DiscardImportedTransactionConflict as json.
-func (s *DiscardImportedTransactionConflict) Encode(e *jx.Encoder) {
-	unwrapped := (*Problem)(s)
-
-	unwrapped.Encode(e)
-}
-
-// Decode decodes DiscardImportedTransactionConflict from json.
-func (s *DiscardImportedTransactionConflict) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode DiscardImportedTransactionConflict to nil")
-	}
-	var unwrapped Problem
-	if err := func() error {
-		if err := unwrapped.Decode(d); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "alias")
-	}
-	*s = DiscardImportedTransactionConflict(unwrapped)
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *DiscardImportedTransactionConflict) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *DiscardImportedTransactionConflict) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -5397,44 +6140,6 @@ func (s *ImportedTransactionPage) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
-// Encode encodes KeepImportedTransactionConflict as json.
-func (s *KeepImportedTransactionConflict) Encode(e *jx.Encoder) {
-	unwrapped := (*Problem)(s)
-
-	unwrapped.Encode(e)
-}
-
-// Decode decodes KeepImportedTransactionConflict from json.
-func (s *KeepImportedTransactionConflict) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode KeepImportedTransactionConflict to nil")
-	}
-	var unwrapped Problem
-	if err := func() error {
-		if err := unwrapped.Decode(d); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "alias")
-	}
-	*s = KeepImportedTransactionConflict(unwrapped)
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *KeepImportedTransactionConflict) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *KeepImportedTransactionConflict) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
 // Encode encodes KeepImportedTransactionNotFound as json.
 func (s *KeepImportedTransactionNotFound) Encode(e *jx.Encoder) {
 	unwrapped := (*Problem)(s)
@@ -5507,6 +6212,82 @@ func (s *KeepImportedTransactionUnauthorized) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *KeepImportedTransactionUnauthorized) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ListAccountMonthsNotFound as json.
+func (s *ListAccountMonthsNotFound) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ListAccountMonthsNotFound from json.
+func (s *ListAccountMonthsNotFound) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ListAccountMonthsNotFound to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ListAccountMonthsNotFound(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ListAccountMonthsNotFound) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ListAccountMonthsNotFound) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ListAccountMonthsUnauthorized as json.
+func (s *ListAccountMonthsUnauthorized) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ListAccountMonthsUnauthorized from json.
+func (s *ListAccountMonthsUnauthorized) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ListAccountMonthsUnauthorized to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ListAccountMonthsUnauthorized(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ListAccountMonthsUnauthorized) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ListAccountMonthsUnauthorized) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -6898,6 +7679,415 @@ func (s *MonthClosing) UnmarshalJSON(data []byte) error {
 }
 
 // Encode implements json.Marshaler.
+func (s *MonthProblem) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *MonthProblem) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("type")
+		e.Str(s.Type)
+	}
+	{
+		e.FieldStart("title")
+		e.Str(s.Title)
+	}
+	{
+		e.FieldStart("status")
+		e.Int32(s.Status)
+	}
+	{
+		if s.Detail.Set {
+			e.FieldStart("detail")
+			s.Detail.Encode(e)
+		}
+	}
+	{
+		if s.BookingMonth.Set {
+			e.FieldStart("booking_month")
+			s.BookingMonth.Encode(e)
+		}
+	}
+	{
+		if s.OpenMonth.Set {
+			e.FieldStart("open_month")
+			s.OpenMonth.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfMonthProblem = [6]string{
+	0: "type",
+	1: "title",
+	2: "status",
+	3: "detail",
+	4: "booking_month",
+	5: "open_month",
+}
+
+// Decode decodes MonthProblem from json.
+func (s *MonthProblem) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode MonthProblem to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "type":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Str()
+				s.Type = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"type\"")
+			}
+		case "title":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.Title = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"title\"")
+			}
+		case "status":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int32()
+				s.Status = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"status\"")
+			}
+		case "detail":
+			if err := func() error {
+				s.Detail.Reset()
+				if err := s.Detail.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"detail\"")
+			}
+		case "booking_month":
+			if err := func() error {
+				s.BookingMonth.Reset()
+				if err := s.BookingMonth.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"booking_month\"")
+			}
+		case "open_month":
+			if err := func() error {
+				s.OpenMonth.Reset()
+				if err := s.OpenMonth.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"open_month\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode MonthProblem")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfMonthProblem) {
+					name = jsonFieldsNameOfMonthProblem[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *MonthProblem) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *MonthProblem) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *MonthReopenProblem) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *MonthReopenProblem) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("type")
+		e.Str(s.Type)
+	}
+	{
+		e.FieldStart("title")
+		e.Str(s.Title)
+	}
+	{
+		e.FieldStart("status")
+		e.Int32(s.Status)
+	}
+	{
+		if s.Detail.Set {
+			e.FieldStart("detail")
+			s.Detail.Encode(e)
+		}
+	}
+	{
+		if s.Reasons != nil {
+			e.FieldStart("reasons")
+			e.ArrStart()
+			for _, elem := range s.Reasons {
+				e.Str(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.BookingMonth.Set {
+			e.FieldStart("booking_month")
+			s.BookingMonth.Encode(e)
+		}
+	}
+	{
+		if s.OpenMonth.Set {
+			e.FieldStart("open_month")
+			s.OpenMonth.Encode(e)
+		}
+	}
+	{
+		if s.Accepted.Set {
+			e.FieldStart("accepted")
+			s.Accepted.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfMonthReopenProblem = [8]string{
+	0: "type",
+	1: "title",
+	2: "status",
+	3: "detail",
+	4: "reasons",
+	5: "booking_month",
+	6: "open_month",
+	7: "accepted",
+}
+
+// Decode decodes MonthReopenProblem from json.
+func (s *MonthReopenProblem) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode MonthReopenProblem to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "type":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Str()
+				s.Type = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"type\"")
+			}
+		case "title":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.Title = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"title\"")
+			}
+		case "status":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int32()
+				s.Status = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"status\"")
+			}
+		case "detail":
+			if err := func() error {
+				s.Detail.Reset()
+				if err := s.Detail.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"detail\"")
+			}
+		case "reasons":
+			if err := func() error {
+				s.Reasons = make([]string, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem string
+					v, err := d.Str()
+					elem = string(v)
+					if err != nil {
+						return err
+					}
+					s.Reasons = append(s.Reasons, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"reasons\"")
+			}
+		case "booking_month":
+			if err := func() error {
+				s.BookingMonth.Reset()
+				if err := s.BookingMonth.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"booking_month\"")
+			}
+		case "open_month":
+			if err := func() error {
+				s.OpenMonth.Reset()
+				if err := s.OpenMonth.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"open_month\"")
+			}
+		case "accepted":
+			if err := func() error {
+				s.Accepted.Reset()
+				if err := s.Accepted.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"accepted\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode MonthReopenProblem")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfMonthReopenProblem) {
+					name = jsonFieldsNameOfMonthReopenProblem[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *MonthReopenProblem) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *MonthReopenProblem) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
 func (s *Notification) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
@@ -7677,6 +8867,219 @@ func (s *OptUUID) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode implements json.Marshaler.
+func (s *ParsedStatementRow) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *ParsedStatementRow) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("line")
+		e.Int32(s.Line)
+	}
+	{
+		e.FieldStart("booking_date")
+		json.EncodeDate(e, s.BookingDate)
+	}
+	{
+		e.FieldStart("transaction_date")
+		json.EncodeDate(e, s.TransactionDate)
+	}
+	{
+		if s.ValueDate.Set {
+			e.FieldStart("value_date")
+			s.ValueDate.Encode(e, json.EncodeDate)
+		}
+	}
+	{
+		e.FieldStart("description")
+		e.Str(s.Description)
+	}
+	{
+		if s.Payee.Set {
+			e.FieldStart("payee")
+			s.Payee.Encode(e)
+		}
+	}
+	{
+		if s.BankTransactionID.Set {
+			e.FieldStart("bank_transaction_id")
+			s.BankTransactionID.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("amount")
+		s.Amount.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfParsedStatementRow = [8]string{
+	0: "line",
+	1: "booking_date",
+	2: "transaction_date",
+	3: "value_date",
+	4: "description",
+	5: "payee",
+	6: "bank_transaction_id",
+	7: "amount",
+}
+
+// Decode decodes ParsedStatementRow from json.
+func (s *ParsedStatementRow) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ParsedStatementRow to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "line":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int32()
+				s.Line = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"line\"")
+			}
+		case "booking_date":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := json.DecodeDate(d)
+				s.BookingDate = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"booking_date\"")
+			}
+		case "transaction_date":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := json.DecodeDate(d)
+				s.TransactionDate = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"transaction_date\"")
+			}
+		case "value_date":
+			if err := func() error {
+				s.ValueDate.Reset()
+				if err := s.ValueDate.Decode(d, json.DecodeDate); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"value_date\"")
+			}
+		case "description":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				v, err := d.Str()
+				s.Description = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"description\"")
+			}
+		case "payee":
+			if err := func() error {
+				s.Payee.Reset()
+				if err := s.Payee.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"payee\"")
+			}
+		case "bank_transaction_id":
+			if err := func() error {
+				s.BankTransactionID.Reset()
+				if err := s.BankTransactionID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"bank_transaction_id\"")
+			}
+		case "amount":
+			requiredBitSet[0] |= 1 << 7
+			if err := func() error {
+				if err := s.Amount.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"amount\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode ParsedStatementRow")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b10010111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfParsedStatementRow) {
+					name = jsonFieldsNameOfParsedStatementRow[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ParsedStatementRow) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ParsedStatementRow) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes PreviewStatementImportNotFound as json.
 func (s *PreviewStatementImportNotFound) Encode(e *jx.Encoder) {
 	unwrapped := (*Problem)(s)
@@ -8013,6 +9416,120 @@ func (s *Registration) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes ReopenAccountMonthBadRequest as json.
+func (s *ReopenAccountMonthBadRequest) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ReopenAccountMonthBadRequest from json.
+func (s *ReopenAccountMonthBadRequest) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ReopenAccountMonthBadRequest to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ReopenAccountMonthBadRequest(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ReopenAccountMonthBadRequest) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ReopenAccountMonthBadRequest) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ReopenAccountMonthNotFound as json.
+func (s *ReopenAccountMonthNotFound) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ReopenAccountMonthNotFound from json.
+func (s *ReopenAccountMonthNotFound) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ReopenAccountMonthNotFound to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ReopenAccountMonthNotFound(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ReopenAccountMonthNotFound) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ReopenAccountMonthNotFound) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ReopenAccountMonthUnauthorized as json.
+func (s *ReopenAccountMonthUnauthorized) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes ReopenAccountMonthUnauthorized from json.
+func (s *ReopenAccountMonthUnauthorized) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ReopenAccountMonthUnauthorized to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = ReopenAccountMonthUnauthorized(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ReopenAccountMonthUnauthorized) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ReopenAccountMonthUnauthorized) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode implements json.Marshaler.
 func (s *ResembledImportedTransaction) Encode(e *jx.Encoder) {
 	e.ObjStart()
@@ -8205,44 +9722,6 @@ func (s *ResembledImportedTransaction) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *ResembledImportedTransaction) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes ReverseTransactionConflict as json.
-func (s *ReverseTransactionConflict) Encode(e *jx.Encoder) {
-	unwrapped := (*Problem)(s)
-
-	unwrapped.Encode(e)
-}
-
-// Decode decodes ReverseTransactionConflict from json.
-func (s *ReverseTransactionConflict) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode ReverseTransactionConflict to nil")
-	}
-	var unwrapped Problem
-	if err := func() error {
-		if err := unwrapped.Decode(d); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "alias")
-	}
-	*s = ReverseTransactionConflict(unwrapped)
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *ReverseTransactionConflict) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *ReverseTransactionConflict) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -8626,6 +10105,12 @@ func (s *StatementFileProblem) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.RowsInClosedMonthsNotInBooks.Set {
+			e.FieldStart("rows_in_closed_months_not_in_books")
+			s.RowsInClosedMonthsNotInBooks.Encode(e)
+		}
+	}
+	{
 		if s.ExpectedBalance.Set {
 			e.FieldStart("expected_balance")
 			s.ExpectedBalance.Encode(e)
@@ -8645,15 +10130,16 @@ func (s *StatementFileProblem) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfStatementFileProblem = [8]string{
+var jsonFieldsNameOfStatementFileProblem = [9]string{
 	0: "type",
 	1: "title",
 	2: "status",
 	3: "detail",
 	4: "rows",
-	5: "expected_balance",
-	6: "export_balance",
-	7: "difference",
+	5: "rows_in_closed_months_not_in_books",
+	6: "expected_balance",
+	7: "export_balance",
+	8: "difference",
 }
 
 // Decode decodes StatementFileProblem from json.
@@ -8661,7 +10147,7 @@ func (s *StatementFileProblem) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode StatementFileProblem to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -8728,6 +10214,16 @@ func (s *StatementFileProblem) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"rows\"")
 			}
+		case "rows_in_closed_months_not_in_books":
+			if err := func() error {
+				s.RowsInClosedMonthsNotInBooks.Reset()
+				if err := s.RowsInClosedMonthsNotInBooks.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rows_in_closed_months_not_in_books\"")
+			}
 		case "expected_balance":
 			if err := func() error {
 				s.ExpectedBalance.Reset()
@@ -8767,8 +10263,9 @@ func (s *StatementFileProblem) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b00000111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -8856,6 +10353,10 @@ func (s *StatementImport) encodeFields(e *jx.Encoder) {
 		e.Int32(s.RowsIgnoredBeforeStartDate)
 	}
 	{
+		e.FieldStart("rows_ignored_in_closed_months")
+		e.Int32(s.RowsIgnoredInClosedMonths)
+	}
+	{
 		e.FieldStart("rows_total")
 		s.RowsTotal.Encode(e)
 	}
@@ -8879,9 +10380,17 @@ func (s *StatementImport) encodeFields(e *jx.Encoder) {
 			s.VoidedAt.Encode(e, json.EncodeDateTime)
 		}
 	}
+	{
+		e.FieldStart("void_blocked_by")
+		e.ArrStart()
+		for _, elem := range s.VoidBlockedBy {
+			e.Str(elem)
+		}
+		e.ArrEnd()
+	}
 }
 
-var jsonFieldsNameOfStatementImport = [13]string{
+var jsonFieldsNameOfStatementImport = [15]string{
 	0:  "statement_import_id",
 	1:  "connection_id",
 	2:  "account_id",
@@ -8890,11 +10399,13 @@ var jsonFieldsNameOfStatementImport = [13]string{
 	5:  "rows_skipped_as_certain_repeats",
 	6:  "suspected_duplicates",
 	7:  "rows_ignored_before_start_date",
-	8:  "rows_total",
-	9:  "opening_balance",
-	10: "balance_check",
-	11: "imported_at",
-	12: "voided_at",
+	8:  "rows_ignored_in_closed_months",
+	9:  "rows_total",
+	10: "opening_balance",
+	11: "balance_check",
+	12: "imported_at",
+	13: "voided_at",
+	14: "void_blocked_by",
 }
 
 // Decode decodes StatementImport from json.
@@ -9000,8 +10511,20 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"rows_ignored_before_start_date\"")
 			}
-		case "rows_total":
+		case "rows_ignored_in_closed_months":
 			requiredBitSet[1] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int32()
+				s.RowsIgnoredInClosedMonths = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rows_ignored_in_closed_months\"")
+			}
+		case "rows_total":
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				if err := s.RowsTotal.Decode(d); err != nil {
 					return err
@@ -9021,7 +10544,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"opening_balance\"")
 			}
 		case "balance_check":
-			requiredBitSet[1] |= 1 << 2
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := d.Str()
 				s.BalanceCheck = string(v)
@@ -9033,7 +10556,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"balance_check\"")
 			}
 		case "imported_at":
-			requiredBitSet[1] |= 1 << 3
+			requiredBitSet[1] |= 1 << 4
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.ImportedAt = v
@@ -9054,6 +10577,26 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"voided_at\"")
 			}
+		case "void_blocked_by":
+			requiredBitSet[1] |= 1 << 6
+			if err := func() error {
+				s.VoidBlockedBy = make([]string, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem string
+					v, err := d.Str()
+					elem = string(v)
+					if err != nil {
+						return err
+					}
+					s.VoidBlockedBy = append(s.VoidBlockedBy, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"void_blocked_by\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -9065,7 +10608,7 @@ func (s *StatementImport) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11111111,
-		0b00001101,
+		0b01011011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -9415,19 +10958,24 @@ func (s *StatementImportPreview) encodeFields(e *jx.Encoder) {
 		e.Int32(s.RowsIgnoredBeforeStartDate)
 	}
 	{
+		e.FieldStart("rows_ignored_in_closed_months")
+		e.Int32(s.RowsIgnoredInClosedMonths)
+	}
+	{
 		e.FieldStart("rows_total")
 		s.RowsTotal.Encode(e)
 	}
 }
 
-var jsonFieldsNameOfStatementImportPreview = [7]string{
+var jsonFieldsNameOfStatementImportPreview = [8]string{
 	0: "preview_id",
 	1: "opening_balance",
 	2: "start_date",
 	3: "export_balance",
 	4: "row_count",
 	5: "rows_ignored_before_start_date",
-	6: "rows_total",
+	6: "rows_ignored_in_closed_months",
+	7: "rows_total",
 }
 
 // Decode decodes StatementImportPreview from json.
@@ -9507,8 +11055,20 @@ func (s *StatementImportPreview) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"rows_ignored_before_start_date\"")
 			}
-		case "rows_total":
+		case "rows_ignored_in_closed_months":
 			requiredBitSet[0] |= 1 << 6
+			if err := func() error {
+				v, err := d.Int32()
+				s.RowsIgnoredInClosedMonths = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rows_ignored_in_closed_months\"")
+			}
+		case "rows_total":
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				if err := s.RowsTotal.Decode(d); err != nil {
 					return err
@@ -9527,7 +11087,7 @@ func (s *StatementImportPreview) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b01111111,
+		0b11111111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -9569,6 +11129,120 @@ func (s *StatementImportPreview) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *StatementImportPreview) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes TestCsvMappingNotFound as json.
+func (s *TestCsvMappingNotFound) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes TestCsvMappingNotFound from json.
+func (s *TestCsvMappingNotFound) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode TestCsvMappingNotFound to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = TestCsvMappingNotFound(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *TestCsvMappingNotFound) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *TestCsvMappingNotFound) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes TestCsvMappingUnauthorized as json.
+func (s *TestCsvMappingUnauthorized) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes TestCsvMappingUnauthorized from json.
+func (s *TestCsvMappingUnauthorized) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode TestCsvMappingUnauthorized to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = TestCsvMappingUnauthorized(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *TestCsvMappingUnauthorized) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *TestCsvMappingUnauthorized) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes TestCsvMappingUnprocessableEntity as json.
+func (s *TestCsvMappingUnprocessableEntity) Encode(e *jx.Encoder) {
+	unwrapped := (*Problem)(s)
+
+	unwrapped.Encode(e)
+}
+
+// Decode decodes TestCsvMappingUnprocessableEntity from json.
+func (s *TestCsvMappingUnprocessableEntity) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode TestCsvMappingUnprocessableEntity to nil")
+	}
+	var unwrapped Problem
+	if err := func() error {
+		if err := unwrapped.Decode(d); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = TestCsvMappingUnprocessableEntity(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *TestCsvMappingUnprocessableEntity) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *TestCsvMappingUnprocessableEntity) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -10153,44 +11827,6 @@ func (s *UploadStatementImportUnauthorized) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *UploadStatementImportUnauthorized) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes VoidStatementImportConflict as json.
-func (s *VoidStatementImportConflict) Encode(e *jx.Encoder) {
-	unwrapped := (*Problem)(s)
-
-	unwrapped.Encode(e)
-}
-
-// Decode decodes VoidStatementImportConflict from json.
-func (s *VoidStatementImportConflict) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode VoidStatementImportConflict to nil")
-	}
-	var unwrapped Problem
-	if err := func() error {
-		if err := unwrapped.Decode(d); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "alias")
-	}
-	*s = VoidStatementImportConflict(unwrapped)
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *VoidStatementImportConflict) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *VoidStatementImportConflict) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

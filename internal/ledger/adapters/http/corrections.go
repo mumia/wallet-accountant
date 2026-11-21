@@ -94,7 +94,7 @@ func (h *TransactionHandler) ReverseTransaction(ctx context.Context, params oas.
 		case c.notFound:
 			return new(oas.ReverseTransactionNotFound(httpapi.NotFoundProblem())), nil
 		case c.problem.Status == http.StatusConflict:
-			return new(oas.ReverseTransactionConflict(c.problem)), nil
+			return &oas.MonthProblem{Type: c.problem.Type, Title: c.problem.Title, Status: c.problem.Status, Detail: c.problem.Detail}, nil
 		default:
 			return new(oas.ReverseTransactionUnprocessableEntity(c.problem)), nil
 		}

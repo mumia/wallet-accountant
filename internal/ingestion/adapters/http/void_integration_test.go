@@ -203,6 +203,10 @@ func TestVoidingTheFirstImportReopensTheOpeningBalance(t *testing.T) {
 	f.upload(t, "", otherStatement, "2454.90", "").AssertJSON(t, http.StatusCreated, &statementImport{})
 }
 
+// januaryBonus is a later file with one new January row: 510.50 + 1989.50
+// + 100.00 = 2600.00.
+const januaryBonus = "Date;Description;Amount\n20/01/2026;Bonus;100,00\n"
+
 // Voiding the first import while a later file is uploaded: either the
 // later import is recorded first, and the first is no longer the latest so
 // it can't be voided; or the void runs first, the Account awaits its first
@@ -326,7 +330,7 @@ func TestVoidIsIdempotentAndScopedToTheHousehold(t *testing.T) {
 	}
 
 	// Alice through another of her Connections.
-	other := alice.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()}).ConnectionID
+	other := alice.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()}).ConnectionID
 	app.Do(t, http.MethodPost, "/api/households/"+alice.household+"/connections/"+other+"/statement-imports/"+
 		first.StatementImportID+"/void", alice.token, nil).AssertProblem(t, http.StatusNotFound, "about:blank")
 	alice.void(t, "0198f0a0-0000-7000-8000-00000000dead").AssertProblem(t, http.StatusNotFound, "about:blank")

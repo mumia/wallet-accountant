@@ -26,5 +26,9 @@ docs: |-
   Statement import runs its waiting Balance check, recorded as passed
   or failed. An Imported transaction that isn't a Suspected duplicate
   gets 409 `/problems/imported-transaction-not-suspected-duplicate`.
+  One booked in a closed month gets 409 `/problems/month-closed`. A
+  Suspected duplicate booked in a month that isn't open yet can still
+  be kept, so its Statement import's Balance check never waits on a
+  month that can't open (ADR-0024).
 
   Operation `keepImportedTransaction`.

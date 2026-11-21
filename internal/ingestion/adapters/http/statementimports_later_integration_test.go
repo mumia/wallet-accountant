@@ -47,7 +47,7 @@ func newLaterImportFixture(t *testing.T, app *apitest.App, subject string) impor
 	t.Helper()
 
 	f := newImportFixture(t, app, subject)
-	f.connection = f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": withBankIDs()}).ConnectionID
+	f.connection = f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": withBankIDs()}).ConnectionID
 	f.confirm(t, firstWithIDs, "2500.00")
 
 	return f

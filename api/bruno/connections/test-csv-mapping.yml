@@ -1,0 +1,44 @@
+info:
+  name: Test an unsaved CSV mapping on a sample file
+  type: http
+  seq: 5
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/csv-mapping-tests'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: multipart-form
+    data:
+      - name: csv_mapping
+        type: text
+        value: '&{4 0    <nil> [0x3341eee30e0 0x3341eee3180 0x3341eee3360 0x3341eee3400 0x3341eee35e0 0x3341eee3680 0x3341eee3860 0x3341eee3900 0x3341eee3ae0 0x3341eee3b80 0x3341eee3d60 0x3341eee3e00 0x3341ef00140 0x3341ef001e0 0x3341ef003c0 0x3341ef00460 0x3341ef00640 0x3341ef006e0 0x3341ef78d20 0x3341ef78dc0]    0 0}'
+        description: How a bank lays out its statement CSV.
+      - name: file
+        type: file
+        value: []
+        description: The sample statement file, as the bank exported it; it isn't kept
+  auth: inherit
+docs: |-
+  Reads a sample statement file with an unsaved CSV mapping, exactly as
+  an upload would read it, and returns the first 10 readable rows, how
+  many rows are readable, and every unreadable line with its reason.
+  Amounts are read in the Account currency. Rows before the Account's
+  start date are shown too: this tests the mapping, not an import. It
+  records nothing and doesn't keep the sample. An invalid mapping gets
+  422 `/problems/invalid-csv-mapping`, whose detail lists every
+  problem, and a file with no rows at all 422
+  `/problems/empty-statement-file`.
+
+  Operation `testCsvMapping`.

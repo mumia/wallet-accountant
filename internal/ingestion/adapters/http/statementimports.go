@@ -149,7 +149,7 @@ func (h *StatementImportHandler) VoidStatementImport(ctx context.Context, params
 	voided, err := h.imports.Void(ctx, params.HouseholdID, params.ConnectionID, params.StatementImportID)
 
 	conflict := func(typ, title, detail string) (oas.VoidStatementImportRes, error) {
-		return new(oas.VoidStatementImportConflict(httpapi.Problem(http.StatusConflict, typ, title, detail))), nil
+		return httpapi.MonthConflict(typ, title, detail, "", ""), nil
 	}
 
 	switch {
@@ -391,6 +391,10 @@ var balanceChecksOut = map[domain.BalanceCheck]string{
 func statementImportResponse(i app.StatementImport) (*oas.StatementImport, error) {
 	s := i.State
 	out := &oas.StatementImport{
+		// Worked out from the Open month in ticket 06 of
+		// .scratch/ui-first-slice-backend; until then Void is offered and
+		// its 409s still refuse it.
+		VoidBlockedBy:               []string{},
 		StatementImportID:           i.ID,
 		ConnectionID:                s.ConnectionID,
 		AccountID:                   s.AccountID,

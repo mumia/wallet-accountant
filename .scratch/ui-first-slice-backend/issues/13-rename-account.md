@@ -8,6 +8,6 @@
 
 - [ ] `RenameAccount` → `AccountRenamed` (registered); trim; blank → 422 `invalid-account`; the same name records nothing
 - [ ] The Account lookup row's name updated
-- [ ] Decider test plus HTTP tests: rename, blank, 201 characters, the same name
+- [ ] Decider test plus HTTP tests: rename, a name of only spaces (422), 201 characters (400 from the schema), the same name
 
 ## Comments

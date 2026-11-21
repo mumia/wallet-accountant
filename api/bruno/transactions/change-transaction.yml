@@ -32,6 +32,8 @@ docs: |-
   `/problems/invalid-category`. A reversed Transaction gets 409
   `/problems/transaction-reversed`; a reversal gets 422
   `/problems/transaction-is-a-reversal`, and the Opening balance
-  Transaction 422 `/problems/opening-balance-transaction`.
+  Transaction 422 `/problems/opening-balance-transaction`. In a closed
+  month the Category can still change, but not to Uncategorised: that
+  gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024).
 
   Operation `changeTransaction`.

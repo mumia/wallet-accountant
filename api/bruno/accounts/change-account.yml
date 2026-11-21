@@ -1,0 +1,30 @@
+info:
+  name: Rename an Account
+  type: http
+  seq: 4
+http:
+  method: PATCH
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Main"
+      }
+  auth: inherit
+docs: |-
+  Renames the Account. Only its name can change; its kind, Account
+  currency and start date are fixed. A name of only spaces gets 422
+  `/problems/invalid-account`, and an empty or too long one 400. Names needn't be unique. The
+  same name again records nothing.
+
+  Operation `changeAccount`.

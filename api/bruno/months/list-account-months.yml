@@ -1,0 +1,30 @@
+info:
+  name: An Account's months
+  type: http
+  seq: 1
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/months'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+  auth: inherit
+docs: |-
+  Returns every Booking month of the Account, newest first and
+  unpaged, each as on `getAccountMonth`. The months run from the start
+  date's month to the later of the current calendar month (UTC) and
+  the latest Booking month holding a non-Discarded Imported
+  transaction. The Account has exactly one `OPEN` month; the months
+  before it are `CLOSED` and those after it `NOT_OPEN_YET` (ADR-0024).
+  It answers from the Account's creation: before its first Statement
+  import, the start date's month is `OPEN` and the rest are
+  `NOT_OPEN_YET`. It is always current: it is read in the request's own
+  transaction.
+
+  Operation `listAccountMonths`.

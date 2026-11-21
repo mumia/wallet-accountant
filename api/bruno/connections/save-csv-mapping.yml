@@ -1,7 +1,7 @@
 info:
   name: Save a Connection's CSV mapping
   type: http
-  seq: 3
+  seq: 4
 http:
   method: PUT
   url: '{{baseUrl}}/households/:household_id/accounts/:account_id/connections/:connection_id/csv-mapping'
@@ -22,6 +22,7 @@ http:
     type: json
     data: |-
       {
+        "encoding": "WINDOWS_1252",
         "delimiter": ";",
         "has_header_row": false,
         "skip_leading_lines": 0,
