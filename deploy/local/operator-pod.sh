@@ -3,7 +3,8 @@
 # one-off pod in a cluster: the chart's pod spec (operator-pod.yaml) with the
 # installed release's chart version and values, as the chart's README
 # ("Operator commands") describes. The pod's output goes only to this
-# terminal, and `--rm` deletes the pod and its log.
+# terminal, and the pod is deleted with its log, also when this script fails
+# or is interrupted.
 #
 # Usage: operator-pod.sh bootstrap|rebuild. Needs HELM, and either
 # - LOCAL_CLUSTER and LOCAL_REGISTRY_PORT: the local cluster, whose chart is
@@ -48,5 +49,35 @@ overrides=$("$HELM" template $release "$chart_repo" \
 overrides=$(echo "$overrides" | grep -v -e '^---$' -e '^# Source:')
 image=$(echo "$overrides" | jq -r '.spec.containers[0].image')
 
-exec kubectl --context "$ctx" -n $ns run "wallet-accountant-$mode" --rm -i --quiet --restart=Never \
-	--image="$image" --overrides="$overrides"
+pod=wallet-accountant-$mode
+k() { kubectl --context "$ctx" -n $ns "$@"; }
+if k get pod "$pod" >/dev/null 2>&1; then
+	echo "pod $pod already exists in namespace $ns of $ctx: another $mode is running, or one was interrupted (delete it with: kubectl --context $ctx -n $ns delete pod $pod)" >&2
+	exit 1
+fi
+# Not `kubectl run -i --rm`: attaching races a pod that exits quickly, and
+# can lose its output while still exiting 0. The pod runs detached, and its
+# log is read once it has finished.
+trap 'k delete pod "$pod" --ignore-not-found >/dev/null 2>&1 || true; rm -f "$values" "$errors"' EXIT
+trap 'exit 130' INT TERM
+k run "$pod" --restart=Never --image="$image" --overrides="$overrides" >/dev/null
+
+# Up to 10 minutes; an image that cannot be pulled fails at once.
+i=0
+while :; do
+	phase=$(k get pod "$pod" -o jsonpath='{.status.phase}') || phase=unknown
+	case $phase in Succeeded | Failed) break ;; esac
+	waiting=$(k get pod "$pod" -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}') || waiting=
+	case $waiting in ErrImagePull | ImagePullBackOff | InvalidImageName | CreateContainerConfigError | CreateContainerError)
+		echo "pod $pod cannot start: $waiting" >&2
+		k describe pod "$pod" | tail -n 15 >&2
+		exit 1
+		;;
+	esac
+	i=$((i + 1))
+	[ $i -lt 300 ] || { echo "pod $pod did not finish within 10 minutes (phase $phase)" >&2; exit 1; }
+	sleep 2
+done
+k logs "$pod"
+code=$(k get pod "$pod" -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}')
+exit "${code:-1}"

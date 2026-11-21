@@ -9,6 +9,7 @@
 #    machine user with the project's audience), and `/api/me` says it is the
 #    Instance administrator;
 # 4. the code reached no log, in any pod of the cluster (ADR-0017);
+#    then bootstrap is refused, now that the code is redeemed;
 # 5. `make local-browser-test`: sign-in, audience and sign-out in a browser;
 # 6. `make local-down`, whatever happened (SMOKE_KEEP=1 keeps the cluster).
 #
@@ -100,7 +101,7 @@ node="k3d-$LOCAL_CLUSTER-server-0"
 docker exec "$node" sh -c 'ls /var/log/pods | grep -q "^wallet-accountant_wallet-accountant-all-"' ||
 	fail "no log of the app's pod under /var/log/pods on $node"
 # The deleted bootstrap pod's own log goes when the kubelet cleans the pod up,
-# which can take a while after `--rm`: wait for that one (up to 2 minutes);
+# which can take a while after it is deleted: wait for that one (up to 2 minutes);
 # the code in any other log fails at once.
 for i in $(seq 24); do
 	status=0
@@ -110,6 +111,14 @@ for i in $(seq 24); do
 	sleep 5
 done
 [ "$status" = 1 ] || fail "the Invitation code is in these logs, or grep failed ($status): $found"
+
+step "make local-bootstrap again: refused once redeemed"
+# ADR-0017; it also shows a failed run's exit code reaches make. The output
+# is not printed: were it to succeed, it would hold a code.
+if make_local -s local-bootstrap >/dev/null 2>&1; then
+	fail "make local-bootstrap succeeded after the code was redeemed"
+fi
+! $KUBECTL -n $NS get pod wallet-accountant-bootstrap >/dev/null 2>&1 || fail "the refused bootstrap's pod was left behind"
 
 step "make local-browser-test"
 make_local local-browser-test
