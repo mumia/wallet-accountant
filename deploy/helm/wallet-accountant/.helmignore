@@ -1,0 +1,5 @@
+# The chart's tests (`make lint-chart`) are not part of the package.
+test/
+.DS_Store
+*.swp
+*~

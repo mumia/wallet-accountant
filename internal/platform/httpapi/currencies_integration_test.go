@@ -14,7 +14,7 @@ func TestListCurrenciesWithoutTokenIsUnauthorized(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	res := app.Get(t, "/currencies", "")
+	res := app.Get(t, "/api/currencies", "")
 
 	res.AssertProblem(t, http.StatusUnauthorized, "about:blank")
 }
@@ -25,7 +25,7 @@ func TestListCurrenciesForAnUnregisteredIdentity(t *testing.T) {
 	app := apitest.Start(t)
 	token := app.TokenFor("https://issuer.example", "subject-1")
 
-	res := app.Get(t, "/currencies", token)
+	res := app.Get(t, "/api/currencies", token)
 
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", res.Status, res.Body)

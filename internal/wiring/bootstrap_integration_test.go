@@ -44,11 +44,11 @@ func TestBootstrapAdmitsTheFirstInstanceAdministratorOnce(t *testing.T) {
 	owner := app.TokenFor("https://issuer.example", "owner")
 
 	// The rerun replaced the earlier code.
-	app.Post(t, "/registrations", owner, map[string]string{"invitation_code": first}).
+	app.Post(t, "/api/registrations", owner, map[string]string{"invitation_code": first}).
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-invitation")
 
 	var registered me
-	app.Post(t, "/registrations", owner, map[string]string{"invitation_code": second}).
+	app.Post(t, "/api/registrations", owner, map[string]string{"invitation_code": second}).
 		AssertJSON(t, http.StatusCreated, &registered)
 
 	if !registered.IsInstanceAdministrator {
@@ -56,7 +56,7 @@ func TestBootstrapAdmitsTheFirstInstanceAdministratorOnce(t *testing.T) {
 	}
 
 	var got me
-	app.Get(t, "/me", owner).AssertJSON(t, http.StatusOK, &got)
+	app.Get(t, "/api/me", owner).AssertJSON(t, http.StatusOK, &got)
 
 	if got != registered {
 		t.Errorf("GET /me = %+v, want %+v", got, registered)

@@ -44,7 +44,7 @@ func newSuspectedFixture(t *testing.T, app *apitest.App, subject string) suspect
 }
 
 func (f importFixture) importedPath(id, action string) string {
-	return "/households/" + f.household + "/imported-transactions/" + id + "/" + action
+	return "/api/households/" + f.household + "/imported-transactions/" + id + "/" + action
 }
 
 // suspected lists the Account's Suspected duplicates by description.
@@ -445,7 +445,7 @@ func TestAnotherHouseholdCantDecideSuspectedDuplicates(t *testing.T) {
 
 	for _, household := range []string{alice.household, bob.household} {
 		for _, action := range []string{"keep", "discard"} {
-			app.Do(t, http.MethodPost, "/households/"+household+"/imported-transactions/"+salary+"/"+action, bob.token, nil).
+			app.Do(t, http.MethodPost, "/api/households/"+household+"/imported-transactions/"+salary+"/"+action, bob.token, nil).
 				AssertProblem(t, http.StatusNotFound, "about:blank")
 		}
 	}

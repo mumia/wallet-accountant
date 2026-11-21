@@ -1,0 +1,9 @@
+{
+  "name": "wallet-accountant-stand-in-ui-e2e",
+  "private": true,
+  "description": "The stand-in UI's browser test (make local-browser-test). It runs only in the mcr.microsoft.com/playwright image, whose tag (PLAYWRIGHT_VERSION in the Makefile) must equal @playwright/test's version. oidc-client-ts is listed so that a version bump fails the test until site/vendor holds the same bundle (make stand-in-ui-vendor).",
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "oidc-client-ts": "3.5.0"
+  }
+}

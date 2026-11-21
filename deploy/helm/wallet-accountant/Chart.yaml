@@ -1,0 +1,12 @@
+apiVersion: v2
+name: wallet-accountant
+description: Wallet Accountant, a household money ledger, with its migrations, OpenTelemetry Collector, routes and an optional UI (ADR-0020).
+type: application
+# CI publishes the chart and the image together for every semver tag (ADR-0020).
+# Placeholders: the release tag v1.2.3 sets version 1.2.3 and appVersion v1.2.3,
+# the image tag (docs/architecture/conventions.md, "Releases").
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/mumia/wallet-accountant
+sources:
+  - https://github.com/mumia/wallet-accountant

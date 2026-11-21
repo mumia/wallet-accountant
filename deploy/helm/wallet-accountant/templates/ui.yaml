@@ -1,0 +1,98 @@
+{{- /*
+The UI slot (docs/architecture/ui-contract.md): a static image on port 8080
+with /healthz, and its runtime config.json mounted at ui.configPath from the
+oidc ConfigMap. The root filesystem is read-only, with an emptyDir on /tmp.
+With the Zitadel setup Job, that ConfigMap is the Job's, and the Job
+restarts this Deployment when config.json changes.
+*/ -}}
+{{- if .Values.ui.enabled }}
+{{- $name := include "wa.uiName" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+spec:
+  replicas: {{ .Values.ui.replicas }}
+  selector:
+    matchLabels:
+      {{- include "wa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ui
+  template:
+    metadata:
+      labels:
+        {{- include "wa.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ui
+      {{- if not .Values.oidc.zitadelSetup.enabled }}
+      annotations:
+        checksum/config: {{ include "wa.uiConfig" (list . .Values.oidc.clientIds.web) | sha256sum }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: ui
+          image: {{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}
+          imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- with .Values.ui.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ .Values.ui.configPath }}
+              subPath: config.json
+              readOnly: true
+            # The root filesystem is read-only; the server's pid and
+            # temporary files go here.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "wa.oidcConfigMap" . }}
+            items:
+              - key: config.json
+                path: config.json
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "wa.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+{{- end }}

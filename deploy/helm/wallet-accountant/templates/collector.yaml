@@ -1,0 +1,139 @@
+{{- /*
+The OpenTelemetry Collector the app exports to (ADR-0016). It receives OTLP
+and sends each signal to the exporters collector.pipelines names; by default
+nop, which discards everything so the app's exporter can stay on. Helm merges
+the exporters map with the default, so only exporters a pipeline uses are
+written. collector.grafanaStack.enabled replaces both with one OTLP exporter
+per signal, to Tempo, Prometheus and Loki.
+*/ -}}
+{{- if .Values.collector.enabled }}
+{{- $name := include "wa.collectorName" . }}
+{{- $pipelines := .Values.collector.pipelines }}
+{{- $configured := .Values.collector.exporters }}
+{{- with .Values.collector.grafanaStack }}
+{{- if .enabled }}
+{{- $pipelines = dict "traces" (list "otlphttp/tempo") "metrics" (list "otlphttp/prometheus") "logs" (list "otlphttp/loki") }}
+{{- $configured = dict
+  "otlphttp/tempo" (dict "endpoint" .endpoints.tempo)
+  "otlphttp/prometheus" (dict "endpoint" .endpoints.prometheus)
+  "otlphttp/loki" (dict "endpoint" .endpoints.loki) }}
+{{- end }}
+{{- end }}
+{{- $used := list }}
+{{- range $signal, $exporters := $pipelines }}
+{{- $used = concat $used $exporters }}
+{{- end }}
+{{- $exporters := dict }}
+{{- range $e := uniq $used }}
+{{- if not (hasKey $configured $e) }}
+{{- fail (printf "collector.pipelines names the exporter %s, which collector.exporters does not configure" $e) }}
+{{- end }}
+{{- $_ := set $exporters $e (index $configured $e | default dict) }}
+{{- end }}
+{{- $config := dict
+  "extensions" (dict "health_check" (dict "endpoint" "0.0.0.0:13133"))
+  "receivers" (dict "otlp" (dict "protocols" (dict
+    "grpc" (dict "endpoint" "0.0.0.0:4317")
+    "http" (dict "endpoint" "0.0.0.0:4318"))))
+  "processors" (dict "batch" dict)
+  "exporters" $exporters
+  "service" (dict "extensions" (list "health_check") "pipelines" dict) }}
+{{- range $signal, $exp := $pipelines }}
+{{- $_ := set $config.service.pipelines $signal (dict "receivers" (list "otlp") "processors" (list "batch") "exporters" $exp) }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+data:
+  config.yaml: |
+    {{- toYaml $config | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "wa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: collector
+  template:
+    metadata:
+      labels:
+        {{- include "wa.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: collector
+      annotations:
+        # Restart the collector when its configuration changes.
+        checksum/config: {{ toYaml $config | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "wa.podSecurityContext" (list . 10001) | nindent 8 }}
+      containers:
+        - name: collector
+          image: {{ .Values.collector.image.repository }}:{{ .Values.collector.image.tag }}
+          imagePullPolicy: {{ .Values.collector.image.pullPolicy }}
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- with .Values.collector.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "wa.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+{{- end }}

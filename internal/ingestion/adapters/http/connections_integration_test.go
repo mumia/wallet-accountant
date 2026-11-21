@@ -135,7 +135,7 @@ type fixture struct {
 }
 
 func (f fixture) connections() string {
-	return "/households/" + f.household + "/accounts/" + f.account + "/connections"
+	return "/api/households/" + f.household + "/accounts/" + f.account + "/connections"
 }
 
 func (f fixture) mappingOf(c connection) string {
@@ -169,7 +169,7 @@ func newFixture(t *testing.T, app *apitest.App, subject string) fixture {
 		HouseholdID string `json:"household_id"`
 	}
 
-	app.Post(t, "/households", token, map[string]string{"name": "Home", "base_currency": "EUR"}).
+	app.Post(t, "/api/households", token, map[string]string{"name": "Home", "base_currency": "EUR"}).
 		AssertJSON(t, http.StatusCreated, &household)
 
 	return fixture{app: app, token: token, household: household.HouseholdID, account: addAccount(t, app, token, household.HouseholdID)}
@@ -182,7 +182,7 @@ func addAccount(t *testing.T, app *apitest.App, token, household string) string 
 		AccountID string `json:"account_id"`
 	}
 
-	app.Post(t, "/households/"+household+"/accounts", token, map[string]string{
+	app.Post(t, "/api/households/"+household+"/accounts", token, map[string]string{
 		"name": "Main", "kind": "BANK_ACCOUNT", "currency": "EUR", "start_date": "2026-01-01",
 	}).AssertJSON(t, http.StatusCreated, &account)
 

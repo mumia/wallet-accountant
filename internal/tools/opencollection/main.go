@@ -487,17 +487,27 @@ change the contract, not the requests. See README.md in this directory for signi
 // so requests work without choosing an environment. An environment's
 // variables take precedence over them, to point the collection elsewhere.
 func variables(doc *document) []keyValue {
-	baseURL := "http://localhost:8080"
+	// A server URL relative to the origin (ADR-0021) is taken on the
+	// development app.
+	const devOrigin = "http://localhost:8080"
+
+	baseURL := devOrigin
 	if len(doc.Servers) > 0 {
 		baseURL = doc.Servers[0].URL
+		if strings.HasPrefix(baseURL, "/") {
+			baseURL = devOrigin + baseURL
+		}
 	}
 
 	vars := []keyValue{
-		{Name: "baseUrl", Value: baseURL, Description: "The API (make run)"},
-		{Name: "authUrl", Value: "http://localhost:8081", Description: "The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel from make dev-up)"},
+		{Name: "baseUrl", Value: baseURL, Description: "The API (make run, debug mode)"},
+		{
+			Name: "authUrl", Value: "https://auth.localhost:18443",
+			Description: "The OpenID Connect provider, WA_OIDC_ISSUER (Zitadel in the local cluster, make local-up)",
+		},
 		{
 			Name: "clientId", Value: "{{process.env.WA_OAUTH_CLIENT_ID}}",
-			Description: "The client ID of the Zitadel application api-clients; make dev-up writes it to .env",
+			Description: "The client ID of the Zitadel application api-clients; make local-deploy writes it to .env",
 		},
 	}
 

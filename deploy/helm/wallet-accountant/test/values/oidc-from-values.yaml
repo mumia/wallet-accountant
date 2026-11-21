@@ -1,0 +1,5 @@
+# Another OIDC provider: the client IDs come from values.
+oidc:
+  clientIds:
+    web: web-client-id
+    apiClients: api-clients-client-id

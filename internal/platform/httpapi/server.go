@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -15,7 +16,17 @@ import (
 	"github.com/mumia/wallet-accountant/internal/platform/telemetry"
 )
 
-// NewHandler returns the HTTP handler of the API: the ogen server for h,
+// PathPrefix starts every API path, so the UI can serve every other path on
+// the same origin (ADR-0021). It is the contract's servers URL.
+const PathPrefix = "/api"
+
+// HealthPath is answered 200 to GET and HEAD with no token, for the chart's
+// probes. It is outside PathPrefix, so not part of the API: the Gateway
+// routes only PathPrefix to the app, and only the kubelet asks it.
+const HealthPath = "/healthz"
+
+// NewHandler returns the HTTP handler of the API: the ogen server for h
+// under PathPrefix (any other path but HealthPath is a 404),
 // with bearer tokens checked by auth, every error as problem+json,
 // Idempotency-Key honoured on every POST (keys stored through pool, which
 // connects as wa_app), and a log record, a trace and metrics for every
@@ -24,6 +35,7 @@ func NewHandler(h oas.Handler, auth authn.Authenticator, pool *pgxpool.Pool, tel
 	errs := Errors{Logger: tel.Logger}
 
 	srv, err := oas.NewServer(h, security{auth: auth},
+		oas.WithPathPrefix(PathPrefix),
 		oas.WithErrorHandler(errs.HandleError),
 		oas.WithNotFound(errs.NotFound),
 		oas.WithMethodNotAllowed(errs.MethodNotAllowed),
@@ -36,14 +48,29 @@ func NewHandler(h oas.Handler, auth authn.Authenticator, pool *pgxpool.Pool, tel
 
 	idem := &idempotency{pool: pool, auth: auth, logger: tel.Logger, next: srv, abandonAfter: defaultAbandonAfter}
 
-	return otelhttp.NewHandler(logRequests(tel.Logger, idem), "http.server",
+	return healthz(otelhttp.NewHandler(logRequests(tel.Logger, idem), "http.server",
 		otelhttp.WithTracerProvider(tel.TracerProvider),
 		otelhttp.WithMeterProvider(tel.MeterProvider),
 		otelhttp.WithPropagators(tel.Propagator),
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 			return r.Method + " " + r.URL.Path
 		}),
-	), nil
+	)), nil
+}
+
+// healthz answers HealthPath ahead of next, so probes are neither logged
+// nor traced.
+func healthz(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == HealthPath && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = io.WriteString(w, "ok\n")
+
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 type security struct {

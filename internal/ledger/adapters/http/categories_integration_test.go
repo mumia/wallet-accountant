@@ -48,13 +48,13 @@ func createHousehold(t *testing.T, app *apitest.App, token, name string) string 
 	t.Helper()
 
 	var created household
-	app.Post(t, "/households", token, map[string]string{"name": name, "base_currency": "EUR"}).
+	app.Post(t, "/api/households", token, map[string]string{"name": name, "base_currency": "EUR"}).
 		AssertJSON(t, http.StatusCreated, &created)
 
 	return created.HouseholdID
 }
 
-func categoriesPath(household string) string { return "/households/" + household + "/categories" }
+func categoriesPath(household string) string { return "/api/households/" + household + "/categories" }
 
 func create(t *testing.T, app *apitest.App, token, household string, body map[string]any) category {
 	t.Helper()

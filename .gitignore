@@ -34,3 +34,6 @@ go.work.sum
 
 # Build output
 /bin/
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/

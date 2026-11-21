@@ -1,0 +1,62 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Keeps every pinned version current (ADR-0020): Go modules, GitHub Actions, the Dockerfile, the chart's images and the tools the Makefile pins. `make renovate-check` validates this file and dry-runs it.",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":semanticCommitsDisabled",
+    "schedule:weekly"
+  ],
+  "postUpdateOptions": ["gomodTidy"],
+  "ignorePaths": ["**/node_modules/**"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "A `# renovate: datasource=<d> depName=<name> [packageName=<p>] [versioning=<v>] [registryUrl=<u>]` comment pins the version on the next line: the value after its first `:=`, `=` or `:`.",
+      "managerFilePatterns": ["/(^|/)Makefile$/", "/\\.mk$/", "/\\.sh$/", "/\\.ya?ml$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+packageName=(?<packageName>\\S+))?(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+registryUrl=(?<registryUrl>\\S+))?[ \\t]*\\r?\\n[^\\n]*?(?::=|=|:)[ \\t]*[\"']?(?<currentValue>[^\\s\"'@]+)[\"']?(?:@(?<currentDigest>sha256:[a-f0-9]+))?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Go modules, minor and patch, in one PR",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "Go modules"
+    },
+    {
+      "description": "The Go toolchain: go.mod's go and toolchain lines and the Dockerfile's golang image together",
+      "matchPackageNames": ["go", "golang"],
+      "groupName": "Go toolchain"
+    },
+    {
+      "description": "GitHub Actions in one PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "The images the chart's values pin, in one PR",
+      "matchManagers": ["helm-values"],
+      "matchFileNames": ["deploy/helm/**"],
+      "groupName": "chart images"
+    },
+    {
+      "description": "The tools the Makefile pins, in one PR",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["Makefile"],
+      "groupName": "Makefile tools"
+    },
+    {
+      "description": "Playwright: the Makefile's image tag (PLAYWRIGHT_VERSION) and the stand-in UI test's @playwright/test must stay equal, so they move in one PR",
+      "matchPackageNames": ["mcr.microsoft.com/playwright", "@playwright/test"],
+      "groupName": "Playwright"
+    },
+    {
+      "description": "oidc-client-ts: the stand-in UI ships its browser bundle in site/vendor; the browser test fails until `make stand-in-ui-vendor` is run and committed in the same PR",
+      "matchPackageNames": ["oidc-client-ts"],
+      "prBodyNotes": ["Run `make stand-in-ui-vendor` and commit `deploy/helm/wallet-accountant/test/stand-in-ui/site/vendor` before merging."]
+    }
+  ]
+}

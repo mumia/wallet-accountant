@@ -1,0 +1,169 @@
+{{- /*
+oidc.zitadelSetup (ADR-0022): after every install and upgrade, a Job that
+creates or updates the Zitadel project, `api-clients` and `web`, sets
+15-minute access tokens, and writes the client IDs into the data of the oidc
+ConfigMap, which the chart owns (files/zitadel-setup.sh). Its ServiceAccount may write only that ConfigMap
+and restart only the UI Deployment.
+*/ -}}
+{{- if .Values.oidc.zitadelSetup.enabled }}
+{{- $name := printf "%s-zitadel-setup" (include "wa.fullname" .) }}
+{{- $setup := .Values.oidc.zitadelSetup }}
+{{- $origin := include "wa.origin" . }}
+{{- $redirects := prepend $setup.web.extraRedirectUris (printf "%s%s" $origin .Values.oidc.redirectPath) }}
+{{- $postLogout := prepend $setup.web.extraPostLogoutRedirectUris (printf "%s%s" $origin .Values.oidc.postLogoutRedirectPath) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zitadel-setup
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zitadel-setup
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ include "wa.oidcConfigMap" . }}]
+    verbs: [get, patch]
+  {{- if .Values.ui.enabled }}
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [{{ include "wa.uiName" . }}]
+    verbs: [get, patch]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zitadel-setup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zitadel-setup
+data:
+  zitadel-setup.sh: |
+    {{- .Files.Get "files/zitadel-setup.sh" | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zitadel-setup
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    # The last run stays for its logs until the next one.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ $setup.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "wa.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: zitadel-setup
+      annotations:
+        checksum/script: {{ .Files.Get "files/zitadel-setup.sh" | sha256sum }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: true
+      securityContext:
+        {{- include "wa.podSecurityContext" (list . 100) | nindent 8 }}
+      containers:
+        - name: zitadel-setup
+          image: {{ $setup.image.repository }}:{{ $setup.image.tag }}
+          imagePullPolicy: {{ $setup.image.pullPolicy }}
+          command: ["sh", "/scripts/zitadel-setup.sh"]
+          env:
+            - name: ZITADEL_URL
+              value: {{ $setup.url | default .Values.oidc.issuer | trimSuffix "/" | quote }}
+            - name: CONNECT_TO
+              value: {{ $setup.connectTo | quote }}
+            - name: ZITADEL_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $setup.patSecret.name }}
+                  key: {{ $setup.patSecret.key }}
+            - name: PROJECT_ID
+              value: {{ .Values.oidc.audience | quote }}
+            - name: ISSUER
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: WEB_REDIRECT_URIS
+              value: {{ join " " $redirects | quote }}
+            - name: WEB_POST_LOGOUT_REDIRECT_URIS
+              value: {{ join " " $postLogout | quote }}
+            - name: WEB_DEV_MODE
+              value: {{ $setup.web.devMode | quote }}
+            - name: API_CLIENTS_REDIRECT_URIS
+              value: {{ join " " $setup.apiClients.redirectUris | quote }}
+            - name: ACCESS_TOKEN_LIFETIME
+              value: {{ $setup.tokenLifetimes.accessToken | quote }}
+            - name: ID_TOKEN_LIFETIME
+              value: {{ $setup.tokenLifetimes.idToken | quote }}
+            - name: REFRESH_TOKEN_IDLE_EXPIRATION
+              value: {{ $setup.tokenLifetimes.refreshTokenIdle | quote }}
+            - name: REFRESH_TOKEN_EXPIRATION
+              value: {{ $setup.tokenLifetimes.refreshToken | quote }}
+            - name: UI_REDIRECT_PATH
+              value: {{ .Values.oidc.redirectPath | quote }}
+            - name: UI_POST_LOGOUT_REDIRECT_PATH
+              value: {{ .Values.oidc.postLogoutRedirectPath | quote }}
+            - name: OIDC_CONFIGMAP
+              value: {{ include "wa.oidcConfigMap" . }}
+            - name: UI_DEPLOYMENT
+              value: {{ ternary (include "wa.uiName" .) "" .Values.ui.enabled | quote }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: TMPDIR
+              value: /tmp
+            {{- if .Values.trust.caConfigMap.name }}
+            - name: CURL_CA_BUNDLE
+              value: /etc/ssl/extra-ca/ca.crt
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- with $setup.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- include "wa.caVolumeMounts" . | nindent 12 }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ $name }}
+        - name: tmp
+          emptyDir: {}
+        {{- include "wa.caVolumes" . | nindent 8 }}
+{{- end }}

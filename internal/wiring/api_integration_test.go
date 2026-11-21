@@ -16,16 +16,41 @@ func TestUnknownRouteIsProblemJSON(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	res := app.Get(t, "/no-such-route", "")
+	res := app.Get(t, "/api/no-such-route", "")
 
 	res.AssertProblem(t, http.StatusNotFound, "about:blank")
+}
+
+// The API lives under /api, so the UI can own every other path of the same
+// origin (ADR-0021). An API path without the prefix is not the API.
+func TestAPIPathWithoutTheAPIPrefixIsNotFound(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+
+	app.Get(t, "/me", "").AssertProblem(t, http.StatusNotFound, "about:blank")
+	app.Get(t, "/api/me", "").AssertProblem(t, http.StatusUnauthorized, "about:blank")
+}
+
+// The chart's probes ask /healthz, outside the API and without a token:
+// the Gateway never routes it to the app, only the kubelet asks it.
+func TestHealthzAnswersWithoutAToken(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+
+	if res := app.Get(t, "/healthz", ""); res.Status != http.StatusOK {
+		t.Errorf("GET /healthz = %d %s, want 200", res.Status, res.Body)
+	}
+
+	if res := app.Do(t, http.MethodPost, "/healthz", "", nil); res.Status == http.StatusOK {
+		t.Errorf("POST /healthz = 200, want only GET (and HEAD) answered")
+	}
 }
 
 func TestWrongMethodIsProblemJSONWithAllow(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	res := app.Do(t, http.MethodDelete, "/me", "", nil)
+	res := app.Do(t, http.MethodDelete, "/api/me", "", nil)
 
 	res.AssertProblem(t, http.StatusMethodNotAllowed, "about:blank")
 
@@ -38,7 +63,7 @@ func TestEveryRequestProducesALogRecordATraceAndMetrics(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	app.Get(t, "/me", "")
+	app.Get(t, "/api/me", "")
 
 	spans := app.Spans.GetSpans()
 	if len(spans) == 0 {
@@ -50,7 +75,7 @@ func TestEveryRequestProducesALogRecordATraceAndMetrics(t *testing.T) {
 	var logged bool
 
 	for _, rec := range app.Logs.Records(t) {
-		if rec["msg"] == "http request" && rec["trace_id"] == traceID && rec["url.path"] == "/me" {
+		if rec["msg"] == "http request" && rec["trace_id"] == traceID && rec["url.path"] == "/api/me" {
 			logged = true
 		}
 	}

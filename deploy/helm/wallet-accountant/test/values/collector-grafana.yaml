@@ -1,0 +1,13 @@
+# The collector forwarding to the Grafana stack, as in production (ADR-0016).
+collector:
+  exporters:
+    otlphttp/tempo:
+      endpoint: http://tempo.monitoring:4318
+    otlphttp/prometheus:
+      endpoint: http://prometheus.monitoring:9090/api/v1/otlp
+    otlphttp/loki:
+      endpoint: http://loki.monitoring:3100/otlp
+  pipelines:
+    traces: [otlphttp/tempo]
+    metrics: [otlphttp/prometheus]
+    logs: [otlphttp/loki]

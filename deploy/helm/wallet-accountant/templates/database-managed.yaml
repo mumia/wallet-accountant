@@ -1,0 +1,110 @@
+{{- /*
+database.mode: managed (ADR-0023): a single-tenant CloudNativePG Cluster
+with wa_owner, the role that owns the database and runs migrate (ADR-0014).
+The first migration creates
+wa_app and wa_event_store_reader, and migrate sets their passwords to those
+in the generated URLs.
+
+These objects are pre-install hooks so that they exist before the migrate
+hook on the first install. Helm therefore creates them once and leaves them
+on upgrade and uninstall: the database outlives the release (README.md,
+"Managed database"). The delete policy hook-failed stops Helm's default,
+before-hook-creation, from ever deleting them.
+*/ -}}
+{{- if eq .Values.database.mode "managed" }}
+{{- $cluster := include "wa.dbClusterName" . }}
+{{- $ownerSecretName := printf "%s-owner" $cluster }}
+{{- $urlsSecretName := include "wa.dbUrlsSecret" . }}
+{{- /* Keep the passwords of an existing install (a reinstall over kept objects). */}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $urlsSecretName }}
+{{- $passwords := dict }}
+{{- range $role := list "owner" "app" "reader" }}
+{{- $pw := "" }}
+{{- with $existing }}
+{{- with index .data (printf "%s-password" $role) }}
+{{- $pw = b64dec . }}
+{{- end }}
+{{- end }}
+{{- $_ := set $passwords $role (default (randAlphaNum 32) $pw) }}
+{{- end }}
+{{- $host := printf "%s-rw.%s.svc:5432" $cluster .Release.Namespace }}
+{{- $query := printf "sslmode=%s" .Values.database.managed.sslMode }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $ownerSecretName }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: hook-failed
+type: kubernetes.io/basic-auth
+stringData:
+  username: wa_owner
+  password: {{ $passwords.owner | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $urlsSecretName }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: hook-failed
+type: Opaque
+stringData:
+  owner-password: {{ $passwords.owner | quote }}
+  app-password: {{ $passwords.app | quote }}
+  reader-password: {{ $passwords.reader | quote }}
+  owner-url: {{ printf "postgres://wa_owner:%s@%s/wallet_accountant?%s" $passwords.owner $host $query | quote }}
+  app-url: {{ printf "postgres://wa_app:%s@%s/wallet_accountant?%s" $passwords.app $host $query | quote }}
+  reader-url: {{ printf "postgres://wa_event_store_reader:%s@%s/wallet_accountant?%s" $passwords.reader $host $query | quote }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $cluster }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: hook-failed
+spec:
+  instances: {{ .Values.database.managed.instances }}
+  {{- with .Values.database.managed.imageName }}
+  imageName: {{ . }}
+  {{- end }}
+  storage:
+    size: {{ .Values.database.managed.storage.size }}
+    {{- with .Values.database.managed.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  {{- with .Values.database.managed.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  bootstrap:
+    initdb:
+      database: wallet_accountant
+      owner: wa_owner
+      secret:
+        name: {{ $ownerSecretName }}
+  managed:
+    roles:
+      # The owner gets CREATEROLE to create wa_app and wa_event_store_reader,
+      # and BYPASSRLS (ADR-0014).
+      - name: wa_owner
+        ensure: present
+        login: true
+        createrole: true
+        bypassrls: true
+        passwordSecret:
+          name: {{ $ownerSecretName }}
+{{- end }}

@@ -1,0 +1,106 @@
+{{- /*
+The app's Deployments (ADR-0009, ADR-0020): one per run mode in
+app.runModes, by default a single `all`. `all` and `api` serve HTTP behind
+the Service; `worker` forwards events only.
+*/ -}}
+{{- range $mode := .Values.app.runModes }}
+{{- $serves := ne $mode "worker" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wa.fullname" $ }}-{{ $mode }}
+  labels:
+    {{- include "wa.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $mode }}
+spec:
+  replicas: {{ $.Values.app.replicas }}
+  selector:
+    matchLabels:
+      {{- include "wa.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $mode }}
+  template:
+    metadata:
+      labels:
+        {{- include "wa.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $mode }}
+        {{- if $serves }}
+        wallet-accountant/serves-http: "true"
+        {{- end }}
+      {{- with $.Values.app.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "wa.podSecurityContext" (list $ 65532) | nindent 8 }}
+      containers:
+        - name: app
+          image: {{ include "wa.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          args: [{{ $mode | quote }}]
+          env:
+            {{- include "wa.appEnv" $ | nindent 12 }}
+          {{- if $serves }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          {{- with $.Values.app.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.app.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          {{- with $.Values.app.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with (include "wa.caVolumeMounts" $) }}
+          volumeMounts:
+            {{- . | nindent 12 }}
+          {{- end }}
+      {{- with (include "wa.caVolumes" $) }}
+      volumes:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.app.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.app.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.app.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wa.fullname" . }}
+  labels:
+    {{- include "wa.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "wa.selectorLabels" . | nindent 4 }}
+    wallet-accountant/serves-http: "true"
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
