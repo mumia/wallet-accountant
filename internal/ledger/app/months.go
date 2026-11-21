@@ -35,6 +35,9 @@ var (
 	// ErrMonthCloseRefused is returned, as a *domain.MonthCloseRefusedError,
 	// for a month that can't close yet.
 	ErrMonthCloseRefused = domain.ErrMonthCloseRefused
+	// ErrMonthReopenRefused is returned, as a
+	// *domain.MonthReopenRefusedError, for a month that can't be reopened.
+	ErrMonthReopenRefused = domain.ErrMonthReopenRefused
 	// ErrAwaitingFirstStatementImport is returned for closing a month of an
 	// Account that has no Opening balance yet.
 	ErrAwaitingFirstStatementImport = domain.ErrAwaitingFirstStatementImport
@@ -171,6 +174,45 @@ func (m *Months) Close(ctx context.Context, household, account uuid.UUID, month 
 	return out, nil
 }
 
+// Reopen takes back the Account's latest Month close while its Open month
+// has no Accepted Transactions that aren't reversed: the month is the Open
+// month again, and the month after it is not open yet (ADR-0024). The
+// Account Decider refuses with every failed condition together, as a
+// *domain.MonthReopenRefusedError (consistency map: Reopen month).
+func (m *Months) Reopen(ctx context.Context, household, account uuid.UUID, month time.Time) (AccountMonth, error) {
+	var out AccountMonth
+
+	err := m.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		_, found, err := m.accounts.Folds.Load(ctx, tx, account)
+		if err != nil {
+			return fmt.Errorf("load account %s: %w", account, err)
+		}
+
+		if !found {
+			return ErrAccountNotFound
+		}
+
+		res, err := m.accounts.Execute(ctx, tx, account, domain.ReopenMonth{Month: month})
+		if err != nil {
+			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		imports, err := m.ingestion.MonthImports(ctx, tx, account, month)
+		if err != nil {
+			return err //nolint:wrapcheck // already wrapped by Ingestion
+		}
+
+		out = accountMonthOf(account, month, res.State, imports)
+
+		return nil
+	})
+	if err != nil {
+		return AccountMonth{}, fmt.Errorf("reopen month %s of account %s: %w", month.Format(domain.MonthLayout), account, err)
+	}
+
+	return out, nil
+}
+
 func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, imports domain.MonthImports) AccountMonth {
 	key := month.Format(domain.MonthLayout)
 
@@ -182,8 +224,7 @@ func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, i
 		SuspectedDuplicates: imports.SuspectedDuplicates,
 		Uncategorised:       s.Uncategorised[key],
 		UncheckedImports:    imports.UncheckedImports,
-		// Reopen isn't implemented yet (ticket 04), so it is always refused.
-		ReopenBlocked: true,
+		ReopenBlocked:       s.ReopenRefusal(key) != nil,
 	}
 
 	switch {

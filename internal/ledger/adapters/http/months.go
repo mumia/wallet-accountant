@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mumia/wallet-accountant/internal/ledger/app"
@@ -21,6 +22,7 @@ const (
 	MonthNotEndedType                       = "/problems/month-not-ended"
 	AccountAwaitingFirstStatementImportType = "/problems/account-awaiting-first-statement-import"
 	InvalidMonthCloseType                   = "/problems/invalid-month-close"
+	MonthReopenRefusedType                  = "/problems/month-reopen-refused"
 )
 
 // The reasons a Month close is refused, as the API names them.
@@ -30,6 +32,13 @@ const (
 	reasonUncategorised         = "UNCATEGORISED"
 	reasonBalanceCheckNotPassed = "BALANCE_CHECK_NOT_PASSED"
 	reasonBalanceMismatch       = "BALANCE_MISMATCH"
+)
+
+// The reasons a Reopen is refused, as the API names them.
+const (
+	reasonNotClosed                        = "NOT_CLOSED"
+	reasonNotLatestClosed                  = "NOT_LATEST_CLOSED"
+	reasonOpenMonthHasAcceptedTransactions = "OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS"
 )
 
 // MonthHandler implements the Month operations of oas.Handler.
@@ -123,6 +132,72 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 	}
 
 	return accountMonthOut(closed)
+}
+
+// ReopenAccountMonth implements reopenAccountMonth.
+func (h *MonthHandler) ReopenAccountMonth(ctx context.Context, params oas.ReopenAccountMonthParams,
+) (oas.ReopenAccountMonthRes, error) {
+	month, err := time.Parse(domain.MonthLayout, params.BookingMonth)
+	if err != nil {
+		return new(oas.ReopenAccountMonthBadRequest(httpapi.Problem(http.StatusBadRequest, "", "",
+			"The booking_month must be written YYYY-MM."))), nil
+	}
+
+	reopened, err := h.months.Reopen(ctx, params.HouseholdID, params.AccountID, month)
+
+	var refused *domain.MonthReopenRefusedError
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound):
+		return new(oas.ReopenAccountMonthNotFound(httpapi.NotFoundProblem())), nil
+	case errors.As(err, &refused):
+		return reopenRefusedProblem(refused), nil
+	case err != nil:
+		return nil, fmt.Errorf("reopen account month: %w", err)
+	}
+
+	return accountMonthOut(reopened)
+}
+
+// reopenRefusedProblem lists every reason the month can't be reopened,
+// with one sentence per reason in detail.
+func reopenRefusedProblem(e *domain.MonthReopenRefusedError) *oas.MonthReopenProblem {
+	month := httpapi.MonthWords(e.Month)
+
+	p := &oas.MonthReopenProblem{
+		Type: MonthReopenRefusedType, Title: "Month can't be reopened", Status: http.StatusConflict,
+		BookingMonth: oas.NewOptString(e.Month), OpenMonth: oas.NewOptString(e.OpenMonth),
+	}
+
+	var sentences []string
+
+	if e.NotClosed {
+		p.Reasons = append(p.Reasons, reasonNotClosed)
+		sentences = append(sentences, month+" isn't closed, so it can't be reopened.")
+	}
+
+	if e.NotLatestClosed {
+		p.Reasons = append(p.Reasons, reasonNotLatestClosed)
+		sentences = append(sentences, fmt.Sprintf("Only %s, the latest closed month, can be reopened.",
+			httpapi.MonthWords(e.LatestClosed)))
+	}
+
+	if e.Accepted > 0 {
+		p.Reasons = append(p.Reasons, reasonOpenMonthHasAcceptedTransactions)
+		p.Accepted = oas.NewOptInt32(int32(e.Accepted)) //nolint:gosec // a count of Transactions
+
+		transactions, them := "Accepted Transactions", "them"
+		if e.Accepted == 1 {
+			transactions, them = "Accepted Transaction", "it"
+		}
+
+		sentences = append(sentences, fmt.Sprintf("%s has %d %s. Reverse %s before reopening %s.",
+			httpapi.MonthWords(e.OpenMonth), e.Accepted, transactions, them, month))
+	}
+
+	p.Detail = oas.NewOptString(strings.Join(sentences, " "))
+
+	return p
 }
 
 // refusedProblem lists every reason the month can't close, each with its
