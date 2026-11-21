@@ -10,15 +10,20 @@ import (
 )
 
 var (
-	// ErrMonthAlreadyClosed is returned for closing a month a second time:
-	// its Statement balance isn't overwritten (spec story 64).
+	// ErrMonthAlreadyClosed is returned, as a *MonthError, for closing a
+	// month before the Open month: it is already closed, and its Statement
+	// balance isn't overwritten.
 	ErrMonthAlreadyClosed = errors.New("month already closed")
+	// ErrMonthNotOpenYet is returned, as a *MonthError, for closing a month
+	// after the Open month: months close one at a time, in order
+	// (ADR-0024).
+	ErrMonthNotOpenYet = errors.New("month not open yet")
+	// ErrMonthNotEnded is returned, as a *MonthError, for closing the Open
+	// month before it has ended, by the server's clock in UTC (ADR-0024).
+	ErrMonthNotEnded = errors.New("month not ended")
 	// ErrMonthBeforeStartDate is returned for closing a month before the
 	// Account's start date, where its history doesn't reach.
 	ErrMonthBeforeStartDate = errors.New("month is before the account's start date")
-	// ErrMonthNotStarted is returned for closing a month later than the
-	// month the close is given in: it has no Statement yet.
-	ErrMonthNotStarted = errors.New("month hasn't started yet")
 	// ErrMonthCloseRefused is returned, as a *MonthCloseRefusedError, for a
 	// month that can't close yet.
 	ErrMonthCloseRefused = errors.New("month close refused")
@@ -99,13 +104,27 @@ func (e *MonthCloseRefusedError) Error() string {
 
 func (e *MonthCloseRefusedError) Unwrap() error { return ErrMonthCloseRefused }
 
+// MonthError is a refusal about a Booking month (MonthLayout) that names
+// it and the Account's Open month, so the refusal can say which month to
+// close or reopen first. Err is the refusal itself.
+type MonthError struct {
+	Err       error
+	Month     string
+	OpenMonth string
+}
+
+func (e *MonthError) Error() string {
+	return fmt.Sprintf("%s: %s (the open month is %s)", e.Err, e.Month, e.OpenMonth)
+}
+
+func (e *MonthError) Unwrap() error { return e.Err }
+
 // MonthClose is a closed Booking month: the Statement balance it closed
-// with, when and by whom, and whether it changed after it closed.
+// with, and when and by whom.
 type MonthClose struct {
 	StatementBalance sharedkernel.Decimal
 	ClosedAt         time.Time
 	ClosedBy         sharedkernel.ID
-	Flagged          bool
 }
 
 // CloseMonth closes the Booking month Month (any day in it) with the
@@ -129,31 +148,13 @@ type MonthClosed struct {
 
 func (MonthClosed) isAccountEvent() {}
 
-// OpenMonth is the Account's one open Booking month (MonthLayout): the
-// first month from the start date's month that isn't closed (ADR-0024).
-// Until the fold holds it (ticket 02 of .scratch/ui-first-slice-backend),
-// it is derived from the Month closes.
-func (s AccountState) OpenMonth() string {
-	return FirstOpenMonth(s.StartDate, func(month string) bool {
-		_, closed := s.Closed[month]
+// NextMonth is the Booking month (MonthLayout) after month, December
+// rolling into January.
+func NextMonth(month string) string {
+	// Every month the fold holds was written with MonthLayout.
+	m, _ := time.Parse(MonthLayout, month)
 
-		return closed
-	})
-}
-
-// FirstOpenMonth is the first Booking month (MonthLayout) from the start
-// date's month that closed doesn't report as closed.
-func FirstOpenMonth(startDate time.Time, closed func(month string) bool) string {
-	month := time.Date(startDate.Year(), startDate.Month(), 1, 0, 0, 0, 0, time.UTC)
-
-	for {
-		key := month.Format(MonthLayout)
-		if !closed(key) {
-			return key
-		}
-
-		month = month.AddDate(0, 1, 0)
-	}
+	return m.AddDate(0, 1, 0).Format(MonthLayout)
 }
 
 // ClosingBalance is the computed balance at the end of the Booking month
@@ -170,8 +171,9 @@ func (s AccountState) ClosingBalance(month string) sharedkernel.Decimal {
 	return sum
 }
 
-// closeMonth checks every close condition and refuses with all of those
-// that fail together. There is never a balancing entry (ADR-0018).
+// closeMonth closes only the Open month, once it has ended (ADR-0024). It
+// checks every close condition and refuses with all of those that fail
+// together. There is never a balancing entry (ADR-0018).
 func closeMonth(s AccountState, c CloseMonth) ([]AccountEvent, error) {
 	month := c.Month.Format(MonthLayout)
 
@@ -182,12 +184,13 @@ func closeMonth(s AccountState, c CloseMonth) ([]AccountEvent, error) {
 		return nil, ErrAwaitingFirstStatementImport
 	case month < s.StartDate.Format(MonthLayout):
 		return nil, fmt.Errorf("%w: %s is before %s", ErrMonthBeforeStartDate, month, s.StartDate.Format(DateLayout))
-	case month > c.Today.Format(MonthLayout):
-		return nil, fmt.Errorf("%w: %s is after %s", ErrMonthNotStarted, month, c.Today.Format(DateLayout))
-	}
-
-	if _, closed := s.Closed[month]; closed {
-		return nil, fmt.Errorf("%w: %s", ErrMonthAlreadyClosed, month)
+	case month > s.OpenMonth:
+		return nil, &MonthError{Err: ErrMonthNotOpenYet, Month: month, OpenMonth: s.OpenMonth}
+	case month < s.OpenMonth:
+		return nil, &MonthError{Err: ErrMonthAlreadyClosed, Month: month, OpenMonth: s.OpenMonth}
+	case c.Today.UTC().Format(MonthLayout) <= month:
+		// Today is before the first day of the month after it.
+		return nil, &MonthError{Err: ErrMonthNotEnded, Month: month, OpenMonth: s.OpenMonth}
 	}
 
 	currency, err := sharedkernel.ParseCurrency(s.Currency)
@@ -231,64 +234,4 @@ func closed(closes map[string]MonthClose, month string, c MonthClose) map[string
 	out[month] = c
 
 	return out
-}
-
-// flagged returns closes with month flagged when it is closed: a change
-// after close is allowed but flagged (spec story 62). An open month is left
-// out, and closes is returned as is, so a fold never shares a changed map
-// with an earlier state.
-func flagged(closes map[string]MonthClose, month string) map[string]MonthClose {
-	c, ok := closes[month]
-	if !ok || c.Flagged {
-		return closes
-	}
-
-	c.Flagged = true
-
-	return closed(closes, month, c)
-}
-
-// flaggedFrom returns closes with every closed month from month on flagged:
-// a change that moves the balance of month moves the closing balance of
-// every later month too (ClosingBalance), so each of them is touched.
-func flaggedFrom(closes map[string]MonthClose, month string) map[string]MonthClose {
-	for m := range closes {
-		if m >= month {
-			closes = flagged(closes, m)
-		}
-	}
-
-	return closes
-}
-
-// FlagMonth flags the closed Booking month of Month (any day in it) for a
-// change that touched it without booking anything on the Account: voiding
-// a Statement import whose rows were in it (spec story 62).
-type FlagMonth struct {
-	Month time.Time
-}
-
-func (FlagMonth) isAccountCommand() {}
-
-// MonthFlagged is recorded when a closed Booking month (MonthLayout) is
-// flagged by a change that didn't book anything on the Account.
-type MonthFlagged struct {
-	Month string `json:"month"`
-}
-
-func (MonthFlagged) isAccountEvent() {}
-
-// flagMonth flags a closed month once; an open or already flagged month
-// records nothing.
-func flagMonth(s AccountState, c FlagMonth) ([]AccountEvent, error) {
-	if !s.Added {
-		return nil, ErrAccountNotAdded
-	}
-
-	month := c.Month.Format(MonthLayout)
-	if m, ok := s.Closed[month]; !ok || m.Flagged {
-		return nil, nil
-	}
-
-	return []AccountEvent{MonthFlagged{Month: month}}, nil
 }

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
-	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -88,6 +88,27 @@ func (f importFixture) refusedClose(t *testing.T, month, balance string) monthCl
 	res.AssertProblem(t, http.StatusUnprocessableEntity, "/problems/month-close-refused")
 
 	var p monthCloseProblem
+	if err := json.Unmarshal(res.Body, &p); err != nil {
+		t.Fatalf("problem = %s (%v)", res.Body, err)
+	}
+
+	return p
+}
+
+// monthProblem is a 409 about a month.
+type monthProblem struct {
+	apitest.ProblemBody
+	BookingMonth string `json:"booking_month"`
+	OpenMonth    string `json:"open_month"`
+}
+
+// monthConflict expects res to be a 409 of the problem type, and returns it.
+func monthConflict(t *testing.T, res *apitest.Response, problemType string) monthProblem {
+	t.Helper()
+
+	res.AssertProblem(t, http.StatusConflict, problemType)
+
+	var p monthProblem
 	if err := json.Unmarshal(res.Body, &p); err != nil {
 		t.Fatalf("problem = %s (%v)", res.Body, err)
 	}
@@ -214,13 +235,75 @@ func TestClosingAMonth(t *testing.T) {
 	f.assertBalance(t, "2510.50")
 
 	f.closeMonth(t, "2026-01", "2510.50").AssertProblem(t, http.StatusConflict, "/problems/month-already-closed")
-	f.closeMonth(t, "2026-01", "1.00").AssertProblem(t, http.StatusConflict, "/problems/month-already-closed")
+
+	p := monthConflict(t, f.closeMonth(t, "2026-01", "1.00"), "/problems/month-already-closed")
+	if p.BookingMonth != "2026-01" || p.OpenMonth != "2026-02" {
+		t.Errorf("problem = %+v, want January named and February open", p)
+	}
 
 	if got := f.month(t, "2026-01"); !reflect.DeepEqual(got, january) {
 		t.Errorf("january = %+v, want its Statement balance kept: %+v", got, january)
 	}
 
+	// Closing January opened February (spec story 2).
 	assertMonth(t, f.month(t, "2026-02"), "OPEN", 1, 0, 0)
+	assertMonth(t, f.month(t, "2026-03"), "NOT_OPEN_YET", 0, 0, 0)
+}
+
+// Months close one at a time, in order: February can't close while
+// January is open, and the refusal names January; once January closes,
+// February closes and March opens (spec stories 1, 2, 4).
+func TestMonthsCloseInOrder(t *testing.T) {
+	t.Parallel()
+	f := newAcceptFixture(t, apitest.Start(t), "alice")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary", "Coffee")
+
+	p := monthConflict(t, f.closeMonth(t, "2026-02", "2500.00"), "/problems/month-not-open-yet")
+	if p.Title != "Month not open yet" || p.Detail != "February 2026 isn't open yet. Close January 2026 first." ||
+		p.BookingMonth != "2026-02" || p.OpenMonth != "2026-01" {
+		t.Errorf("problem = %+v", p)
+	}
+
+	assertMonth(t, f.month(t, "2026-01"), "OPEN", 0, 0, 0)
+	assertMonth(t, f.month(t, "2026-02"), "NOT_OPEN_YET", 0, 0, 0)
+
+	f.closed(t, "2026-01", "2510.50")
+	assertMonth(t, f.closed(t, "2026-02", "2500.00"), "CLOSED", 0, 0, 0)
+	assertMonth(t, f.month(t, "2026-03"), "OPEN", 0, 0, 0)
+
+	var account struct {
+		OpenMonth string `json:"open_month"`
+	}
+	f.app.Get(t, f.accountPath(), f.token).AssertJSON(t, http.StatusOK, &account)
+
+	if account.OpenMonth != "2026-03" {
+		t.Errorf("account open month = %q, want 2026-03", account.OpenMonth)
+	}
+}
+
+// The Open month closes only once it has ended, from the first day of the
+// next month by the server's clock in UTC (spec story 3).
+func TestTheOpenMonthClosesOnlyOnceItHasEnded(t *testing.T) {
+	t.Parallel()
+
+	var now atomic.Pointer[time.Time]
+
+	set := func(d time.Time) { now.Store(&d) }
+	set(time.Date(2026, time.January, 31, 23, 59, 59, 0, time.UTC))
+
+	f := newAcceptFixture(t, apitest.Start(t, apitest.WithClock(func() time.Time { return *now.Load() })), "alice")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+
+	p := monthConflict(t, f.closeMonth(t, "2026-01", "2510.50"), "/problems/month-not-ended")
+	if p.Title != "Month not ended" || p.Detail != "January 2026 can be closed from 1 February 2026." ||
+		p.BookingMonth != "2026-01" || p.OpenMonth != "2026-01" {
+		t.Errorf("problem = %+v", p)
+	}
+
+	assertMonth(t, f.month(t, "2026-01"), "OPEN", 0, 0, 0)
+
+	set(time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC))
+	assertMonth(t, f.closed(t, "2026-01", "2510.50"), "CLOSED", 0, 0, 0)
 }
 
 // Each close condition on its own refuses the close, naming only itself
@@ -371,10 +454,11 @@ func TestAnImportWithRowsOnlyAfterTheMonthDoesntRefuseTheClose(t *testing.T) {
 
 	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary", "Coffee")
 
+	assertMonth(t, f.closed(t, "2026-01", "2510.50"), "CLOSED", 0, 0, 0)
+
+	// February, which the import has rows in, is stopped by it.
 	p := f.refusedClose(t, "2026-02", "2500.00")
 	assertReasons(t, p, "SUSPECTED_DUPLICATES", "BALANCE_CHECK_NOT_PASSED")
-
-	assertMonth(t, f.closed(t, "2026-01", "2510.50"), "CLOSED", 0, 0, 0)
 }
 
 // A voided import never stops a close, even with its check still waiting.
@@ -432,13 +516,9 @@ func TestClosingAMonthIsRefused(t *testing.T) {
 	f.closeMonth(t, "2025-12", "0.00").
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-month-close")
 
-	// A month that hasn't started yet has no Statement to close with.
+	// A month that hasn't started yet isn't open yet either.
 	next := time.Now().UTC().AddDate(0, 1, 0).Format("2006-01")
-	if p := f.closeMonth(t, next, "2500.00").
-		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-month-close"); !strings.Contains(p.Detail, "started") {
-		t.Errorf("detail = %q, want it to say the month hasn't started", p.Detail)
-	}
-
+	monthConflict(t, f.closeMonth(t, next, "2500.00"), "/problems/month-not-open-yet")
 	assertMonth(t, f.month(t, next), "NOT_OPEN_YET", 0, 0, 0)
 
 	f.closeMonth(t, "2026-13", "0.00").AssertProblem(t, http.StatusBadRequest, "about:blank")

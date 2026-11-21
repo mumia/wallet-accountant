@@ -76,6 +76,9 @@ type Options struct {
 	// Stdout replaces os.Stdout, where the bootstrap run mode prints the
 	// Invitation code.
 	Stdout io.Writer
+	// Now replaces time.Now as the clock the API's transactions read, such
+	// as whether a month has ended (ADR-0024).
+	Now func() time.Time
 }
 
 // Run runs the binary in mode until ctx is cancelled or the mode finishes.
@@ -118,7 +121,12 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 		auth = oidc.New(cfg.OIDCIssuer, cfg.OIDCAudience)
 	}
 
-	contexts := NewContexts(pool)
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+
+	contexts := NewContexts(pool, now)
 
 	handler, err := httpapi.NewHandler(apiHandler{
 		Handler:             householdshttp.NewHandler(contexts.Users, contexts.Households),

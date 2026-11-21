@@ -54,8 +54,18 @@ type App struct {
 	Metrics *sdkmetric.ManualReader
 }
 
+// Option changes how Start runs the application.
+type Option func(*wiring.Options)
+
+// WithClock makes now the clock the application's transactions read, such
+// as whether a month has ended, so a test sets the date instead of
+// depending on today's.
+func WithClock(now func() time.Time) Option {
+	return func(o *wiring.Options) { o.Now = now }
+}
+
 // Start runs the application for the duration of the test.
-func Start(t testing.TB) *App {
+func Start(t testing.TB, opts ...Option) *App {
 	t.Helper()
 
 	app := &App{
@@ -111,12 +121,17 @@ func Start(t testing.TB) *App {
 
 	done := make(chan error, 1)
 
+	runOpts := wiring.Options{
+		Authenticator: app.auth,
+		Listener:      ln,
+		PollInterval:  10 * time.Millisecond,
+	}
+	for _, o := range opts {
+		o(&runOpts)
+	}
+
 	go func() {
-		done <- wiring.Run(ctx, wiring.ModeAll, cfg, tel, wiring.Options{
-			Authenticator: app.auth,
-			Listener:      ln,
-			PollInterval:  10 * time.Millisecond,
-		})
+		done <- wiring.Run(ctx, wiring.ModeAll, cfg, tel, runOpts)
 	}()
 
 	t.Cleanup(func() {
