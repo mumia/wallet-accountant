@@ -347,7 +347,19 @@ test-integration: ## Run the integration tests against PostgreSQL through testco
 
 # Renovate (ADR-0020) keeps every pinned version current in this repo and the
 # env repo. Each list names, per manager, one dependency it must find, so a
-# config change that stops a manager from matching fails here.
+# config change that stops a manager from matching fails here; check.sh also
+# fails when one dependency's updates would land in several PRs.
+# Updates the env repo's Renovate must put in one PR (deploy/renovate/check.sh;
+# the env repo's README, "Renovate"): a chart with the images it renders, and
+# a version with the images.lock entries it decides.
+RENOVATE_ENV_TOGETHER := \
+	together:fluxcd/flux2,ghcr.io/fluxcd/source-controller,ghcr.io/fluxcd/kustomize-controller,ghcr.io/fluxcd/helm-controller,ghcr.io/fluxcd/notification-controller \
+	together:rancher/k3s,k3s-io/k3s \
+	together:quay.io/jetstack/charts/cert-manager,quay.io/jetstack/cert-manager-controller,quay.io/jetstack/cert-manager-cainjector,quay.io/jetstack/cert-manager-webhook,quay.io/jetstack/cert-manager-startupapicheck \
+	together:headlamp,ghcr.io/headlamp-k8s/headlamp \
+	together:cloudnative-pg,ghcr.io/cloudnative-pg/cloudnative-pg \
+	together:cert-manager-webhook-ovh,ghcr.io/aureq/cert-manager-webhook-ovh \
+	together:prometheus,loki,tempo,grafana,quay.io/prometheus/prometheus,quay.io/prometheus-operator/prometheus-config-reloader,docker.io/grafana/loki,docker.io/grafana/tempo,docker.io/grafana/grafana
 RENOVATE_EXPECT := \
 	gomod:go gomod:github.com/shopspring/decimal \
 	github-actions:actions/checkout github-actions:actions/setup-go \
@@ -372,7 +384,9 @@ RENOVATE_ENV_EXPECT := \
 	regex:mikefarah/yq regex:ghcr.io/yannh/kubeconform regex:binwiederhier/ntfy \
 	regex:k3s-io/k3s regex:tailscale/tailscale regex:fluxcd/flux2 regex:Deuxfleurs/garage \
 	terraform:flux terraform:http terraform:kubernetes terraform:onepassword terraform:ovh \
-	terraform:proxmox terraform:random terraform:tailscale terraform:tls
+	terraform:proxmox terraform:random terraform:tailscale terraform:tls \
+	flux:otel/opentelemetry-collector-contrib flux:curlimages/curl \
+	$(RENOVATE_ENV_TOGETHER)
 
 renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
 	deploy/renovate/check.sh . $(RENOVATE_EXPECT)
