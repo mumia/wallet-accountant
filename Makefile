@@ -93,7 +93,7 @@ export OTEL_EXPORTER_OTLP_PROTOCOL  ?= http/protobuf
 
 .PHONY: renovate-check
 .PHONY: local-ca local-up local-up-observability local-down local-build local-push local-deploy local-wait local-check local-headlamp-token
-.PHONY: local-bootstrap local-rebuild local-bruno-env local-prefetch images-lock-check images-lock-pin local-browser-test local-smoke stand-in-ui-vendor
+.PHONY: local-bootstrap local-rebuild local-bruno-env local-prefetch images-lock-check images-lock-pin flux-version local-browser-test local-smoke stand-in-ui-vendor
 .PHONY: prod-check prod-bootstrap prod-bruno-env
 .PHONY: help docker-build run run-api run-worker migrate rebuild dev-bootstrap generate lint lint-go lint-api lint-chart lint-workflows chart-package chart-push print-helm build test test-integration
 
@@ -245,8 +245,11 @@ IMAGESLOCK := go run ./deploy/local/imageslock
 # Dockerfiles whose base images images.lock must list (the Mac's Docker builds from them).
 LOCK_DOCKERFILES := Dockerfile $(STAND_IN_UI)/Dockerfile
 
-images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts, Flux, k3d, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock
+images-lock-check: $(HELM) ## Fail when what clusters/local renders to (manifests, charts with the env repo's values, Flux, k3d, Dockerfiles) uses an image or chart missing from ENV_REPO's images.lock, or the flux CLI is not flux-version
 	$(IMAGESLOCK) check -env "$(ENV_REPO)" -helm $(HELM) -chart $(CHART) $(foreach f,$(LOCK_DOCKERFILES),-dockerfile $(f))
+
+flux-version: ## Print the Flux release ENV_REPO pins (infra/homelab's flux_version): the flux CLI every check, CI and the local cluster use
+	@$(IMAGESLOCK) flux-version -env "$(ENV_REPO)"
 
 images-lock-pin: ## Add the digest to every image in ENV_REPO's images.lock that has none (online)
 	$(IMAGESLOCK) pin -lock "$(ENV_REPO)/images.lock"
@@ -344,7 +347,19 @@ test-integration: ## Run the integration tests against PostgreSQL through testco
 
 # Renovate (ADR-0020) keeps every pinned version current in this repo and the
 # env repo. Each list names, per manager, one dependency it must find, so a
-# config change that stops a manager from matching fails here.
+# config change that stops a manager from matching fails here; check.sh also
+# fails when one dependency's updates would land in several PRs.
+# Updates the env repo's Renovate must put in one PR (deploy/renovate/check.sh;
+# the env repo's README, "Renovate"): a chart with the images it renders, and
+# a version with the images.lock entries it decides.
+RENOVATE_ENV_TOGETHER := \
+	together:fluxcd/flux2,ghcr.io/fluxcd/source-controller,ghcr.io/fluxcd/kustomize-controller,ghcr.io/fluxcd/helm-controller,ghcr.io/fluxcd/notification-controller \
+	together:rancher/k3s,k3s-io/k3s \
+	together:quay.io/jetstack/charts/cert-manager,quay.io/jetstack/cert-manager-controller,quay.io/jetstack/cert-manager-cainjector,quay.io/jetstack/cert-manager-webhook,quay.io/jetstack/cert-manager-startupapicheck \
+	together:headlamp,ghcr.io/headlamp-k8s/headlamp \
+	together:cloudnative-pg,ghcr.io/cloudnative-pg/cloudnative-pg \
+	together:cert-manager-webhook-ovh,ghcr.io/aureq/cert-manager-webhook-ovh \
+	together:prometheus,loki,tempo,grafana,quay.io/prometheus/prometheus,quay.io/prometheus-operator/prometheus-config-reloader,docker.io/grafana/loki,docker.io/grafana/tempo,docker.io/grafana/grafana
 RENOVATE_EXPECT := \
 	gomod:go gomod:github.com/shopspring/decimal \
 	github-actions:actions/checkout github-actions:actions/setup-go \
@@ -353,7 +368,7 @@ RENOVATE_EXPECT := \
 	regex:helm.sh/helm/v4 regex:github.com/yannh/kubeconform regex:golang.org/x/vuln \
 	dockerfile:nginxinc/nginx-unprivileged regex:mcr.microsoft.com/playwright \
 	npm:@playwright/test npm:oidc-client-ts \
-	regex:k3d-io/k3d regex:FiloSottile/mkcert regex:fluxcd/flux2
+	regex:k3d-io/k3d regex:FiloSottile/mkcert
 RENOVATE_ENV_EXPECT := \
 	regex:nginxinc/nginx-unprivileged \
 	flux:quay.io/jetstack/charts/cert-manager flux:headlamp \
@@ -369,7 +384,9 @@ RENOVATE_ENV_EXPECT := \
 	regex:mikefarah/yq regex:ghcr.io/yannh/kubeconform regex:binwiederhier/ntfy \
 	regex:k3s-io/k3s regex:tailscale/tailscale regex:fluxcd/flux2 regex:Deuxfleurs/garage \
 	terraform:flux terraform:http terraform:kubernetes terraform:onepassword terraform:ovh \
-	terraform:proxmox terraform:random terraform:tailscale terraform:tls
+	terraform:proxmox terraform:random terraform:tailscale terraform:tls \
+	flux:otel/opentelemetry-collector-contrib flux:curlimages/curl \
+	$(RENOVATE_ENV_TOGETHER)
 
 renovate-check: ## Validate renovate.json here and in ENV_REPO, and dry-run Renovate's lookups in Docker
 	deploy/renovate/check.sh . $(RENOVATE_EXPECT)

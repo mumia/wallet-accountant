@@ -538,8 +538,13 @@ else
 	rm -f "$jar"
 
 	# The chart's collector with collector.grafanaStack.enabled, in a scratch
-	# namespace, and one trace, metric and log sent to it.
+	# namespace, and one trace, metric and log sent to it. The images are the
+	# env repo's (images.lock, which its values pin and the registry mirrors),
+	# not the chart's defaults, which may be ahead of them.
 	scratch=local-check-otel
+	locked() { sed -n "s|^[[:space:]]*-[[:space:]]*$1:\([^@[:space:]]*\).*|\1|p" "$LOCK" | head -n 1; }
+	collector_tag=$(locked otel/opentelemetry-collector-contrib)
+	curl_image=docker.io/curlimages/curl:$(locked docker.io/curlimages/curl)
 	trace_id=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 	now=$(date +%s)000000000
 	# A namespace left by an earlier run may still be terminating.
@@ -550,13 +555,13 @@ else
 		--set oidc.issuer=https://auth.localhost --set oidc.clientIds.web=x --set oidc.clientIds.apiClients=x \
 		--set database.mode=external --set database.external.ownerUrl.secretName=x \
 		--set database.external.appUrl.secretName=x --set database.external.readerUrl.secretName=x \
-		--set collector.grafanaStack.enabled=true --show-only templates/collector.yaml 2>/dev/null |
+		--set collector.grafanaStack.enabled=true --set collector.image.tag="$collector_tag" --show-only templates/collector.yaml 2>/dev/null |
 		$KUBECTL -n "$scratch" apply -f - >/dev/null 2>&1 &&
 		$KUBECTL -n "$scratch" rollout status deployment/wa-wallet-accountant-collector --timeout=3m >/dev/null 2>&1 || true
 	resource='{"attributes":[{"key":"service.name","value":{"stringValue":"local-check"}}]}'
 	otlp_sent=$(mktemp)
 	# Detached, not `run -i`: attaching times out when the API server is busy.
-	$KUBECTL -n "$scratch" run otlp-sender --restart=Never --image=docker.io/curlimages/curl:8.17.0 \
+	$KUBECTL -n "$scratch" run otlp-sender --restart=Never --image="$curl_image" \
 		--command -- sh -c '
 		post() { curl -fsS --retry 10 --retry-all-errors --retry-delay 3 -H "Content-Type: application/json" -d "$2" "http://wa-wallet-accountant-collector:4318/v1/$1"; }
 		post traces "{\"resourceSpans\":[{\"resource\":$1,\"scopeSpans\":[{\"spans\":[{\"traceId\":\"$2\",\"spanId\":\"0102030405060708\",\"name\":\"local-check\",\"kind\":1,\"startTimeUnixNano\":\"$3\",\"endTimeUnixNano\":\"$3\"}]}]}]}" &&

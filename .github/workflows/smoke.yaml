@@ -34,12 +34,11 @@ jobs:
     timeout-minutes: 45
     env:
       ENV_REPO: ${{ github.workspace }}/wallet-accountant-deploy
-      # The same versions as on a developer's Mac; flux's version is also the
-      # Flux controllers' (env repo, images.lock).
+      # The same versions as on a developer's Mac. flux's comes from the env
+      # repo (infra/homelab's flux_version; `make flux-version`), whose
+      # images.lock pins that release's controllers.
       # renovate: datasource=github-releases depName=k3d-io/k3d
       K3D_VERSION: v5.9.0
-      # renovate: datasource=github-releases depName=fluxcd/flux2
-      FLUX_VERSION: v2.10.0
       # renovate: datasource=github-releases depName=FiloSottile/mkcert
       MKCERT_VERSION: v1.4.4
     steps:
@@ -60,6 +59,7 @@ jobs:
           cache: true
       - name: Install k3d, flux and mkcert
         run: |
+          FLUX_VERSION=$(make -s flux-version)
           mkdir -p "$HOME/.local/bin"
           cd "$HOME/.local/bin"
           curl -fsSLo k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
