@@ -61,17 +61,17 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 		errors.Is(err, app.ErrAccountNotFound):
 		return new(oas.AcceptImportedTransactionNotFound(httpapi.NotFoundProblem())), nil
 	case errors.Is(err, app.ErrImportedTransactionAlreadyAccepted):
-		return new(oas.AcceptImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+		return httpapi.MonthConflict(
 			ImportedTransactionAlreadyAcceptedType, "Imported transaction already Accepted",
-			"The Imported transaction is already booked in the Ledger."))), nil
+			"The Imported transaction is already booked in the Ledger.", "", ""), nil
 	case errors.Is(err, app.ErrImportedTransactionDiscarded):
-		return new(oas.AcceptImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+		return httpapi.MonthConflict(
 			ImportedTransactionDiscardedType, "Imported transaction Discarded",
-			"The Imported transaction is Discarded, which is final."))), nil
+			"The Imported transaction is Discarded, which is final.", "", ""), nil
 	case errors.Is(err, app.ErrImportedTransactionSuspectedDuplicate):
-		return new(oas.AcceptImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+		return httpapi.MonthConflict(
 			ImportedTransactionSuspectedDuplicateType, "Imported transaction is a Suspected duplicate",
-			"Keep the Suspected duplicate before accepting it, or Discard it."))), nil
+			"Keep the Suspected duplicate before accepting it, or Discard it.", "", ""), nil
 	case errors.Is(err, app.ErrInternalCategory):
 		return new(oas.AcceptImportedTransactionUnprocessableEntity(httpapi.Problem(http.StatusUnprocessableEntity,
 			InternalCategoryType, "Internal Category",
@@ -101,13 +101,13 @@ func (h *StatementImportHandler) DiscardImportedTransaction(ctx context.Context,
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound):
 		return new(oas.DiscardImportedTransactionNotFound(httpapi.NotFoundProblem())), nil
 	case errors.Is(err, app.ErrImportedTransactionAlreadyDiscarded):
-		return new(oas.DiscardImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+		return httpapi.MonthConflict(
 			ImportedTransactionAlreadyDiscardedType, "Imported transaction already Discarded",
-			"The Imported transaction is already Discarded."))), nil
+			"The Imported transaction is already Discarded.", "", ""), nil
 	case errors.Is(err, app.ErrImportedTransactionAlreadyAccepted):
-		return new(oas.DiscardImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+		return httpapi.MonthConflict(
 			ImportedTransactionAlreadyAcceptedType, "Imported transaction already Accepted",
-			"The Imported transaction is booked in the Ledger: reverse its Transaction first."))), nil
+			"The Imported transaction is booked in the Ledger: reverse its Transaction first.", "", ""), nil
 	case err != nil:
 		return nil, fmt.Errorf("discard imported transaction: %w", err)
 	}
@@ -130,9 +130,9 @@ func (h *StatementImportHandler) KeepImportedTransaction(ctx context.Context,
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound):
 		return new(oas.KeepImportedTransactionNotFound(httpapi.NotFoundProblem())), nil
 	case errors.Is(err, app.ErrImportedTransactionNotSuspectedDuplicate):
-		return new(oas.KeepImportedTransactionConflict(httpapi.Problem(http.StatusConflict,
+		return httpapi.MonthConflict(
 			ImportedTransactionNotSuspectedDuplicateType, "Not a Suspected duplicate",
-			"Only a Suspected duplicate can be kept."))), nil
+			"Only a Suspected duplicate can be kept.", "", ""), nil
 	case err != nil:
 		return nil, fmt.Errorf("keep imported transaction: %w", err)
 	}

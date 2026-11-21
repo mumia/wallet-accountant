@@ -22,8 +22,10 @@ http:
     type: json
     data: |-
       {
+        "name": "Statement file",
         "kind": "STATEMENT_FILE_IMPORT",
         "csv_mapping": {
+          "encoding": "WINDOWS_1252",
           "delimiter": ";",
           "has_header_row": false,
           "skip_leading_lines": 0,
@@ -81,10 +83,14 @@ runtime:
           bru.setVar("connection_id", res.body.connection_id);
         }
 docs: |-
-  Creates a statement file import Connection for the Account,
-  optionally with the CSV mapping of the bank's statement files. Live
-  bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
-  422 with the problem type `/problems/invalid-connection`. An invalid
+  Creates a statement file import Connection for the Account, with a
+  name and optionally the CSV mapping of the bank's statement files.
+  The name is trimmed, 1 to 100 characters, and unique within the
+  Account ignoring case: a name already used gets 422
+  `/problems/connection-name-taken`. Live bank feeds are not supported
+  yet; a `BANK_FEED` or unknown kind, or a name of only spaces, gets
+  422 with the problem type `/problems/invalid-connection`; an empty or
+  too long name gets 400. An invalid
   mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is
   created.
 

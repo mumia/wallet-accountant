@@ -17,6 +17,14 @@ import (
 // ProblemContentType is the media type of every error response (RFC 9457).
 const ProblemContentType = "application/problem+json"
 
+// NotImplementedType is the problem type of an operation the contract
+// already has but the server doesn't implement yet.
+const NotImplementedType = "/problems/not-implemented"
+
+// ErrNotImplemented is returned by a handler for an operation the contract
+// already has but the server doesn't implement yet. It leaves as 501.
+var ErrNotImplemented = errors.New("not implemented yet")
+
 // BlankType is the problem type used when the status code says it all.
 const BlankType = "about:blank"
 
@@ -37,6 +45,24 @@ func Problem(status int, typ, title, detail string) oas.Problem {
 	}
 
 	return p
+}
+
+// MonthConflict returns a 409 as a MonthProblem: a conflict with the current
+// state that may name the Booking month it is about and the Account's open
+// month (ADR-0024). Either month is left out when empty.
+func MonthConflict(typ, title, detail, bookingMonth, openMonth string) *oas.MonthProblem {
+	p := Problem(http.StatusConflict, typ, title, detail)
+	out := &oas.MonthProblem{Type: p.Type, Title: p.Title, Status: p.Status, Detail: p.Detail}
+
+	if bookingMonth != "" {
+		out.BookingMonth = oas.NewOptString(bookingMonth)
+	}
+
+	if openMonth != "" {
+		out.OpenMonth = oas.NewOptString(openMonth)
+	}
+
+	return out
 }
 
 // NotFoundProblem is the 404 of a resource the caller may not know exists.
@@ -62,6 +88,11 @@ type Logger interface {
 func (e Errors) NewError(ctx context.Context, err error) *oas.ProblemStatusCode {
 	if _, ok := errors.AsType[*ogenerrors.SecurityError](err); ok {
 		return problemStatus(http.StatusUnauthorized, "A valid bearer token is required.")
+	}
+
+	if errors.Is(err, ErrNotImplemented) {
+		return &oas.ProblemStatusCode{StatusCode: http.StatusNotImplemented, Response: Problem(http.StatusNotImplemented,
+			NotImplementedType, "Not implemented yet", "The server doesn't implement this operation yet.")}
 	}
 
 	if e.Logger != nil {

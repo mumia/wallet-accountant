@@ -43,8 +43,10 @@ func (c *codeRecorder) Unwrap() http.ResponseWriter {
 // Discarded one 409 `/problems/imported-transaction-discarded`; a Suspected duplicate, not yet kept,
 // gets 409 `/problems/imported-transaction-suspected-duplicate`; any other Internal Category gets 422
 // `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
-// `/problems/invalid-category`. Retrying with the same Idempotency-Key and body returns the original
-// result and never books twice.
+// `/problems/invalid-category`. A row booked in a closed month gets 409 `/problems/month-closed`, and
+// one booked in a month that isn't open yet 409 `/problems/month-not-open-yet` (ADR-0024); both name
+// the `booking_month`, and the second also the Account's `open_month`. Retrying with the same
+// Idempotency-Key and body returns the original result and never books twice.
 //
 // POST /households/{household_id}/imported-transactions/{imported_transaction_id}/accept
 func (s *Server) handleAcceptImportedTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -487,6 +489,227 @@ func (s *Server) handleAddAccountRequest(args [1]string, argsEscaped bool, w htt
 	}
 }
 
+// handleChangeAccountRequest handles changeAccount operation.
+//
+// Renames the Account. Only its name can change; its kind, Account currency and start date are fixed.
+// A name of only spaces gets 422 `/problems/invalid-account`, and an empty or too long one 400. Names
+// needn't be unique. The same name again records nothing.
+//
+// PATCH /households/{household_id}/accounts/{account_id}
+func (s *Server) handleChangeAccountRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("changeAccount"),
+		semconv.HTTPRequestMethodKey.String("PATCH"),
+		semconv.HTTPRouteKey.String("/households/{household_id}/accounts/{account_id}"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), ChangeAccountOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(attrs...)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: ChangeAccountOperation,
+			ID:   "changeAccount",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, ChangeAccountOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+					defer recordError("Security:BearerAuth", err)
+				}
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+				defer recordError("Security", err)
+			}
+			return
+		}
+	}
+	params, err := decodeChangeAccountParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+	request, rawBody, close, err := s.decodeChangeAccountRequest(r)
+	if err != nil {
+		err = &ogenerrors.DecodeRequestError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeRequest", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+	defer func() {
+		if err := close(); err != nil {
+			recordError("CloseRequest", err)
+		}
+	}()
+
+	var response ChangeAccountRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    ChangeAccountOperation,
+			OperationSummary: "Rename an Account",
+			OperationID:      "changeAccount",
+			Body:             request,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "household_id",
+					In:   "path",
+				}: params.HouseholdID,
+				{
+					Name: "account_id",
+					In:   "path",
+				}: params.AccountID,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = *AccountChange
+			Params   = ChangeAccountParams
+			Response = ChangeAccountRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackChangeAccountParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.ChangeAccount(ctx, request, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.ChangeAccount(ctx, request, params)
+	}
+	if err != nil {
+		if errRes, ok := errors.Into[*ProblemStatusCode](err); ok {
+			if err := encodeErrorResponse(errRes, w, span); err != nil {
+				defer recordError("Internal", err)
+			}
+			return
+		}
+		if errors.Is(err, ht.ErrNotImplemented) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+		if err := encodeErrorResponse(s.h.NewError(ctx, err), w, span); err != nil {
+			defer recordError("Internal", err)
+		}
+		return
+	}
+
+	if err := encodeChangeAccountResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
 // handleChangeCategoryRequest handles changeCategory operation.
 //
 // Renames the Category when `name` is given, and moves it when `parent_id` is given: under that
@@ -711,6 +934,233 @@ func (s *Server) handleChangeCategoryRequest(args [2]string, argsEscaped bool, w
 	}
 }
 
+// handleChangeConnectionRequest handles changeConnection operation.
+//
+// Renames the Connection. The name is trimmed, 1 to 100 characters, and unique within the Account
+// ignoring case: a name already used by another of its Connections gets 422
+// `/problems/connection-name-taken`, one of only spaces 422 `/problems/invalid-connection`, and an
+// empty or too long one 400. The same name again records nothing. The CSV mapping is saved apart, by
+// `saveCsvMapping`.
+//
+// PATCH /households/{household_id}/accounts/{account_id}/connections/{connection_id}
+func (s *Server) handleChangeConnectionRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("changeConnection"),
+		semconv.HTTPRequestMethodKey.String("PATCH"),
+		semconv.HTTPRouteKey.String("/households/{household_id}/accounts/{account_id}/connections/{connection_id}"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), ChangeConnectionOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(attrs...)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: ChangeConnectionOperation,
+			ID:   "changeConnection",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, ChangeConnectionOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+					defer recordError("Security:BearerAuth", err)
+				}
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+				defer recordError("Security", err)
+			}
+			return
+		}
+	}
+	params, err := decodeChangeConnectionParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+	request, rawBody, close, err := s.decodeChangeConnectionRequest(r)
+	if err != nil {
+		err = &ogenerrors.DecodeRequestError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeRequest", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+	defer func() {
+		if err := close(); err != nil {
+			recordError("CloseRequest", err)
+		}
+	}()
+
+	var response ChangeConnectionRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    ChangeConnectionOperation,
+			OperationSummary: "Rename a Connection",
+			OperationID:      "changeConnection",
+			Body:             request,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "household_id",
+					In:   "path",
+				}: params.HouseholdID,
+				{
+					Name: "account_id",
+					In:   "path",
+				}: params.AccountID,
+				{
+					Name: "connection_id",
+					In:   "path",
+				}: params.ConnectionID,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = *ConnectionChange
+			Params   = ChangeConnectionParams
+			Response = ChangeConnectionRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackChangeConnectionParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.ChangeConnection(ctx, request, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.ChangeConnection(ctx, request, params)
+	}
+	if err != nil {
+		if errRes, ok := errors.Into[*ProblemStatusCode](err); ok {
+			if err := encodeErrorResponse(errRes, w, span); err != nil {
+				defer recordError("Internal", err)
+			}
+			return
+		}
+		if errors.Is(err, ht.ErrNotImplemented) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+		if err := encodeErrorResponse(s.h.NewError(ctx, err), w, span); err != nil {
+			defer recordError("Internal", err)
+		}
+		return
+	}
+
+	if err := encodeChangeConnectionResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
 // handleChangeTransactionRequest handles changeTransaction operation.
 //
 // Sets the Category on the non-Account side of the Transaction, for example to categorise one Accepted
@@ -720,7 +1170,8 @@ func (s *Server) handleChangeCategoryRequest(args [2]string, argsEscaped bool, w
 // `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
 // `/problems/invalid-category`. A reversed Transaction gets 409 `/problems/transaction-reversed`; a
 // reversal gets 422 `/problems/transaction-is-a-reversal`, and the Opening balance Transaction 422
-// `/problems/opening-balance-transaction`.
+// `/problems/opening-balance-transaction`. In a closed month the Category can still change, but not to
+// Uncategorised: that gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024).
 //
 // PATCH /households/{household_id}/transactions/{transaction_id}
 func (s *Server) handleChangeTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -939,8 +1390,12 @@ func (s *Server) handleChangeTransactionRequest(args [2]string, argsEscaped bool
 
 // handleCloseAccountMonthRequest handles closeAccountMonth operation.
 //
-// Closes the Booking month with the Statement balance, the closing balance on the bank statement. The
-// close is refused with 422 `/problems/month-close-refused`, listing every failed condition in
+// Closes the Account's open month with the Statement balance, the closing balance on the bank
+// statement, and opens the month after it (December rolls into January). Months close one at a time,
+// in order (ADR-0024). Only the open month can close: a month that isn't open yet gets 409
+// `/problems/month-not-open-yet`, naming the `booking_month` and the Account's `open_month`, and the
+// open month gets 409 `/problems/month-not-ended` until it has ended, by the server's clock in UTC.
+// The close is refused with 422 `/problems/month-close-refused`, listing every failed condition in
 // `reasons` at once, while any Imported transaction booked in the month is pending or an undecided
 // Suspected duplicate, any Transaction booked in it is in Uncategorised, a Statement import with rows
 // in or before the month has its Balance check waiting or failed (voided imports don't count), or the
@@ -949,8 +1404,7 @@ func (s *Server) handleChangeTransactionRequest(args [2]string, argsEscaped bool
 // that is wrong (ADR-0018). A month already closed gets 409 `/problems/month-already-closed`, and an
 // Account awaiting its first Statement import 409 `/problems/account-awaiting-first-statement-import`.
 // A Statement balance in another currency than the Account's, or with more decimal places than it has,
-// a month before the Account's start date, or a month that hasn't started yet gets 422
-// `/problems/invalid-month-close`.
+// or a month before the Account's start date gets 422 `/problems/invalid-month-close`.
 //
 // POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/close
 func (s *Server) handleCloseAccountMonthRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -1401,10 +1855,12 @@ func (s *Server) handleCreateCategoryRequest(args [1]string, argsEscaped bool, w
 
 // handleCreateConnectionRequest handles createConnection operation.
 //
-// Creates a statement file import Connection for the Account, optionally with the CSV mapping of the
-// bank's statement files. Live bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
-// 422 with the problem type `/problems/invalid-connection`. An invalid mapping gets 422 with
-// `/problems/invalid-csv-mapping`, and nothing is created.
+// Creates a statement file import Connection for the Account, with a name and optionally the CSV
+// mapping of the bank's statement files. The name is trimmed, 1 to 100 characters, and unique within
+// the Account ignoring case: a name already used gets 422 `/problems/connection-name-taken`. Live bank
+// feeds are not supported yet; a `BANK_FEED` or unknown kind, or a name of only spaces, gets 422 with
+// the problem type `/problems/invalid-connection`; an empty or too long name gets 400. An invalid
+// mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is created.
 //
 // POST /households/{household_id}/accounts/{account_id}/connections
 func (s *Server) handleCreateConnectionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -2066,7 +2522,10 @@ func (s *Server) handleCreateRegistrationRequest(args [0]string, argsEscaped boo
 // doesn't count in later Balance checks. Deciding the last Suspected duplicate of a Statement import
 // runs its waiting Balance check. One already Discarded gets 409
 // `/problems/imported-transaction-already-discarded`, and an Accepted one 409
-// `/problems/imported-transaction-already-accepted` (reverse its Transaction first).
+// `/problems/imported-transaction-already-accepted` (reverse its Transaction first). One booked in a
+// closed month gets 409 `/problems/month-closed`. A pending row booked in a month that isn't open yet
+// gets 409 `/problems/month-not-open-yet`, but a Suspected duplicate there can still be Discarded
+// (ADR-0024). Both problems name the `booking_month`, and the second also the Account's `open_month`.
 //
 // POST /households/{household_id}/imported-transactions/{imported_transaction_id}/discard
 func (s *Server) handleDiscardImportedTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -2479,12 +2938,14 @@ func (s *Server) handleGetAccountRequest(args [2]string, argsEscaped bool, w htt
 
 // handleGetAccountMonthRequest handles getAccountMonth operation.
 //
-// Returns one Booking month of the Account (months are decided by Booking date): whether it is `OPEN`
-// or `CLOSED`, the Statement balance it closed with, the computed closing balance (the Opening balance
-// plus every month up to this one; absent while the Account awaits its first Statement import), how
-// many of its Imported transactions are pending or undecided Suspected duplicates, how many of its
-// Transactions are in Uncategorised, and whether it changed after it closed. It is always current: it
-// is read in the request's own transaction.
+// Returns one Booking month of the Account (months are decided by Booking date): whether it is
+// `CLOSED`, the Account's one `OPEN` month, or `NOT_OPEN_YET` (ADR-0024); the Statement balance it
+// closed with; the computed closing balance (the Opening balance plus every month up to this one;
+// absent while the Account awaits its first Statement import); how many of its Imported transactions
+// are pending or undecided Suspected duplicates; how many of its Transactions are in Uncategorised;
+// the Statement imports whose Balance check stops it closing; and whether it can be reopened now. Any
+// month from the start date's month on can be read, a later one as `NOT_OPEN_YET`; a month before the
+// start date's month gets 404. It is always current: it is read in the request's own transaction.
 //
 // GET /households/{household_id}/accounts/{account_id}/months/{booking_month}
 func (s *Server) handleGetAccountMonthRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -3084,7 +3545,9 @@ func (s *Server) handleGetMeRequest(args [0]string, argsEscaped bool, w http.Res
 // like any other row, and still shows what it resembled. Deciding the last Suspected duplicate of a
 // Statement import runs its waiting Balance check, recorded as passed or failed. An Imported
 // transaction that isn't a Suspected duplicate gets 409
-// `/problems/imported-transaction-not-suspected-duplicate`.
+// `/problems/imported-transaction-not-suspected-duplicate`. One booked in a closed month gets 409
+// `/problems/month-closed`. A Suspected duplicate booked in a month that isn't open yet can still be
+// kept, so its Statement import's Balance check never waits on a month that can't open (ADR-0024).
 //
 // POST /households/{household_id}/imported-transactions/{imported_transaction_id}/keep
 func (s *Server) handleKeepImportedTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -3282,6 +3745,216 @@ func (s *Server) handleKeepImportedTransactionRequest(args [2]string, argsEscape
 	}
 
 	if err := encodeKeepImportedTransactionResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
+// handleListAccountMonthsRequest handles listAccountMonths operation.
+//
+// Returns every Booking month of the Account, newest first and unpaged, each as on `getAccountMonth`.
+// The months run from the start date's month to the later of the current calendar month (UTC) and the
+// latest Booking month holding a non-Discarded Imported transaction. The Account has exactly one
+// `OPEN` month; the months before it are `CLOSED` and those after it `NOT_OPEN_YET` (ADR-0024). It
+// answers from the Account's creation: before its first Statement import, the start date's month is
+// `OPEN` and the rest are `NOT_OPEN_YET`. It is always current: it is read in the request's own
+// transaction.
+//
+// GET /households/{household_id}/accounts/{account_id}/months
+func (s *Server) handleListAccountMonthsRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("listAccountMonths"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.HTTPRouteKey.String("/households/{household_id}/accounts/{account_id}/months"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), ListAccountMonthsOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(attrs...)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: ListAccountMonthsOperation,
+			ID:   "listAccountMonths",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, ListAccountMonthsOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+					defer recordError("Security:BearerAuth", err)
+				}
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+				defer recordError("Security", err)
+			}
+			return
+		}
+	}
+	params, err := decodeListAccountMonthsParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+
+	var response ListAccountMonthsRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    ListAccountMonthsOperation,
+			OperationSummary: "An Account's months",
+			OperationID:      "listAccountMonths",
+			Body:             nil,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "household_id",
+					In:   "path",
+				}: params.HouseholdID,
+				{
+					Name: "account_id",
+					In:   "path",
+				}: params.AccountID,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = struct{}
+			Params   = ListAccountMonthsParams
+			Response = ListAccountMonthsRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackListAccountMonthsParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.ListAccountMonths(ctx, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.ListAccountMonths(ctx, params)
+	}
+	if err != nil {
+		if errRes, ok := errors.Into[*ProblemStatusCode](err); ok {
+			if err := encodeErrorResponse(errRes, w, span); err != nil {
+				defer recordError("Internal", err)
+			}
+			return
+		}
+		if errors.Is(err, ht.ErrNotImplemented) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+		if err := encodeErrorResponse(s.h.NewError(ctx, err), w, span); err != nil {
+			defer recordError("Internal", err)
+		}
+		return
+	}
+
+	if err := encodeListAccountMonthsResponse(response, w, span); err != nil {
 		defer recordError("EncodeResponse", err)
 		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
 			s.cfg.ErrorHandler(ctx, w, r, err)
@@ -5564,6 +6237,225 @@ func (s *Server) handlePreviewStatementImportRequest(args [2]string, argsEscaped
 	}
 }
 
+// handleReopenAccountMonthRequest handles reopenAccountMonth operation.
+//
+// Takes back the Account's latest Month close (ADR-0024). The month becomes the open month again, its
+// Statement balance is dropped, and the month after it goes back to `NOT_OPEN_YET`: the month must be
+// closed again with its Statement balance. Reopen is refused with 409
+// `/problems/month-reopen-refused`, listing every failed condition in `reasons` at once: the month
+// isn't closed (`NOT_CLOSED`), it isn't the Account's latest closed month (`NOT_LATEST_CLOSED`), or
+// the open month has Accepted Transactions that aren't reversed
+// (`OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS`, with the `open_month` and the `accepted` count): reverse
+// them first. Retrying with the same Idempotency-Key returns the original result.
+//
+// POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/reopen
+func (s *Server) handleReopenAccountMonthRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("reopenAccountMonth"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.HTTPRouteKey.String("/households/{household_id}/accounts/{account_id}/months/{booking_month}/reopen"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), ReopenAccountMonthOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(attrs...)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: ReopenAccountMonthOperation,
+			ID:   "reopenAccountMonth",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, ReopenAccountMonthOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+					defer recordError("Security:BearerAuth", err)
+				}
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+				defer recordError("Security", err)
+			}
+			return
+		}
+	}
+	params, err := decodeReopenAccountMonthParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+
+	var response ReopenAccountMonthRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    ReopenAccountMonthOperation,
+			OperationSummary: "Reopen an Account's latest closed month",
+			OperationID:      "reopenAccountMonth",
+			Body:             nil,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "household_id",
+					In:   "path",
+				}: params.HouseholdID,
+				{
+					Name: "account_id",
+					In:   "path",
+				}: params.AccountID,
+				{
+					Name: "booking_month",
+					In:   "path",
+				}: params.BookingMonth,
+				{
+					Name: "Idempotency-Key",
+					In:   "header",
+				}: params.IdempotencyKey,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = struct{}
+			Params   = ReopenAccountMonthParams
+			Response = ReopenAccountMonthRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackReopenAccountMonthParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.ReopenAccountMonth(ctx, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.ReopenAccountMonth(ctx, params)
+	}
+	if err != nil {
+		if errRes, ok := errors.Into[*ProblemStatusCode](err); ok {
+			if err := encodeErrorResponse(errRes, w, span); err != nil {
+				defer recordError("Internal", err)
+			}
+			return
+		}
+		if errors.Is(err, ht.ErrNotImplemented) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+		if err := encodeErrorResponse(s.h.NewError(ctx, err), w, span); err != nil {
+			defer recordError("Internal", err)
+		}
+		return
+	}
+
+	if err := encodeReopenAccountMonthResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
 // handleReverseTransactionRequest handles reverseTransaction operation.
 //
 // Reverses a mistaken Transaction without editing or deleting it (ADR-0018): a reversing Transaction
@@ -5573,7 +6465,8 @@ func (s *Server) handlePreviewStatementImportRequest(args [2]string, argsEscaped
 // be Accepted again or Discarded. A Transaction already reversed gets 409
 // `/problems/transaction-already-reversed`; a reversal gets 422 `/problems/transaction-is-a-reversal`,
 // and the Opening balance Transaction 422 `/problems/opening-balance-transaction` (only voiding the
-// first Statement import changes it).
+// first Statement import changes it). A Transaction booked in a closed month gets 409
+// `/problems/month-closed`, naming the `booking_month`: Reopen back to it first (ADR-0024).
 //
 // POST /households/{household_id}/transactions/{transaction_id}/reverse
 func (s *Server) handleReverseTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -6005,29 +6898,263 @@ func (s *Server) handleSaveCsvMappingRequest(args [3]string, argsEscaped bool, w
 	}
 }
 
+// handleTestCsvMappingRequest handles testCsvMapping operation.
+//
+// Reads a sample statement file with an unsaved CSV mapping, exactly as an upload would read it, and
+// returns the first 10 readable rows, how many rows are readable, and every unreadable line with its
+// reason. Amounts are read in the Account currency. Rows before the Account's start date are shown
+// too: this tests the mapping, not an import. It records nothing and doesn't keep the sample. An
+// invalid mapping gets 422 `/problems/invalid-csv-mapping`, whose detail lists every problem, and a
+// file with no rows at all 422 `/problems/empty-statement-file`.
+//
+// POST /households/{household_id}/accounts/{account_id}/csv-mapping-tests
+func (s *Server) handleTestCsvMappingRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("testCsvMapping"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.HTTPRouteKey.String("/households/{household_id}/accounts/{account_id}/csv-mapping-tests"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), TestCsvMappingOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(attrs...)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: TestCsvMappingOperation,
+			ID:   "testCsvMapping",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, TestCsvMappingOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+					defer recordError("Security:BearerAuth", err)
+				}
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			if encodeErr := encodeErrorResponse(s.h.NewError(ctx, err), w, span); encodeErr != nil {
+				defer recordError("Security", err)
+			}
+			return
+		}
+	}
+	params, err := decodeTestCsvMappingParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+	request, rawBody, close, err := s.decodeTestCsvMappingRequest(r)
+	if err != nil {
+		err = &ogenerrors.DecodeRequestError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeRequest", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+	defer func() {
+		if err := close(); err != nil {
+			recordError("CloseRequest", err)
+		}
+	}()
+
+	var response TestCsvMappingRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    TestCsvMappingOperation,
+			OperationSummary: "Test an unsaved CSV mapping on a sample file",
+			OperationID:      "testCsvMapping",
+			Body:             request,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "household_id",
+					In:   "path",
+				}: params.HouseholdID,
+				{
+					Name: "account_id",
+					In:   "path",
+				}: params.AccountID,
+				{
+					Name: "Idempotency-Key",
+					In:   "header",
+				}: params.IdempotencyKey,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = *CsvMappingTestUploadMultipart
+			Params   = TestCsvMappingParams
+			Response = TestCsvMappingRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackTestCsvMappingParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.TestCsvMapping(ctx, request, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.TestCsvMapping(ctx, request, params)
+	}
+	if err != nil {
+		if errRes, ok := errors.Into[*ProblemStatusCode](err); ok {
+			if err := encodeErrorResponse(errRes, w, span); err != nil {
+				defer recordError("Internal", err)
+			}
+			return
+		}
+		if errors.Is(err, ht.ErrNotImplemented) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+		if err := encodeErrorResponse(s.h.NewError(ctx, err), w, span); err != nil {
+			defer recordError("Internal", err)
+		}
+		return
+	}
+
+	if err := encodeTestCsvMappingResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
 // handleUploadStatementImportRequest handles uploadStatementImport operation.
 //
 // Imports a statement file through the Connection: every row booked on or after the Account's start
-// date becomes a pending Imported transaction, and the rows before it are ignored and counted. The
-// first import of an Account needs the `preview_id` of its preview (422 `/problems/preview-required`
-// without it). It is recomputed from the uploaded file, its Export balance and the Connection's
-// current mapping version, and a difference gets 422 `/problems/preview-mismatch`. The first import
-// also records the Opening balance Transaction on the start date, in the same transaction; an Account
-// that got its Opening balance since the preview gets 409
-// `/problems/opening-balance-already-recorded`. A file with an unreadable row is refused whole (422
-// `/problems/unreadable-statement-file`), and a file already imported through the Connection gets 409
-// `/problems/duplicate-statement-import`.
+// date becomes a pending Imported transaction, and the rows before it are ignored and counted
+// (`rows_ignored_before_start_date`). Rows booked in a closed month are ignored too, before any other
+// test, and counted (`rows_ignored_in_closed_months`). Rows booked in a month that isn't open yet
+// become pending Imported transactions that can't be Accepted or Discarded until their month opens
+// (ADR-0024). The first import of an Account needs the `preview_id` of its preview (422
+// `/problems/preview-required` without it). It is recomputed from the uploaded file, its Export
+// balance and the Connection's current mapping version, and a difference gets 422
+// `/problems/preview-mismatch`. The first import also records the Opening balance Transaction on the
+// start date, in the same transaction; an Account that got its Opening balance since the preview gets
+// 409 `/problems/opening-balance-already-recorded`. A file with an unreadable row is refused whole
+// (422 `/problems/unreadable-statement-file`), and a file already imported through the Connection gets
+// 409 `/problems/duplicate-statement-import`.
 //
 // A later import takes its Export balance once and no `preview_id` (409
 // `/problems/opening-balance-already-recorded` with one). A row whose bank transaction ID, Booking
 // date and amount all equal those of an earlier Imported transaction of the Account is skipped as a
 // certain repeat and counted. The import then runs its Balance check (ADR-0018): the Account's Opening
 // balance plus every non-Discarded Imported transaction, the new rows included, must equal the Export
-// balance. Otherwise the whole import is refused with 422 `/problems/balance-check-failed`, giving the
-// expected balance, the Export balance and the difference, and nothing is recorded. Amounts, an empty
-// file and a Connection without a mapping are refused as by the preview. Retrying with the same
-// Idempotency-Key and the same file and fields returns the original result, however the form is
-// rebuilt.
+// balance. Rows ignored in closed months count only through the Imported transactions already
+// recorded. Otherwise the whole import is refused with 422 `/problems/balance-check-failed`, giving
+// the expected balance, the Export balance and the difference, and nothing is recorded. When some of
+// the rows ignored in closed months are neither certain repeats nor look like an earlier Imported
+// transaction, the problem also gives `rows_in_closed_months_not_in_books`, and its `detail` names the
+// closed months to Reopen before importing again. Amounts, an empty file and a Connection without a
+// mapping are refused as by the preview. Retrying with the same Idempotency-Key and the same file and
+// fields returns the original result, however the form is rebuilt.
 //
 // POST /households/{household_id}/connections/{connection_id}/statement-imports
 func (s *Server) handleUploadStatementImportRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -6257,7 +7384,13 @@ func (s *Server) handleUploadStatementImportRequest(args [2]string, argsEscaped 
 // import again: that is the only way to change an Opening balance. Only the Account's latest
 // non-voided import can be voided (409 `/problems/not-the-latest-statement-import`), only while none
 // of its rows are Accepted (409 `/problems/statement-import-has-accepted-rows`: reverse their
-// Transactions first), and only once (409 `/problems/statement-import-already-voided`).
+// Transactions first), only while it doesn't touch a closed month (409
+// `/problems/statement-import-touches-closed-month`, naming the earliest such `booking_month`: Reopen
+// back to it first), and only once (409 `/problems/statement-import-already-voided`). An import
+// touches a closed month when any Imported transaction it recorded, in any state, is booked in one, or
+// when it is the Account's first import and the start date's month is closed (ADR-0024). Rows it
+// ignored don't count. `void_blocked_by` on the Statement import says beforehand which of these
+// refusals apply.
 //
 // POST /households/{household_id}/connections/{connection_id}/statement-imports/{statement_import_id}/void
 func (s *Server) handleVoidStatementImportRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {

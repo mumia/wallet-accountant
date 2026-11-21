@@ -327,7 +327,7 @@ lint-go:
 
 lint-api:
 	@# A tree (the Category tree) recurses through an array, which always ends.
-	$(VACUUM) --details --fail-severity warn --ignore-array-circle-ref api/openapi.yaml
+	$(VACUUM) --details --fail-severity warn --ignore-array-circle-ref --ignore-file api/vacuum-ignore.yaml api/openapi.yaml
 	@# The ruleset must still catch violations: a deliberately broken spec has to fail.
 	@if $(VACUUM) --silent api/testdata/zalando-violations.yaml; then \
 		echo "vacuum: the Zalando ruleset no longer reports api/testdata/zalando-violations.yaml"; exit 1; \

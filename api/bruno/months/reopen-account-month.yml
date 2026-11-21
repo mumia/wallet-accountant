@@ -1,0 +1,39 @@
+info:
+  name: Reopen an Account's latest closed month
+  type: http
+  seq: 4
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/months/:booking_month/reopen'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+    - name: booking_month
+      value: '{{booking_month}}'
+      type: path
+      description: The Booking month, written YYYY-MM
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  auth: inherit
+docs: |-
+  Takes back the Account's latest Month close (ADR-0024). The month
+  becomes the open month again, its Statement balance is dropped, and
+  the month after it goes back to `NOT_OPEN_YET`: the month must be
+  closed again with its Statement balance. Reopen is refused with 409
+  `/problems/month-reopen-refused`, listing every failed condition in
+  `reasons` at once: the month isn't closed (`NOT_CLOSED`), it isn't
+  the Account's latest closed month (`NOT_LATEST_CLOSED`), or the open
+  month has Accepted Transactions that aren't reversed
+  (`OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS`, with the `open_month` and
+  the `accepted` count): reverse them first. Retrying with the same
+  Idempotency-Key returns the original result.
+
+  Operation `reopenAccountMonth`.

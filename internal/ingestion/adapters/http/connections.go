@@ -79,7 +79,7 @@ func (h *ConnectionHandler) CreateConnection(ctx context.Context, req *oas.Conne
 	}
 
 	created, err := h.connections.Create(ctx, params.HouseholdID, params.AccountID, app.NewConnection{
-		Kind: kind, CSVMapping: mapping,
+		Name: string(req.Name), Kind: kind, CSVMapping: mapping,
 	})
 
 	invalid := func(problemType, title, detail string) (oas.CreateConnectionRes, error) {
@@ -91,6 +91,9 @@ func (h *ConnectionHandler) CreateConnection(ctx context.Context, req *oas.Conne
 	switch {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound):
 		return new(oas.CreateConnectionNotFound(httpapi.NotFoundProblem())), nil
+	case errors.Is(err, domain.ErrConnectionNameInvalid):
+		return invalid(InvalidConnectionType, "Invalid Connection",
+			"The name must be 1 to 100 characters, not counting spaces around it.")
 	case errors.Is(err, domain.ErrBankFeedsNotSupported):
 		return invalid(InvalidConnectionType, "Invalid Connection", "Bank feed Connections are not supported yet.")
 	case errors.Is(err, domain.ErrUnknownConnectionKind):
@@ -242,6 +245,7 @@ func connectionResponse(c app.Connection) *oas.Connection {
 	out := &oas.Connection{
 		ConnectionID: c.ID,
 		AccountID:    c.AccountID,
+		Name:         oas.ConnectionName(c.Name),
 		Kind:         connectionKindsOut[c.Kind],
 	}
 

@@ -17,3 +17,4 @@ We rejected a Balance adjustment, a typed Opening balance and an "edit amount" c
 - Every bank must provide a booked balance with each export. A bank that offers only an available balance (including card authorisations not yet booked) would fail checks whenever an authorisation is outstanding.
 - An Account with no statement files, such as cash, gets no Opening balance under this rule. How cash Accounts work is still open.
 - Fixing an old import is expensive: every later import must be voided first.
+- *Amended by ADR-0024:* a closed month can't be corrected in place. The User Reopens back to it first, and Void is refused while the import touches a closed month. A file's rows in a closed month are ignored, so a row missing from a closed month shows up as a failed Balance check.

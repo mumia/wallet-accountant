@@ -27,6 +27,10 @@ docs: |-
   duplicate of a Statement import runs its waiting Balance check. One already
   Discarded gets 409 `/problems/imported-transaction-already-discarded`,
   and an Accepted one 409 `/problems/imported-transaction-already-accepted`
-  (reverse its Transaction first).
+  (reverse its Transaction first). One booked in a closed month gets 409
+  `/problems/month-closed`. A pending row booked in a month that isn't
+  open yet gets 409 `/problems/month-not-open-yet`, but a Suspected
+  duplicate there can still be Discarded (ADR-0024). Both problems name
+  the `booking_month`, and the second also the Account's `open_month`.
 
   Operation `discardImportedTransaction`.

@@ -1,7 +1,7 @@
 info:
   name: An Account's month status
   type: http
-  seq: 1
+  seq: 2
 http:
   method: GET
   url: '{{baseUrl}}/households/:household_id/accounts/:account_id/months/:booking_month'
@@ -21,13 +21,16 @@ http:
   auth: inherit
 docs: |-
   Returns one Booking month of the Account (months are decided by
-  Booking date): whether it is `OPEN` or `CLOSED`, the Statement
-  balance it closed with, the computed closing balance (the Opening
-  balance plus every month up to this one; absent while the Account
-  awaits its first Statement import), how many of its Imported
-  transactions are pending or undecided Suspected duplicates, how many
-  of its Transactions are in Uncategorised, and whether it changed
-  after it closed. It is always current: it is read in the request's
-  own transaction.
+  Booking date): whether it is `CLOSED`, the Account's one `OPEN`
+  month, or `NOT_OPEN_YET` (ADR-0024); the Statement balance it closed
+  with; the computed closing balance (the Opening balance plus every
+  month up to this one; absent while the Account awaits its first
+  Statement import); how many of its Imported transactions are pending
+  or undecided Suspected duplicates; how many of its Transactions are
+  in Uncategorised; the Statement imports whose Balance check stops it
+  closing; and whether it can be reopened now. Any month from the start
+  date's month on can be read, a later one as `NOT_OPEN_YET`; a month
+  before the start date's month gets 404. It is always current: it is
+  read in the request's own transaction.
 
   Operation `getAccountMonth`.

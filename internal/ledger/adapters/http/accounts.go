@@ -136,6 +136,9 @@ func accountResponse(a app.Account) (*oas.Account, error) {
 		Currency:                     oas.CurrencyCode(a.Currency),
 		StartDate:                    a.StartDate,
 		AwaitingFirstStatementImport: a.AwaitingFirstStatementImport,
+		OpenMonth:                    a.OpenMonth,
+		Pending:                      int32(a.Pending),             //nolint:gosec // a count of rows
+		SuspectedDuplicates:          int32(a.SuspectedDuplicates), //nolint:gosec // a count of rows
 	}
 
 	if a.Balance != nil {

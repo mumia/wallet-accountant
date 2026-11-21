@@ -5,7 +5,7 @@ Getting a Household's real-world transactions into the Ledger: from statement fi
 ## Language
 
 **Connection**:
-A link between an Account and an outside source of its transactions. It is either a statement file import (the main kind) or a live bank feed.
+A link between an Account and an outside source of its transactions, named uniquely within its Account. It is either a statement file import (the main kind) or a live bank feed.
 _Avoid_: Integration, sync, link, feed
 
 **Statement import**:
@@ -17,11 +17,11 @@ The bank's booked balance, excluding card authorisations not yet booked, when a 
 _Avoid_: Current balance, available balance, closing balance
 
 **Balance check**:
-The test that an Account's Opening balance plus all its non-Discarded Imported transactions equals a Statement import's Export balance. A failed check refuses the import. When the import produced Suspected duplicates, the check waits until they are decided.
+The test that an Account's Opening balance plus all its non-Discarded Imported transactions equals a Statement import's Export balance. A failed check refuses the import. When the import produced Suspected duplicates, the check waits until they are decided. A file's rows booked in a closed month are ignored, so a row missing from a closed month shows up as a failed check (ADR-0024).
 _Avoid_: Reconciliation, validation
 
 **Void**:
-Withdrawing the latest Statement import of an Account, while none of its rows are Accepted, so a corrected file can be uploaded. Its Imported transactions become Discarded.
+Withdrawing the latest Statement import of an Account, while none of its rows are Accepted and none fall in a closed month, so a corrected file can be uploaded. Its Imported transactions become Discarded.
 _Avoid_: Delete, undo, rollback
 
 **Imported transaction**:
@@ -29,7 +29,7 @@ A transaction brought in through a Connection, as opposed to one a User entered 
 _Avoid_: Bank transaction, synced transaction
 
 **Pending**:
-The state of an Imported transaction waiting for a User to Accept or Discard it. A Suspected duplicate becomes pending when it is kept, and an Accepted one returns to pending when its Transaction is reversed.
+The state of an Imported transaction waiting for a User to Accept or Discard it. A Suspected duplicate becomes pending when it is kept, and an Accepted one returns to pending when its Transaction is reversed. A pending row booked in a month that is Not open yet waits, untouchable, until that month opens.
 _Avoid_: Unreviewed, new, open, unconfirmed
 
 **Accepted**:
@@ -41,7 +41,7 @@ A Household's instruction for categorising Imported transactions automatically, 
 _Avoid_: Filter, automation, mapping
 
 **Suspected duplicate**:
-An Imported transaction that looks like one already imported for the same Account, but not certainly. It waits until a Household member decides whether to keep it as a real transaction or Discard it. When the bank's own transaction ID proves a repeat, it is skipped at import and never becomes a Suspected duplicate. A Match links two records of one money movement from different sources; a Suspected duplicate is the same source repeating itself.
+An Imported transaction that looks like one already imported for the same Account, but not certainly. It waits until a Household member decides whether to keep it as a real transaction or Discard it, which can be decided even in a month that is Not open yet. When the bank's own transaction ID proves a repeat, it is skipped at import and never becomes a Suspected duplicate. A Match links two records of one money movement from different sources; a Suspected duplicate is the same source repeating itself.
 _Avoid_: Duplicate, conflict, possible match
 
 **Discarded**:

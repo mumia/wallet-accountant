@@ -629,9 +629,19 @@ func (d *document) body(op operation) (any, error) {
 				Disabled: !slices.Contains(s.Required, name),
 			}
 
-			if prop.Format == "binary" {
+			switch {
+			case prop.Format == "binary":
 				part.Type, part.Value = "file", []string{}
-			} else {
+			case prop.Type == "object":
+				// An object part is sent as JSON text (the contract's
+				// encoding contentType application/json).
+				v, err := jsonExample(d.exampleValue(prop, 0))
+				if err != nil {
+					return nil, fmt.Errorf("%s: %s: %w", op.OperationID, name, err)
+				}
+
+				part.Value = v
+			default:
 				part.Value = fmt.Sprint(d.exampleValue(prop, 0))
 			}
 

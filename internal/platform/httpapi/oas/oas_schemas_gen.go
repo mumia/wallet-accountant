@@ -15,10 +15,6 @@ func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
 
-type AcceptImportedTransactionConflict Problem
-
-func (*AcceptImportedTransactionConflict) acceptImportedTransactionRes() {}
-
 type AcceptImportedTransactionNotFound Problem
 
 func (*AcceptImportedTransactionNotFound) acceptImportedTransactionRes() {}
@@ -45,6 +41,13 @@ type Account struct {
 	// Whether the Account still awaits the first Statement import that records its Opening balance.
 	AwaitingFirstStatementImport bool     `json:"awaiting_first_statement_import"`
 	Balance                      OptMoney `json:"balance"`
+	// The Account's one open Booking month, written YYYY-MM: the start date's month until it closes, then
+	// each next month in turn (ADR-0024).
+	OpenMonth string `json:"open_month"`
+	// The Account's pending Imported transactions, in every month, those not open yet included.
+	Pending int32 `json:"pending"`
+	// The Account's undecided Suspected duplicates, in every month, those not open yet included.
+	SuspectedDuplicates int32 `json:"suspected_duplicates"`
 }
 
 // GetAccountID returns the value of AccountID.
@@ -82,6 +85,21 @@ func (s *Account) GetBalance() OptMoney {
 	return s.Balance
 }
 
+// GetOpenMonth returns the value of OpenMonth.
+func (s *Account) GetOpenMonth() string {
+	return s.OpenMonth
+}
+
+// GetPending returns the value of Pending.
+func (s *Account) GetPending() int32 {
+	return s.Pending
+}
+
+// GetSuspectedDuplicates returns the value of SuspectedDuplicates.
+func (s *Account) GetSuspectedDuplicates() int32 {
+	return s.SuspectedDuplicates
+}
+
 // SetAccountID sets the value of AccountID.
 func (s *Account) SetAccountID(val uuid.UUID) {
 	s.AccountID = val
@@ -117,8 +135,41 @@ func (s *Account) SetBalance(val OptMoney) {
 	s.Balance = val
 }
 
-func (*Account) addAccountRes() {}
-func (*Account) getAccountRes() {}
+// SetOpenMonth sets the value of OpenMonth.
+func (s *Account) SetOpenMonth(val string) {
+	s.OpenMonth = val
+}
+
+// SetPending sets the value of Pending.
+func (s *Account) SetPending(val int32) {
+	s.Pending = val
+}
+
+// SetSuspectedDuplicates sets the value of SuspectedDuplicates.
+func (s *Account) SetSuspectedDuplicates(val int32) {
+	s.SuspectedDuplicates = val
+}
+
+func (*Account) addAccountRes()    {}
+func (*Account) changeAccountRes() {}
+func (*Account) getAccountRes()    {}
+
+// A new name for an Account; its kind, Account currency and start date never change.
+// Ref: #/components/schemas/AccountChange
+type AccountChange struct {
+	// The Account's new name, trimmed; not blank.
+	Name string `json:"name"`
+}
+
+// GetName returns the value of Name.
+func (s *AccountChange) GetName() string {
+	return s.Name
+}
+
+// SetName sets the value of Name.
+func (s *AccountChange) SetName(val string) {
+	s.Name = val
+}
 
 // A new Account. There is no Opening balance field; the first Statement import works it out
 // (ADR-0018).
@@ -200,10 +251,11 @@ type AccountMonth struct {
 	AccountID uuid.UUID `json:"account_id"`
 	// The Booking month, written YYYY-MM.
 	BookingMonth string `json:"booking_month"`
-	// Whether the month is closed.
+	// `OPEN` for the Account's one open month, `CLOSED` for every month before it and `NOT_OPEN_YET` for
+	// every month after it (ADR-0024).
 	State            string   `json:"state"`
 	StatementBalance OptMoney `json:"statement_balance"`
-	// When the month closed; absent while it is open.
+	// When the month closed; absent unless it is closed.
 	ClosedAt        OptDateTime `json:"closed_at"`
 	ComputedBalance OptMoney    `json:"computed_balance"`
 	// The month's Imported transactions waiting for review.
@@ -212,8 +264,12 @@ type AccountMonth struct {
 	SuspectedDuplicates int32 `json:"suspected_duplicates"`
 	// The month's Transactions whose other side is in Uncategorised.
 	Uncategorised int32 `json:"uncategorised"`
-	// Whether the month changed after it closed.
-	Flagged bool `json:"flagged"`
+	// The Statement imports with rows in or before the month whose Balance check hasn't passed, as a Month
+	// close refusal lists them; empty when there are none.
+	UncheckedStatementImports []UncheckedStatementImport `json:"unchecked_statement_imports"`
+	// Whether a Reopen of this month would be refused right now: always true unless it is the Account's
+	// latest closed month and the open month has no Accepted Transactions that aren't reversed.
+	ReopenBlocked bool `json:"reopen_blocked"`
 }
 
 // GetAccountID returns the value of AccountID.
@@ -261,9 +317,14 @@ func (s *AccountMonth) GetUncategorised() int32 {
 	return s.Uncategorised
 }
 
-// GetFlagged returns the value of Flagged.
-func (s *AccountMonth) GetFlagged() bool {
-	return s.Flagged
+// GetUncheckedStatementImports returns the value of UncheckedStatementImports.
+func (s *AccountMonth) GetUncheckedStatementImports() []UncheckedStatementImport {
+	return s.UncheckedStatementImports
+}
+
+// GetReopenBlocked returns the value of ReopenBlocked.
+func (s *AccountMonth) GetReopenBlocked() bool {
+	return s.ReopenBlocked
 }
 
 // SetAccountID sets the value of AccountID.
@@ -311,13 +372,38 @@ func (s *AccountMonth) SetUncategorised(val int32) {
 	s.Uncategorised = val
 }
 
-// SetFlagged sets the value of Flagged.
-func (s *AccountMonth) SetFlagged(val bool) {
-	s.Flagged = val
+// SetUncheckedStatementImports sets the value of UncheckedStatementImports.
+func (s *AccountMonth) SetUncheckedStatementImports(val []UncheckedStatementImport) {
+	s.UncheckedStatementImports = val
 }
 
-func (*AccountMonth) closeAccountMonthRes() {}
-func (*AccountMonth) getAccountMonthRes()   {}
+// SetReopenBlocked sets the value of ReopenBlocked.
+func (s *AccountMonth) SetReopenBlocked(val bool) {
+	s.ReopenBlocked = val
+}
+
+func (*AccountMonth) closeAccountMonthRes()  {}
+func (*AccountMonth) getAccountMonthRes()    {}
+func (*AccountMonth) reopenAccountMonthRes() {}
+
+// An Account's Booking months.
+// Ref: #/components/schemas/AccountMonthList
+type AccountMonthList struct {
+	// Every Booking month of the Account, newest first.
+	Items []AccountMonth `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *AccountMonthList) GetItems() []AccountMonth {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *AccountMonthList) SetItems(val []AccountMonth) {
+	s.Items = val
+}
+
+func (*AccountMonthList) listAccountMonthsRes() {}
 
 // A Transaction as one line of an Account's single-entry list.
 // Ref: #/components/schemas/AccountTransaction
@@ -339,6 +425,8 @@ type AccountTransaction struct {
 	ReversalOfTransactionID OptUUID `json:"reversal_of_transaction_id"`
 	// The Transaction that reversed this one, once it is reversed.
 	ReversedByTransactionID OptUUID `json:"reversed_by_transaction_id"`
+	// The Imported transaction whose Accept recorded it.
+	ImportedTransactionID OptUUID `json:"imported_transaction_id"`
 }
 
 // GetTransactionID returns the value of TransactionID.
@@ -386,6 +474,11 @@ func (s *AccountTransaction) GetReversedByTransactionID() OptUUID {
 	return s.ReversedByTransactionID
 }
 
+// GetImportedTransactionID returns the value of ImportedTransactionID.
+func (s *AccountTransaction) GetImportedTransactionID() OptUUID {
+	return s.ImportedTransactionID
+}
+
 // SetTransactionID sets the value of TransactionID.
 func (s *AccountTransaction) SetTransactionID(val uuid.UUID) {
 	s.TransactionID = val
@@ -429,6 +522,11 @@ func (s *AccountTransaction) SetReversalOfTransactionID(val OptUUID) {
 // SetReversedByTransactionID sets the value of ReversedByTransactionID.
 func (s *AccountTransaction) SetReversedByTransactionID(val OptUUID) {
 	s.ReversedByTransactionID = val
+}
+
+// SetImportedTransactionID sets the value of ImportedTransactionID.
+func (s *AccountTransaction) SetImportedTransactionID(val OptUUID) {
+	s.ImportedTransactionID = val
 }
 
 // A page of an Account's Transactions.
@@ -709,6 +807,18 @@ func (s *CategoryTree) SetItems(val []CategoryNode) {
 
 func (*CategoryTree) listCategoriesRes() {}
 
+type ChangeAccountNotFound Problem
+
+func (*ChangeAccountNotFound) changeAccountRes() {}
+
+type ChangeAccountUnauthorized Problem
+
+func (*ChangeAccountUnauthorized) changeAccountRes() {}
+
+type ChangeAccountUnprocessableEntity Problem
+
+func (*ChangeAccountUnprocessableEntity) changeAccountRes() {}
+
 type ChangeCategoryConflict Problem
 
 func (*ChangeCategoryConflict) changeCategoryRes() {}
@@ -724,6 +834,18 @@ func (*ChangeCategoryUnauthorized) changeCategoryRes() {}
 type ChangeCategoryUnprocessableEntity Problem
 
 func (*ChangeCategoryUnprocessableEntity) changeCategoryRes() {}
+
+type ChangeConnectionNotFound Problem
+
+func (*ChangeConnectionNotFound) changeConnectionRes() {}
+
+type ChangeConnectionUnauthorized Problem
+
+func (*ChangeConnectionUnauthorized) changeConnectionRes() {}
+
+type ChangeConnectionUnprocessableEntity Problem
+
+func (*ChangeConnectionUnprocessableEntity) changeConnectionRes() {}
 
 type ChangeTransactionConflict Problem
 
@@ -745,10 +867,6 @@ type CloseAccountMonthBadRequest Problem
 
 func (*CloseAccountMonthBadRequest) closeAccountMonthRes() {}
 
-type CloseAccountMonthConflict Problem
-
-func (*CloseAccountMonthConflict) closeAccountMonthRes() {}
-
 type CloseAccountMonthNotFound Problem
 
 func (*CloseAccountMonthNotFound) closeAccountMonthRes() {}
@@ -761,7 +879,8 @@ func (*CloseAccountMonthUnauthorized) closeAccountMonthRes() {}
 // Ref: #/components/schemas/Connection
 type Connection struct {
 	// The Connection's ID (UUIDv7).
-	ConnectionID uuid.UUID `json:"connection_id"`
+	ConnectionID uuid.UUID      `json:"connection_id"`
+	Name         ConnectionName `json:"name"`
 	// The Account the Connection brings transactions into.
 	AccountID  uuid.UUID      `json:"account_id"`
 	Kind       ConnectionKind `json:"kind"`
@@ -774,6 +893,11 @@ type Connection struct {
 // GetConnectionID returns the value of ConnectionID.
 func (s *Connection) GetConnectionID() uuid.UUID {
 	return s.ConnectionID
+}
+
+// GetName returns the value of Name.
+func (s *Connection) GetName() ConnectionName {
+	return s.Name
 }
 
 // GetAccountID returns the value of AccountID.
@@ -801,6 +925,11 @@ func (s *Connection) SetConnectionID(val uuid.UUID) {
 	s.ConnectionID = val
 }
 
+// SetName sets the value of Name.
+func (s *Connection) SetName(val ConnectionName) {
+	s.Name = val
+}
+
 // SetAccountID sets the value of AccountID.
 func (s *Connection) SetAccountID(val uuid.UUID) {
 	s.AccountID = val
@@ -821,14 +950,37 @@ func (s *Connection) SetCsvMappingVersion(val OptInt32) {
 	s.CsvMappingVersion = val
 }
 
+func (*Connection) changeConnectionRes() {}
 func (*Connection) createConnectionRes() {}
 func (*Connection) saveCsvMappingRes()   {}
+
+// A new name for a Connection.
+// Ref: #/components/schemas/ConnectionChange
+type ConnectionChange struct {
+	Name ConnectionName `json:"name"`
+}
+
+// GetName returns the value of Name.
+func (s *ConnectionChange) GetName() ConnectionName {
+	return s.Name
+}
+
+// SetName sets the value of Name.
+func (s *ConnectionChange) SetName(val ConnectionName) {
+	s.Name = val
+}
 
 // A new Connection.
 // Ref: #/components/schemas/ConnectionCreation
 type ConnectionCreation struct {
+	Name       ConnectionName `json:"name"`
 	Kind       ConnectionKind `json:"kind"`
 	CsvMapping OptCsvMapping  `json:"csv_mapping"`
+}
+
+// GetName returns the value of Name.
+func (s *ConnectionCreation) GetName() ConnectionName {
+	return s.Name
 }
 
 // GetKind returns the value of Kind.
@@ -839,6 +991,11 @@ func (s *ConnectionCreation) GetKind() ConnectionKind {
 // GetCsvMapping returns the value of CsvMapping.
 func (s *ConnectionCreation) GetCsvMapping() OptCsvMapping {
 	return s.CsvMapping
+}
+
+// SetName sets the value of Name.
+func (s *ConnectionCreation) SetName(val ConnectionName) {
+	s.Name = val
 }
 
 // SetKind sets the value of Kind.
@@ -871,6 +1028,8 @@ func (s *ConnectionList) SetItems(val []Connection) {
 }
 
 func (*ConnectionList) listConnectionsRes() {}
+
+type ConnectionName string
 
 type CreateCategoryConflict Problem
 
@@ -1063,24 +1222,31 @@ func (s *CsvColumns) SetBankTransactionID(val OptCsvColumn) {
 // is saved, so the properties the mapping needs are checked there rather than by the schema.
 // Ref: #/components/schemas/CsvMapping
 type CsvMapping struct {
+	// How the file's bytes are decoded into text, before it is parsed; absent means `UTF_8`. A UTF-8 byte
+	// order mark is stripped.
+	Encoding OptString `json:"encoding"`
 	// The one character between columns.
 	Delimiter OptString `json:"delimiter"`
 	// Whether the first line after the skipped ones names the columns.
 	HasHeaderRow OptBool `json:"has_header_row"`
 	// How many lines to skip before the header row or the first row.
 	SkipLeadingLines OptInt32 `json:"skip_leading_lines"`
-	// How dates are written: one of `YYYY-MM-DD`, `YYYY/MM/DD`, `YYYYMMDD`, `DD/MM/YYYY`, `DD-MM-YYYY`,
-	// `DD.MM.YYYY`, `MM/DD/YYYY`, `MM-DD-YYYY`, `DD/MM/YY` or `MM/DD/YY`.
+	// How dates are written.
 	DateFormat OptString `json:"date_format"`
-	// The decimal separator, `.` or `,`.
+	// The decimal separator.
 	DecimalSeparator OptString `json:"decimal_separator"`
-	// The thousands separator, if any; empty, `.`, `,`, a space or `'`.
+	// The thousands separator, if any; empty for none.
 	ThousandsSeparator OptString `json:"thousands_separator"`
 	// One signed amount column, or separate debit (money out) and credit (money in) columns.
 	AmountLayout OptString `json:"amount_layout"`
 	// For a signed amount, whether a positive amount is money in or money out; some banks invert the sign.
 	PositiveAmountMeans OptString     `json:"positive_amount_means"`
 	Columns             OptCsvColumns `json:"columns"`
+}
+
+// GetEncoding returns the value of Encoding.
+func (s *CsvMapping) GetEncoding() OptString {
+	return s.Encoding
 }
 
 // GetDelimiter returns the value of Delimiter.
@@ -1128,6 +1294,11 @@ func (s *CsvMapping) GetColumns() OptCsvColumns {
 	return s.Columns
 }
 
+// SetEncoding sets the value of Encoding.
+func (s *CsvMapping) SetEncoding(val OptString) {
+	s.Encoding = val
+}
+
 // SetDelimiter sets the value of Delimiter.
 func (s *CsvMapping) SetDelimiter(val OptString) {
 	s.Delimiter = val
@@ -1171,6 +1342,78 @@ func (s *CsvMapping) SetPositiveAmountMeans(val OptString) {
 // SetColumns sets the value of Columns.
 func (s *CsvMapping) SetColumns(val OptCsvColumns) {
 	s.Columns = val
+}
+
+// A sample statement file as an unsaved CSV mapping reads it; nothing is recorded.
+// Ref: #/components/schemas/CsvMappingTest
+type CsvMappingTest struct {
+	// The first 10 readable rows, in file order.
+	Rows []ParsedStatementRow `json:"rows"`
+	// How many rows of the whole file are readable.
+	ReadableRowCount int32 `json:"readable_row_count"`
+	// Every line of the whole file that can't be read, with the reason; empty when all can.
+	UnreadableRows []RowError `json:"unreadable_rows"`
+}
+
+// GetRows returns the value of Rows.
+func (s *CsvMappingTest) GetRows() []ParsedStatementRow {
+	return s.Rows
+}
+
+// GetReadableRowCount returns the value of ReadableRowCount.
+func (s *CsvMappingTest) GetReadableRowCount() int32 {
+	return s.ReadableRowCount
+}
+
+// GetUnreadableRows returns the value of UnreadableRows.
+func (s *CsvMappingTest) GetUnreadableRows() []RowError {
+	return s.UnreadableRows
+}
+
+// SetRows sets the value of Rows.
+func (s *CsvMappingTest) SetRows(val []ParsedStatementRow) {
+	s.Rows = val
+}
+
+// SetReadableRowCount sets the value of ReadableRowCount.
+func (s *CsvMappingTest) SetReadableRowCount(val int32) {
+	s.ReadableRowCount = val
+}
+
+// SetUnreadableRows sets the value of UnreadableRows.
+func (s *CsvMappingTest) SetUnreadableRows(val []RowError) {
+	s.UnreadableRows = val
+}
+
+func (*CsvMappingTest) testCsvMappingRes() {}
+
+// An unsaved CSV mapping and a sample statement file to read with it. `csv_mapping` is a plain form
+// field holding the mapping as JSON text, not a file part.
+// Ref: #/components/schemas/CsvMappingTestUpload
+type CsvMappingTestUploadMultipart struct {
+	CsvMapping CsvMapping `json:"csv_mapping"`
+	// The sample statement file, as the bank exported it; it isn't kept.
+	File ht.MultipartFile `json:"file"`
+}
+
+// GetCsvMapping returns the value of CsvMapping.
+func (s *CsvMappingTestUploadMultipart) GetCsvMapping() CsvMapping {
+	return s.CsvMapping
+}
+
+// GetFile returns the value of File.
+func (s *CsvMappingTestUploadMultipart) GetFile() ht.MultipartFile {
+	return s.File
+}
+
+// SetCsvMapping sets the value of CsvMapping.
+func (s *CsvMappingTestUploadMultipart) SetCsvMapping(val CsvMapping) {
+	s.CsvMapping = val
+}
+
+// SetFile sets the value of File.
+func (s *CsvMappingTestUploadMultipart) SetFile(val ht.MultipartFile) {
+	s.File = val
 }
 
 // A currency and the number of decimal places its amounts use.
@@ -1223,10 +1466,6 @@ func (s *CurrencyList) SetItems(val []Currency) {
 func (*CurrencyList) listCurrenciesRes() {}
 
 type DecimalText string
-
-type DiscardImportedTransactionConflict Problem
-
-func (*DiscardImportedTransactionConflict) discardImportedTransactionRes() {}
 
 type DiscardImportedTransactionNotFound Problem
 
@@ -1574,10 +1813,6 @@ func (s *ImportedTransactionPage) SetNextCursor(val OptString) {
 
 func (*ImportedTransactionPage) listImportedTransactionsRes() {}
 
-type KeepImportedTransactionConflict Problem
-
-func (*KeepImportedTransactionConflict) keepImportedTransactionRes() {}
-
 type KeepImportedTransactionNotFound Problem
 
 func (*KeepImportedTransactionNotFound) keepImportedTransactionRes() {}
@@ -1585,6 +1820,14 @@ func (*KeepImportedTransactionNotFound) keepImportedTransactionRes() {}
 type KeepImportedTransactionUnauthorized Problem
 
 func (*KeepImportedTransactionUnauthorized) keepImportedTransactionRes() {}
+
+type ListAccountMonthsNotFound Problem
+
+func (*ListAccountMonthsNotFound) listAccountMonthsRes() {}
+
+type ListAccountMonthsUnauthorized Problem
+
+func (*ListAccountMonthsUnauthorized) listAccountMonthsRes() {}
 
 type ListAccountTransactionsBadRequest Problem
 
@@ -1894,6 +2137,197 @@ func (s *MonthClosing) GetStatementBalance() Money {
 func (s *MonthClosing) SetStatementBalance(val Money) {
 	s.StatementBalance = val
 }
+
+// Problem details (RFC 9457) of a request that conflicts with the current state. When it is about a
+// month (`/problems/month-closed`, `/problems/month-not-open-yet`, `/problems/month-not-ended`,
+// `/problems/statement-import-touches-closed-month`), `booking_month` names it and `open_month` gives
+// the Account's open month.
+// Ref: #/components/schemas/MonthProblem
+type MonthProblem struct {
+	// Identifies the problem type.
+	Type string `json:"type"`
+	// A short, human-readable summary of the problem type.
+	Title string `json:"title"`
+	// The HTTP status code.
+	Status int32 `json:"status"`
+	// A human-readable explanation of this occurrence.
+	Detail OptString `json:"detail"`
+	// The month the problem is about, written YYYY-MM.
+	BookingMonth OptString `json:"booking_month"`
+	// The Account's open month, written YYYY-MM.
+	OpenMonth OptString `json:"open_month"`
+}
+
+// GetType returns the value of Type.
+func (s *MonthProblem) GetType() string {
+	return s.Type
+}
+
+// GetTitle returns the value of Title.
+func (s *MonthProblem) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *MonthProblem) GetStatus() int32 {
+	return s.Status
+}
+
+// GetDetail returns the value of Detail.
+func (s *MonthProblem) GetDetail() OptString {
+	return s.Detail
+}
+
+// GetBookingMonth returns the value of BookingMonth.
+func (s *MonthProblem) GetBookingMonth() OptString {
+	return s.BookingMonth
+}
+
+// GetOpenMonth returns the value of OpenMonth.
+func (s *MonthProblem) GetOpenMonth() OptString {
+	return s.OpenMonth
+}
+
+// SetType sets the value of Type.
+func (s *MonthProblem) SetType(val string) {
+	s.Type = val
+}
+
+// SetTitle sets the value of Title.
+func (s *MonthProblem) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *MonthProblem) SetStatus(val int32) {
+	s.Status = val
+}
+
+// SetDetail sets the value of Detail.
+func (s *MonthProblem) SetDetail(val OptString) {
+	s.Detail = val
+}
+
+// SetBookingMonth sets the value of BookingMonth.
+func (s *MonthProblem) SetBookingMonth(val OptString) {
+	s.BookingMonth = val
+}
+
+// SetOpenMonth sets the value of OpenMonth.
+func (s *MonthProblem) SetOpenMonth(val OptString) {
+	s.OpenMonth = val
+}
+
+func (*MonthProblem) acceptImportedTransactionRes()  {}
+func (*MonthProblem) closeAccountMonthRes()          {}
+func (*MonthProblem) discardImportedTransactionRes() {}
+func (*MonthProblem) keepImportedTransactionRes()    {}
+func (*MonthProblem) reverseTransactionRes()         {}
+func (*MonthProblem) voidStatementImportRes()        {}
+
+// Problem details (RFC 9457) of a refused Reopen. `reasons` lists every failed condition; for
+// `OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS` the `open_month` and the `accepted` count are given beside it.
+// Ref: #/components/schemas/MonthReopenProblem
+type MonthReopenProblem struct {
+	// Identifies the problem type.
+	Type string `json:"type"`
+	// A short, human-readable summary of the problem type.
+	Title string `json:"title"`
+	// The HTTP status code.
+	Status int32 `json:"status"`
+	// A human-readable explanation of this occurrence.
+	Detail OptString `json:"detail"`
+	// Every condition that stops the month being reopened.
+	Reasons []string `json:"reasons"`
+	// The month asked to reopen, written YYYY-MM.
+	BookingMonth OptString `json:"booking_month"`
+	// The Account's open month, written YYYY-MM.
+	OpenMonth OptString `json:"open_month"`
+	// The open month's Accepted Transactions that aren't reversed.
+	Accepted OptInt32 `json:"accepted"`
+}
+
+// GetType returns the value of Type.
+func (s *MonthReopenProblem) GetType() string {
+	return s.Type
+}
+
+// GetTitle returns the value of Title.
+func (s *MonthReopenProblem) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *MonthReopenProblem) GetStatus() int32 {
+	return s.Status
+}
+
+// GetDetail returns the value of Detail.
+func (s *MonthReopenProblem) GetDetail() OptString {
+	return s.Detail
+}
+
+// GetReasons returns the value of Reasons.
+func (s *MonthReopenProblem) GetReasons() []string {
+	return s.Reasons
+}
+
+// GetBookingMonth returns the value of BookingMonth.
+func (s *MonthReopenProblem) GetBookingMonth() OptString {
+	return s.BookingMonth
+}
+
+// GetOpenMonth returns the value of OpenMonth.
+func (s *MonthReopenProblem) GetOpenMonth() OptString {
+	return s.OpenMonth
+}
+
+// GetAccepted returns the value of Accepted.
+func (s *MonthReopenProblem) GetAccepted() OptInt32 {
+	return s.Accepted
+}
+
+// SetType sets the value of Type.
+func (s *MonthReopenProblem) SetType(val string) {
+	s.Type = val
+}
+
+// SetTitle sets the value of Title.
+func (s *MonthReopenProblem) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *MonthReopenProblem) SetStatus(val int32) {
+	s.Status = val
+}
+
+// SetDetail sets the value of Detail.
+func (s *MonthReopenProblem) SetDetail(val OptString) {
+	s.Detail = val
+}
+
+// SetReasons sets the value of Reasons.
+func (s *MonthReopenProblem) SetReasons(val []string) {
+	s.Reasons = val
+}
+
+// SetBookingMonth sets the value of BookingMonth.
+func (s *MonthReopenProblem) SetBookingMonth(val OptString) {
+	s.BookingMonth = val
+}
+
+// SetOpenMonth sets the value of OpenMonth.
+func (s *MonthReopenProblem) SetOpenMonth(val OptString) {
+	s.OpenMonth = val
+}
+
+// SetAccepted sets the value of Accepted.
+func (s *MonthReopenProblem) SetAccepted(val OptInt32) {
+	s.Accepted = val
+}
+
+func (*MonthReopenProblem) reopenAccountMonthRes() {}
 
 // A Household-level message every member sees, with read state per User. A
 // `SUSPECTED_DUPLICATES_FOUND` one links to the Statement import whose Suspected duplicates wait to be
@@ -2639,6 +3073,106 @@ func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 	return d
 }
 
+// One statement file row as a CSV mapping reads it.
+// Ref: #/components/schemas/ParsedStatementRow
+type ParsedStatementRow struct {
+	// The line in the file, counted from 1, including skipped lines and the header row.
+	Line int32 `json:"line"`
+	// The date the bank recorded it on the Account.
+	BookingDate time.Time `json:"booking_date"`
+	// The date the purchase or payment happened; the Booking date when the file has none.
+	TransactionDate time.Time `json:"transaction_date"`
+	// The date the money moved, when the file has one.
+	ValueDate OptDate `json:"value_date"`
+	// The row's description.
+	Description string `json:"description"`
+	// The payee, when the file has one.
+	Payee OptString `json:"payee"`
+	// The bank's own ID for the row, when the file has one.
+	BankTransactionID OptString `json:"bank_transaction_id"`
+	Amount            Money     `json:"amount"`
+}
+
+// GetLine returns the value of Line.
+func (s *ParsedStatementRow) GetLine() int32 {
+	return s.Line
+}
+
+// GetBookingDate returns the value of BookingDate.
+func (s *ParsedStatementRow) GetBookingDate() time.Time {
+	return s.BookingDate
+}
+
+// GetTransactionDate returns the value of TransactionDate.
+func (s *ParsedStatementRow) GetTransactionDate() time.Time {
+	return s.TransactionDate
+}
+
+// GetValueDate returns the value of ValueDate.
+func (s *ParsedStatementRow) GetValueDate() OptDate {
+	return s.ValueDate
+}
+
+// GetDescription returns the value of Description.
+func (s *ParsedStatementRow) GetDescription() string {
+	return s.Description
+}
+
+// GetPayee returns the value of Payee.
+func (s *ParsedStatementRow) GetPayee() OptString {
+	return s.Payee
+}
+
+// GetBankTransactionID returns the value of BankTransactionID.
+func (s *ParsedStatementRow) GetBankTransactionID() OptString {
+	return s.BankTransactionID
+}
+
+// GetAmount returns the value of Amount.
+func (s *ParsedStatementRow) GetAmount() Money {
+	return s.Amount
+}
+
+// SetLine sets the value of Line.
+func (s *ParsedStatementRow) SetLine(val int32) {
+	s.Line = val
+}
+
+// SetBookingDate sets the value of BookingDate.
+func (s *ParsedStatementRow) SetBookingDate(val time.Time) {
+	s.BookingDate = val
+}
+
+// SetTransactionDate sets the value of TransactionDate.
+func (s *ParsedStatementRow) SetTransactionDate(val time.Time) {
+	s.TransactionDate = val
+}
+
+// SetValueDate sets the value of ValueDate.
+func (s *ParsedStatementRow) SetValueDate(val OptDate) {
+	s.ValueDate = val
+}
+
+// SetDescription sets the value of Description.
+func (s *ParsedStatementRow) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetPayee sets the value of Payee.
+func (s *ParsedStatementRow) SetPayee(val OptString) {
+	s.Payee = val
+}
+
+// SetBankTransactionID sets the value of BankTransactionID.
+func (s *ParsedStatementRow) SetBankTransactionID(val OptString) {
+	s.BankTransactionID = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *ParsedStatementRow) SetAmount(val Money) {
+	s.Amount = val
+}
+
 type PreviewStatementImportNotFound Problem
 
 func (*PreviewStatementImportNotFound) previewStatementImportRes() {}
@@ -2757,6 +3291,18 @@ func (s *Registration) SetInvitationCode(val string) {
 	s.InvitationCode = val
 }
 
+type ReopenAccountMonthBadRequest Problem
+
+func (*ReopenAccountMonthBadRequest) reopenAccountMonthRes() {}
+
+type ReopenAccountMonthNotFound Problem
+
+func (*ReopenAccountMonthNotFound) reopenAccountMonthRes() {}
+
+type ReopenAccountMonthUnauthorized Problem
+
+func (*ReopenAccountMonthUnauthorized) reopenAccountMonthRes() {}
+
 // The earlier Imported transaction a Suspected duplicate looks like, shown next to it so a Household
 // member can decide; kept after the Suspected duplicate is decided.
 // Ref: #/components/schemas/ResembledImportedTransaction
@@ -2846,10 +3392,6 @@ func (s *ResembledImportedTransaction) SetBankTransactionID(val OptString) {
 	s.BankTransactionID = val
 }
 
-type ReverseTransactionConflict Problem
-
-func (*ReverseTransactionConflict) reverseTransactionRes() {}
-
 type ReverseTransactionNotFound Problem
 
 func (*ReverseTransactionNotFound) reverseTransactionRes() {}
@@ -2918,10 +3460,14 @@ type StatementFileProblem struct {
 	// A human-readable explanation of this occurrence.
 	Detail OptString `json:"detail"`
 	// Every line of the file that can't be read, with the reason.
-	Rows            []RowError `json:"rows"`
-	ExpectedBalance OptMoney   `json:"expected_balance"`
-	ExportBalance   OptMoney   `json:"export_balance"`
-	Difference      OptMoney   `json:"difference"`
+	Rows []RowError `json:"rows"`
+	// For a failed Balance check: the file's rows booked in a closed month, and so ignored, that are
+	// neither certain repeats nor look like an earlier Imported transaction. The books likely miss them:
+	// Reopen back to their month and import again (ADR-0024).
+	RowsInClosedMonthsNotInBooks OptInt32 `json:"rows_in_closed_months_not_in_books"`
+	ExpectedBalance              OptMoney `json:"expected_balance"`
+	ExportBalance                OptMoney `json:"export_balance"`
+	Difference                   OptMoney `json:"difference"`
 }
 
 // GetType returns the value of Type.
@@ -2947,6 +3493,11 @@ func (s *StatementFileProblem) GetDetail() OptString {
 // GetRows returns the value of Rows.
 func (s *StatementFileProblem) GetRows() []RowError {
 	return s.Rows
+}
+
+// GetRowsInClosedMonthsNotInBooks returns the value of RowsInClosedMonthsNotInBooks.
+func (s *StatementFileProblem) GetRowsInClosedMonthsNotInBooks() OptInt32 {
+	return s.RowsInClosedMonthsNotInBooks
 }
 
 // GetExpectedBalance returns the value of ExpectedBalance.
@@ -2989,6 +3540,11 @@ func (s *StatementFileProblem) SetRows(val []RowError) {
 	s.Rows = val
 }
 
+// SetRowsInClosedMonthsNotInBooks sets the value of RowsInClosedMonthsNotInBooks.
+func (s *StatementFileProblem) SetRowsInClosedMonthsNotInBooks(val OptInt32) {
+	s.RowsInClosedMonthsNotInBooks = val
+}
+
 // SetExpectedBalance sets the value of ExpectedBalance.
 func (s *StatementFileProblem) SetExpectedBalance(val OptMoney) {
 	s.ExpectedBalance = val
@@ -3026,9 +3582,11 @@ type StatementImport struct {
 	// of the Account and wait to be kept or Discarded.
 	SuspectedDuplicates int32 `json:"suspected_duplicates"`
 	// The rows booked before the Account's start date, which were ignored.
-	RowsIgnoredBeforeStartDate int32    `json:"rows_ignored_before_start_date"`
-	RowsTotal                  Money    `json:"rows_total"`
-	OpeningBalance             OptMoney `json:"opening_balance"`
+	RowsIgnoredBeforeStartDate int32 `json:"rows_ignored_before_start_date"`
+	// The rows booked in a closed month, which were ignored (ADR-0024).
+	RowsIgnoredInClosedMonths int32    `json:"rows_ignored_in_closed_months"`
+	RowsTotal                 Money    `json:"rows_total"`
+	OpeningBalance            OptMoney `json:"opening_balance"`
 	// The Balance check; the first import passes it by construction, and a later import without Suspected
 	// duplicates that fails it is refused. A later import with Suspected duplicates is `WAITING` until the
 	// last one is kept or Discarded, and then `PASSED` or `FAILED`.
@@ -3037,6 +3595,11 @@ type StatementImport struct {
 	ImportedAt time.Time `json:"imported_at"`
 	// When the import was voided; absent while it isn't.
 	VoidedAt OptDateTime `json:"voided_at"`
+	// Every reason Void would be refused right now; empty when it is allowed. `NOT_LATEST`: a later import
+	// of the Account isn't voided. `HAS_ACCEPTED_ROWS`: some of its rows are Accepted.
+	// `TOUCHES_CLOSED_MONTH`: an Imported transaction it recorded is booked in a closed month, or it is
+	// the first import and the start date's month is closed. A voided import lists none.
+	VoidBlockedBy []string `json:"void_blocked_by"`
 }
 
 // GetStatementImportID returns the value of StatementImportID.
@@ -3079,6 +3642,11 @@ func (s *StatementImport) GetRowsIgnoredBeforeStartDate() int32 {
 	return s.RowsIgnoredBeforeStartDate
 }
 
+// GetRowsIgnoredInClosedMonths returns the value of RowsIgnoredInClosedMonths.
+func (s *StatementImport) GetRowsIgnoredInClosedMonths() int32 {
+	return s.RowsIgnoredInClosedMonths
+}
+
 // GetRowsTotal returns the value of RowsTotal.
 func (s *StatementImport) GetRowsTotal() Money {
 	return s.RowsTotal
@@ -3102,6 +3670,11 @@ func (s *StatementImport) GetImportedAt() time.Time {
 // GetVoidedAt returns the value of VoidedAt.
 func (s *StatementImport) GetVoidedAt() OptDateTime {
 	return s.VoidedAt
+}
+
+// GetVoidBlockedBy returns the value of VoidBlockedBy.
+func (s *StatementImport) GetVoidBlockedBy() []string {
+	return s.VoidBlockedBy
 }
 
 // SetStatementImportID sets the value of StatementImportID.
@@ -3144,6 +3717,11 @@ func (s *StatementImport) SetRowsIgnoredBeforeStartDate(val int32) {
 	s.RowsIgnoredBeforeStartDate = val
 }
 
+// SetRowsIgnoredInClosedMonths sets the value of RowsIgnoredInClosedMonths.
+func (s *StatementImport) SetRowsIgnoredInClosedMonths(val int32) {
+	s.RowsIgnoredInClosedMonths = val
+}
+
 // SetRowsTotal sets the value of RowsTotal.
 func (s *StatementImport) SetRowsTotal(val Money) {
 	s.RowsTotal = val
@@ -3167,6 +3745,11 @@ func (s *StatementImport) SetImportedAt(val time.Time) {
 // SetVoidedAt sets the value of VoidedAt.
 func (s *StatementImport) SetVoidedAt(val OptDateTime) {
 	s.VoidedAt = val
+}
+
+// SetVoidBlockedBy sets the value of VoidBlockedBy.
+func (s *StatementImport) SetVoidBlockedBy(val []string) {
+	s.VoidBlockedBy = val
 }
 
 func (*StatementImport) uploadStatementImportRes() {}
@@ -3273,7 +3856,10 @@ type StatementImportPreview struct {
 	RowCount int32 `json:"row_count"`
 	// The rows booked before the Account's start date, which are ignored.
 	RowsIgnoredBeforeStartDate int32 `json:"rows_ignored_before_start_date"`
-	RowsTotal                  Money `json:"rows_total"`
+	// The rows booked in a closed month, which are ignored (ADR-0024); always 0 here, since a first import
+	// never meets a closed month.
+	RowsIgnoredInClosedMonths int32 `json:"rows_ignored_in_closed_months"`
+	RowsTotal                 Money `json:"rows_total"`
 }
 
 // GetPreviewID returns the value of PreviewID.
@@ -3304,6 +3890,11 @@ func (s *StatementImportPreview) GetRowCount() int32 {
 // GetRowsIgnoredBeforeStartDate returns the value of RowsIgnoredBeforeStartDate.
 func (s *StatementImportPreview) GetRowsIgnoredBeforeStartDate() int32 {
 	return s.RowsIgnoredBeforeStartDate
+}
+
+// GetRowsIgnoredInClosedMonths returns the value of RowsIgnoredInClosedMonths.
+func (s *StatementImportPreview) GetRowsIgnoredInClosedMonths() int32 {
+	return s.RowsIgnoredInClosedMonths
 }
 
 // GetRowsTotal returns the value of RowsTotal.
@@ -3339,6 +3930,11 @@ func (s *StatementImportPreview) SetRowCount(val int32) {
 // SetRowsIgnoredBeforeStartDate sets the value of RowsIgnoredBeforeStartDate.
 func (s *StatementImportPreview) SetRowsIgnoredBeforeStartDate(val int32) {
 	s.RowsIgnoredBeforeStartDate = val
+}
+
+// SetRowsIgnoredInClosedMonths sets the value of RowsIgnoredInClosedMonths.
+func (s *StatementImportPreview) SetRowsIgnoredInClosedMonths(val int32) {
+	s.RowsIgnoredInClosedMonths = val
 }
 
 // SetRowsTotal sets the value of RowsTotal.
@@ -3426,6 +4022,18 @@ func (s *StatementImportUploadMultipart) SetExportBalance(val DecimalText) {
 func (s *StatementImportUploadMultipart) SetPreviewID(val OptString) {
 	s.PreviewID = val
 }
+
+type TestCsvMappingNotFound Problem
+
+func (*TestCsvMappingNotFound) testCsvMappingRes() {}
+
+type TestCsvMappingUnauthorized Problem
+
+func (*TestCsvMappingUnauthorized) testCsvMappingRes() {}
+
+type TestCsvMappingUnprocessableEntity Problem
+
+func (*TestCsvMappingUnprocessableEntity) testCsvMappingRes() {}
 
 // A Transaction as seen from its Account: its signed amount there (positive is money in) and the
 // Category on the other side.
@@ -3644,10 +4252,6 @@ func (*UploadStatementImportNotFound) uploadStatementImportRes() {}
 type UploadStatementImportUnauthorized Problem
 
 func (*UploadStatementImportUnauthorized) uploadStatementImportRes() {}
-
-type VoidStatementImportConflict Problem
-
-func (*VoidStatementImportConflict) voidStatementImportRes() {}
 
 type VoidStatementImportNotFound Problem
 

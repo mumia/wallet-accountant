@@ -1,0 +1,37 @@
+info:
+  name: Rename a Connection
+  type: http
+  seq: 3
+http:
+  method: PATCH
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/connections/:connection_id'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+    - name: connection_id
+      value: '{{connection_id}}'
+      type: path
+      description: The Connection's ID
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Statement file"
+      }
+  auth: inherit
+docs: |-
+  Renames the Connection. The name is trimmed, 1 to 100 characters,
+  and unique within the Account ignoring case: a name already used by
+  another of its Connections gets 422 `/problems/connection-name-taken`,
+  one of only spaces 422 `/problems/invalid-connection`, and an empty
+  or too long one 400. The
+  same name again records nothing. The CSV mapping is saved apart, by
+  `saveCsvMapping`.
+
+  Operation `changeConnection`.

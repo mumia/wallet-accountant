@@ -63,7 +63,7 @@ func NewConnectionAggregate(folds eventstore.FoldStore[domain.ConnectionState]) 
 		Decider:           domain.Connection,
 		Codec:             codec,
 		Folds:             folds,
-		FoldSchemaVersion: 1,
+		FoldSchemaVersion: 2,
 	}
 }
 
@@ -72,6 +72,7 @@ func NewConnectionAggregate(folds eventstore.FoldStore[domain.ConnectionState]) 
 type Connection struct {
 	ID             uuid.UUID
 	AccountID      uuid.UUID
+	Name           string
 	Kind           domain.ConnectionKind
 	CSVMapping     *domain.CSVMapping
 	MappingVersion int
@@ -86,6 +87,7 @@ type ConnectionReader interface {
 
 // NewConnection is the request to create a Connection.
 type NewConnection struct {
+	Name       string
 	Kind       domain.ConnectionKind
 	CSVMapping *domain.CSVMapping
 }
@@ -115,7 +117,7 @@ func (c *Connections) Create(ctx context.Context, household, account uuid.UUID, 
 
 	err = c.inAccount(ctx, household, account, func(ctx context.Context, tx *eventstore.Tx) error {
 		res, err := c.connections.Execute(ctx, tx, id, domain.CreateConnection{
-			AccountID: account, Kind: req.Kind, CSVMapping: req.CSVMapping,
+			AccountID: account, Name: req.Name, Kind: req.Kind, CSVMapping: req.CSVMapping,
 		})
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
@@ -202,6 +204,6 @@ func (c *Connections) inAccount(ctx context.Context, household, account uuid.UUI
 
 func connectionOf(id uuid.UUID, s domain.ConnectionState) Connection {
 	return Connection{
-		ID: id, AccountID: s.AccountID, Kind: s.Kind, CSVMapping: s.CSVMapping, MappingVersion: s.MappingVersion,
+		ID: id, AccountID: s.AccountID, Name: s.Name, Kind: s.Kind, CSVMapping: s.CSVMapping, MappingVersion: s.MappingVersion,
 	}
 }

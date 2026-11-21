@@ -1,0 +1,17 @@
+# One Open month per Account; a closed month locks its money
+
+Each Account has exactly one Open month. The first is the start date's month, and the next (December rolls into January) opens only when the Open month closes. A month can close only once it has ended, by the server's clock in UTC. Months close one at a time, in order. Every later month is Not open yet. This replaces the first slice's rule that a closed month can still be changed, with any change flagged.
+
+- **A closed month locks amounts and descriptions.** Accept, Keep, Discard and Reverse of anything booked in it are refused. A Transaction's Category can still change, because Categories explain money rather than move it, but never to Uncategorised, which would undo a condition the close checked.
+- **A Not open yet month takes nothing into the Ledger.** Imported transactions booked in it are recorded as pending and wait. They can't be Accepted or Discarded until their month opens. The one exception is the decision on a Suspected duplicate: otherwise the Balance check of an import that overlaps the Open month would wait for that decision forever, and the Open month could never close.
+- **Statement import rows in a closed month are ignored and counted**, like rows before the start date. The Balance check formula is unchanged (ADR-0018). A row the books already hold changes nothing. A row missing from a closed month makes the check fail by its amount. The refusal then says which closed month holds rows that aren't in the books.
+- **Reopen** takes back only the latest Month close, and only while the Open month has no Accepted Transactions. The reopened month is the Open month again, and the month after it is Not open yet again. The month must be closed again with its Statement balance. Correcting an old month therefore means reopening back to it, one month at a time.
+- **Void is refused when the import touches a closed month**: any Imported transaction it recorded, in any state, is booked in a closed month, or it is the Account's first import and the start month is closed (voiding it would reverse the Opening balance booked there).
+
+We chose this so that a closed month stays what the User confirmed. With flagging, a closed month's agreement with the bank could silently stop being true, and nothing told the User which later months depended on it. We rejected closing months in any order, because a month's computed balance includes every month before it, so closing a later month over an open earlier one confirms a number that can still move. We rejected a Household time zone for "the month has ended", because nothing else needs one yet. A Household in a time zone east of UTC waits a few hours after midnight on the 1st.
+
+## Consequences
+
+- Fixing an entry in an old month is expensive: every later month is Reopened, and each one must be closed again.
+- A bank that back-dates a row into a closed month causes a failed Balance check until the User reopens back to that month.
+- The Account fold owns the Open month. Ingestion reads it in the same database transaction as every Keep, Discard, import and Void.

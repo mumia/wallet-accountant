@@ -34,7 +34,14 @@ docs: |-
   Account's latest non-voided import can be voided (409
   `/problems/not-the-latest-statement-import`), only while none of its
   rows are Accepted (409 `/problems/statement-import-has-accepted-rows`:
-  reverse their Transactions first), and only once (409
-  `/problems/statement-import-already-voided`).
+  reverse their Transactions first), only while it doesn't touch a
+  closed month (409 `/problems/statement-import-touches-closed-month`,
+  naming the earliest such `booking_month`: Reopen back to it first),
+  and only once (409 `/problems/statement-import-already-voided`). An
+  import touches a closed month when any Imported transaction it
+  recorded, in any state, is booked in one, or when it is the Account's
+  first import and the start date's month is closed (ADR-0024). Rows it
+  ignored don't count. `void_blocked_by` on the Statement import says
+  beforehand which of these refusals apply.
 
   Operation `voidStatementImport`.

@@ -396,15 +396,53 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Problem'
+    patch:
+      operationId: changeAccount
+      summary: Rename an Account
+      description: |
+        Renames the Account. Only its name can change; its kind, Account
+        currency and start date are fixed. A name of only spaces gets 422
+        `/problems/invalid-account`, and an empty or too long one 400. Names needn't be unique. The
+        same name again records nothing.
+      tags:
+        - Accounts
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountChange'
+      responses:
+        '200':
+          description: The renamed Account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
   /households/{household_id}/accounts/{account_id}/connections:
     post:
       operationId: createConnection
       summary: Create a Connection for an Account
       description: |
-        Creates a statement file import Connection for the Account,
-        optionally with the CSV mapping of the bank's statement files. Live
-        bank feeds are not supported yet; a `BANK_FEED` or unknown kind gets
-        422 with the problem type `/problems/invalid-connection`. An invalid
+        Creates a statement file import Connection for the Account, with a
+        name and optionally the CSV mapping of the bank's statement files.
+        The name is trimmed, 1 to 100 characters, and unique within the
+        Account ignoring case: a name already used gets 422
+        `/problems/connection-name-taken`. Live bank feeds are not supported
+        yet; a `BANK_FEED` or unknown kind, or a name of only spaces, gets
+        422 with the problem type `/problems/invalid-connection`; an empty or
+        too long name gets 400. An invalid
         mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is
         created.
       tags:
@@ -456,6 +494,45 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/connections/{connection_id}:
+    patch:
+      operationId: changeConnection
+      summary: Rename a Connection
+      description: |
+        Renames the Connection. The name is trimmed, 1 to 100 characters,
+        and unique within the Account ignoring case: a name already used by
+        another of its Connections gets 422 `/problems/connection-name-taken`,
+        one of only spaces 422 `/problems/invalid-connection`, and an empty
+        or too long one 400. The
+        same name again records nothing. The CSV mapping is saved apart, by
+        `saveCsvMapping`.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/ConnectionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionChange'
+      responses:
+        '200':
+          description: The renamed Connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
   /households/{household_id}/accounts/{account_id}/connections/{connection_id}/csv-mapping:
     put:
       operationId: saveCsvMapping
@@ -485,6 +562,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/csv-mapping-tests:
+    post:
+      operationId: testCsvMapping
+      summary: Test an unsaved CSV mapping on a sample file
+      description: |
+        Reads a sample statement file with an unsaved CSV mapping, exactly as
+        an upload would read it, and returns the first 10 readable rows, how
+        many rows are readable, and every unreadable line with its reason.
+        Amounts are read in the Account currency. Rows before the Account's
+        start date are shown too: this tests the mapping, not an import. It
+        records nothing and doesn't keep the sample. An invalid mapping gets
+        422 `/problems/invalid-csv-mapping`, whose detail lists every
+        problem, and a file with no rows at all 422
+        `/problems/empty-statement-file`.
+      tags:
+        - Connections
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CsvMappingTestUpload'
+            encoding:
+              csv_mapping:
+                contentType: application/json
+      responses:
+        '200':
+          description: The sample as the mapping reads it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsvMappingTest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -575,20 +696,56 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/months:
+    get:
+      operationId: listAccountMonths
+      summary: An Account's months
+      description: |
+        Returns every Booking month of the Account, newest first and
+        unpaged, each as on `getAccountMonth`. The months run from the start
+        date's month to the later of the current calendar month (UTC) and
+        the latest Booking month holding a non-Discarded Imported
+        transaction. The Account has exactly one `OPEN` month; the months
+        before it are `CLOSED` and those after it `NOT_OPEN_YET` (ADR-0024).
+        It answers from the Account's creation: before its first Statement
+        import, the start date's month is `OPEN` and the rest are
+        `NOT_OPEN_YET`. It is always current: it is read in the request's own
+        transaction.
+      tags:
+        - Months
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+      responses:
+        '200':
+          description: The Account's months, newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountMonthList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
   /households/{household_id}/accounts/{account_id}/months/{booking_month}:
     get:
       operationId: getAccountMonth
       summary: An Account's month status
       description: |
         Returns one Booking month of the Account (months are decided by
-        Booking date): whether it is `OPEN` or `CLOSED`, the Statement
-        balance it closed with, the computed closing balance (the Opening
-        balance plus every month up to this one; absent while the Account
-        awaits its first Statement import), how many of its Imported
-        transactions are pending or undecided Suspected duplicates, how many
-        of its Transactions are in Uncategorised, and whether it changed
-        after it closed. It is always current: it is read in the request's
-        own transaction.
+        Booking date): whether it is `CLOSED`, the Account's one `OPEN`
+        month, or `NOT_OPEN_YET` (ADR-0024); the Statement balance it closed
+        with; the computed closing balance (the Opening balance plus every
+        month up to this one; absent while the Account awaits its first
+        Statement import); how many of its Imported transactions are pending
+        or undecided Suspected duplicates; how many of its Transactions are
+        in Uncategorised; the Statement imports whose Balance check stops it
+        closing; and whether it can be reopened now. Any month from the start
+        date's month on can be read, a later one as `NOT_OPEN_YET`; a month
+        before the start date's month gets 404. It is always current: it is
+        read in the request's own transaction.
       tags:
         - Months
       parameters:
@@ -615,8 +772,14 @@ paths:
       operationId: closeAccountMonth
       summary: Close an Account's month
       description: |
-        Closes the Booking month with the Statement balance, the closing
-        balance on the bank statement. The close is refused with 422
+        Closes the Account's open month with the Statement balance, the
+        closing balance on the bank statement, and opens the month after it
+        (December rolls into January). Months close one at a time, in order
+        (ADR-0024). Only the open month can close: a month that isn't open
+        yet gets 409 `/problems/month-not-open-yet`, naming the
+        `booking_month` and the Account's `open_month`, and the open month
+        gets 409 `/problems/month-not-ended` until it has ended, by the
+        server's clock in UTC. The close is refused with 422
         `/problems/month-close-refused`, listing every failed condition in
         `reasons` at once, while any Imported transaction booked in the month
         is pending or an undecided Suspected duplicate, any Transaction booked
@@ -630,8 +793,7 @@ paths:
         first Statement import 409
         `/problems/account-awaiting-first-statement-import`. A Statement
         balance in another currency than the Account's, or with more decimal
-        places than it has, a month before the Account's start date, or a month
-        that hasn't started yet gets
+        places than it has, or a month before the Account's start date gets
         422 `/problems/invalid-month-close`.
       tags:
         - Months
@@ -660,9 +822,49 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/MonthConflict'
         '422':
           $ref: '#/components/responses/MonthCloseRefused'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/accounts/{account_id}/months/{booking_month}/reopen:
+    post:
+      operationId: reopenAccountMonth
+      summary: Reopen an Account's latest closed month
+      description: |
+        Takes back the Account's latest Month close (ADR-0024). The month
+        becomes the open month again, its Statement balance is dropped, and
+        the month after it goes back to `NOT_OPEN_YET`: the month must be
+        closed again with its Statement balance. Reopen is refused with 409
+        `/problems/month-reopen-refused`, listing every failed condition in
+        `reasons` at once: the month isn't closed (`NOT_CLOSED`), it isn't
+        the Account's latest closed month (`NOT_LATEST_CLOSED`), or the open
+        month has Accepted Transactions that aren't reversed
+        (`OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS`, with the `open_month` and
+        the `accepted` count): reverse them first. Retrying with the same
+        Idempotency-Key returns the original result.
+      tags:
+        - Months
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/AccountID'
+        - $ref: '#/components/parameters/BookingMonthPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The reopened month's status, now open
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountMonth'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/MonthReopenRefused'
         default:
           $ref: '#/components/responses/Problem'
   /households/{household_id}/imported-transactions/{imported_transaction_id}/accept:
@@ -683,6 +885,10 @@ paths:
         `/problems/imported-transaction-suspected-duplicate`; any other Internal
         Category gets 422 `/problems/internal-category`, and a Category that
         isn't one of the Household's gets 422 `/problems/invalid-category`.
+        A row booked in a closed month gets 409 `/problems/month-closed`, and
+        one booked in a month that isn't open yet 409
+        `/problems/month-not-open-yet` (ADR-0024); both name the
+        `booking_month`, and the second also the Account's `open_month`.
         Retrying with the same Idempotency-Key and body returns the original
         result and never books twice.
       tags:
@@ -709,7 +915,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/MonthConflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
         default:
@@ -729,7 +935,9 @@ paths:
         `/problems/invalid-category`. A reversed Transaction gets 409
         `/problems/transaction-reversed`; a reversal gets 422
         `/problems/transaction-is-a-reversal`, and the Opening balance
-        Transaction 422 `/problems/opening-balance-transaction`.
+        Transaction 422 `/problems/opening-balance-transaction`. In a closed
+        month the Category can still change, but not to Uncategorised: that
+        gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024).
       tags:
         - Transactions
       parameters:
@@ -773,7 +981,9 @@ paths:
         gets 409 `/problems/transaction-already-reversed`; a reversal gets
         422 `/problems/transaction-is-a-reversal`, and the Opening balance
         Transaction 422 `/problems/opening-balance-transaction` (only
-        voiding the first Statement import changes it).
+        voiding the first Statement import changes it). A Transaction booked
+        in a closed month gets 409 `/problems/month-closed`, naming the
+        `booking_month`: Reopen back to it first (ADR-0024).
       tags:
         - Transactions
       parameters:
@@ -792,7 +1002,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/MonthConflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
         default:
@@ -808,6 +1018,10 @@ paths:
         Statement import runs its waiting Balance check, recorded as passed
         or failed. An Imported transaction that isn't a Suspected duplicate
         gets 409 `/problems/imported-transaction-not-suspected-duplicate`.
+        One booked in a closed month gets 409 `/problems/month-closed`. A
+        Suspected duplicate booked in a month that isn't open yet can still
+        be kept, so its Statement import's Balance check never waits on a
+        month that can't open (ADR-0024).
       tags:
         - Imported transactions
       parameters:
@@ -826,7 +1040,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/MonthConflict'
         default:
           $ref: '#/components/responses/Problem'
   /households/{household_id}/imported-transactions/{imported_transaction_id}/discard:
@@ -841,7 +1055,11 @@ paths:
         duplicate of a Statement import runs its waiting Balance check. One already
         Discarded gets 409 `/problems/imported-transaction-already-discarded`,
         and an Accepted one 409 `/problems/imported-transaction-already-accepted`
-        (reverse its Transaction first).
+        (reverse its Transaction first). One booked in a closed month gets 409
+        `/problems/month-closed`. A pending row booked in a month that isn't
+        open yet gets 409 `/problems/month-not-open-yet`, but a Suspected
+        duplicate there can still be Discarded (ADR-0024). Both problems name
+        the `booking_month`, and the second also the Account's `open_month`.
       tags:
         - Imported transactions
       parameters:
@@ -860,7 +1078,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/MonthConflict'
         default:
           $ref: '#/components/responses/Problem'
   /households/{household_id}/connections/{connection_id}/statement-imports/previews:
@@ -924,7 +1142,12 @@ paths:
       description: |
         Imports a statement file through the Connection: every row booked on
         or after the Account's start date becomes a pending Imported
-        transaction, and the rows before it are ignored and counted. The
+        transaction, and the rows before it are ignored and counted
+        (`rows_ignored_before_start_date`). Rows booked in a closed month are
+        ignored too, before any other test, and counted
+        (`rows_ignored_in_closed_months`). Rows booked in a month that isn't
+        open yet become pending Imported transactions that can't be Accepted
+        or Discarded until their month opens (ADR-0024). The
         first import of an Account needs the `preview_id` of its preview
         (422 `/problems/preview-required` without it). It is recomputed from
         the uploaded file, its Export balance and the Connection's current
@@ -944,9 +1167,15 @@ paths:
         certain repeat and counted. The import then runs its Balance check
         (ADR-0018): the Account's Opening balance plus every non-Discarded
         Imported transaction, the new rows included, must equal the Export
-        balance. Otherwise the whole import is refused with 422
-        `/problems/balance-check-failed`, giving the expected balance, the
-        Export balance and the difference, and nothing is recorded. Amounts, an empty
+        balance. Rows ignored in closed months count only through the
+        Imported transactions already recorded. Otherwise the whole import
+        is refused with 422 `/problems/balance-check-failed`, giving the
+        expected balance, the Export balance and the difference, and nothing
+        is recorded. When some of the rows ignored in closed months are
+        neither certain repeats nor look like an earlier Imported
+        transaction, the problem also gives
+        `rows_in_closed_months_not_in_books`, and its `detail` names the
+        closed months to Reopen before importing again. Amounts, an empty
         file and a Connection without a mapping are refused as by the
         preview. Retrying with the same Idempotency-Key and the same file and
         fields returns the original result, however the form is rebuilt.
@@ -1016,8 +1245,15 @@ paths:
         Account's latest non-voided import can be voided (409
         `/problems/not-the-latest-statement-import`), only while none of its
         rows are Accepted (409 `/problems/statement-import-has-accepted-rows`:
-        reverse their Transactions first), and only once (409
-        `/problems/statement-import-already-voided`).
+        reverse their Transactions first), only while it doesn't touch a
+        closed month (409 `/problems/statement-import-touches-closed-month`,
+        naming the earliest such `booking_month`: Reopen back to it first),
+        and only once (409 `/problems/statement-import-already-voided`). An
+        import touches a closed month when any Imported transaction it
+        recorded, in any state, is booked in one, or when it is the Account's
+        first import and the start date's month is closed (ADR-0024). Rows it
+        ignored don't count. `void_blocked_by` on the Statement import says
+        beforehand which of these refusals apply.
       tags:
         - Statement imports
       parameters:
@@ -1037,7 +1273,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/MonthConflict'
         default:
           $ref: '#/components/responses/Problem'
   /households/{household_id}/notifications:
@@ -1278,6 +1514,21 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/MonthCloseProblem'
+    MonthConflict:
+      description: |
+        The request conflicts with the current state: for example the row is
+        booked in a closed month, or in a month that isn't open yet
+        (`booking_month` and the Account's `open_month` given)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/MonthProblem'
+    MonthReopenRefused:
+      description: The month can't be reopened (`reasons` lists every failed condition)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/MonthReopenProblem'
     Problem:
       description: An error
       content:
@@ -1500,6 +1751,9 @@ components:
         - currency
         - start_date
         - awaiting_first_statement_import
+        - open_month
+        - pending
+        - suspected_duplicates
       properties:
         account_id:
           type: string
@@ -1523,6 +1777,36 @@ components:
           description: Whether the Account still awaits the first Statement import that records its Opening balance
         balance:
           $ref: '#/components/schemas/Money'
+        open_month:
+          type: string
+          description: |
+            The Account's one open Booking month, written YYYY-MM: the start
+            date's month until it closes, then each next month in turn
+            (ADR-0024)
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          example: 2026-01
+        pending:
+          type: integer
+          format: int32
+          description: The Account's pending Imported transactions, in every month, those not open yet included
+          example: 4
+        suspected_duplicates:
+          type: integer
+          format: int32
+          description: The Account's undecided Suspected duplicates, in every month, those not open yet included
+          example: 1
+    AccountChange:
+      type: object
+      description: A new name for an Account; its kind, Account currency and start date never change
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The Account's new name, trimmed; not blank
+          example: Main
     AccountList:
       type: object
       description: A Household's Accounts
@@ -1553,8 +1837,11 @@ components:
       type: object
       description: A new Connection
       required:
+        - name
         - kind
       properties:
+        name:
+          $ref: '#/components/schemas/ConnectionName'
         kind:
           $ref: '#/components/schemas/ConnectionKind'
         csv_mapping:
@@ -1565,12 +1852,15 @@ components:
       required:
         - connection_id
         - account_id
+        - name
         - kind
       properties:
         connection_id:
           type: string
           format: uuid
           description: The Connection's ID (UUIDv7)
+        name:
+          $ref: '#/components/schemas/ConnectionName'
         account_id:
           type: string
           format: uuid
@@ -1587,6 +1877,20 @@ components:
             the Connection has no mapping. A first Statement import's preview
             is tied to it.
           example: 1
+    ConnectionName:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: The Connection's name, trimmed, unique within its Account ignoring case
+      example: Statement file
+    ConnectionChange:
+      type: object
+      description: A new name for a Connection
+      required:
+        - name
+      properties:
+        name:
+          $ref: '#/components/schemas/ConnectionName'
     ConnectionList:
       type: object
       description: An Account's Connections
@@ -1608,6 +1912,16 @@ components:
         validated together when the mapping is saved, so the properties the
         mapping needs are checked there rather than by the schema.
       properties:
+        encoding:
+          type: string
+          description: |
+            How the file's bytes are decoded into text, before it is parsed;
+            absent means `UTF_8`. A UTF-8 byte order mark is stripped.
+          x-extensible-enum:
+            - UTF_8
+            - WINDOWS_1252
+          default: UTF_8
+          example: WINDOWS_1252
         delimiter:
           type: string
           description: The one character between columns
@@ -1623,18 +1937,35 @@ components:
           default: 0
         date_format:
           type: string
-          description: |
-            How dates are written: one of `YYYY-MM-DD`, `YYYY/MM/DD`,
-            `YYYYMMDD`, `DD/MM/YYYY`, `DD-MM-YYYY`, `DD.MM.YYYY`,
-            `MM/DD/YYYY`, `MM-DD-YYYY`, `DD/MM/YY` or `MM/DD/YY`
+          description: How dates are written
+          x-extensible-enum:
+            - YYYY-MM-DD
+            - YYYY/MM/DD
+            - YYYYMMDD
+            - DD/MM/YYYY
+            - DD-MM-YYYY
+            - DD.MM.YYYY
+            - MM/DD/YYYY
+            - MM-DD-YYYY
+            - DD/MM/YY
+            - MM/DD/YY
           example: DD/MM/YYYY
         decimal_separator:
           type: string
-          description: The decimal separator, `.` or `,`
+          description: The decimal separator
+          x-extensible-enum:
+            - .
+            - ','
           example: ','
         thousands_separator:
           type: string
-          description: The thousands separator, if any; empty, `.`, `,`, a space or `'`
+          description: The thousands separator, if any; empty for none
+          x-extensible-enum:
+            - ''
+            - .
+            - ','
+            - ' '
+            - "'"
           default: ''
           example: .
         amount_layout:
@@ -1688,6 +2019,88 @@ components:
           format: int32
           description: The column's position, counted from 1
           example: 3
+    CsvMappingTestUpload:
+      type: object
+      description: |
+        An unsaved CSV mapping and a sample statement file to read with it.
+        `csv_mapping` is a plain form field holding the mapping as JSON text,
+        not a file part
+      required:
+        - csv_mapping
+        - file
+      properties:
+        csv_mapping:
+          $ref: '#/components/schemas/CsvMapping'
+        file:
+          type: string
+          format: binary
+          description: The sample statement file, as the bank exported it; it isn't kept
+    CsvMappingTest:
+      type: object
+      description: A sample statement file as an unsaved CSV mapping reads it; nothing is recorded
+      required:
+        - rows
+        - readable_row_count
+        - unreadable_rows
+      properties:
+        rows:
+          type: array
+          description: The first 10 readable rows, in file order
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/ParsedStatementRow'
+        readable_row_count:
+          type: integer
+          format: int32
+          description: How many rows of the whole file are readable
+          example: 42
+        unreadable_rows:
+          type: array
+          description: Every line of the whole file that can't be read, with the reason; empty when all can
+          items:
+            $ref: '#/components/schemas/RowError'
+    ParsedStatementRow:
+      type: object
+      description: One statement file row as a CSV mapping reads it
+      required:
+        - line
+        - booking_date
+        - transaction_date
+        - description
+        - amount
+      properties:
+        line:
+          type: integer
+          format: int32
+          description: The line in the file, counted from 1, including skipped lines and the header row
+          example: 7
+        booking_date:
+          type: string
+          format: date
+          description: The date the bank recorded it on the Account
+          example: '2026-01-15'
+        transaction_date:
+          type: string
+          format: date
+          description: The date the purchase or payment happened; the Booking date when the file has none
+          example: '2026-01-14'
+        value_date:
+          type: string
+          format: date
+          description: The date the money moved, when the file has one
+          example: '2026-01-16'
+        description:
+          type: string
+          description: The row's description
+          example: Coffee
+        payee:
+          type: string
+          description: The payee, when the file has one
+        bank_transaction_id:
+          type: string
+          description: The bank's own ID for the row, when the file has one
+        amount:
+          $ref: '#/components/schemas/Money'
     DecimalText:
       type: string
       description: An exact decimal written with `.` as the decimal separator and no thousands separator
@@ -1736,6 +2149,7 @@ components:
         - export_balance
         - row_count
         - rows_ignored_before_start_date
+        - rows_ignored_in_closed_months
         - rows_total
       properties:
         preview_id:
@@ -1763,6 +2177,13 @@ components:
           format: int32
           description: The rows booked before the Account's start date, which are ignored
           example: 3
+        rows_ignored_in_closed_months:
+          type: integer
+          format: int32
+          description: |
+            The rows booked in a closed month, which are ignored (ADR-0024);
+            always 0 here, since a first import never meets a closed month
+          example: 0
         rows_total:
           $ref: '#/components/schemas/Money'
     StatementImport:
@@ -1777,8 +2198,10 @@ components:
         - rows_skipped_as_certain_repeats
         - suspected_duplicates
         - rows_ignored_before_start_date
+        - rows_ignored_in_closed_months
         - rows_total
         - balance_check
+        - void_blocked_by
         - imported_at
       properties:
         statement_import_id:
@@ -1820,6 +2243,11 @@ components:
           format: int32
           description: The rows booked before the Account's start date, which were ignored
           example: 3
+        rows_ignored_in_closed_months:
+          type: integer
+          format: int32
+          description: The rows booked in a closed month, which were ignored (ADR-0024)
+          example: 5
         rows_total:
           $ref: '#/components/schemas/Money'
         opening_balance:
@@ -1847,6 +2275,22 @@ components:
           format: date-time
           description: When the import was voided; absent while it isn't
           example: '2026-02-02T10:00:00Z'
+        void_blocked_by:
+          type: array
+          description: |
+            Every reason Void would be refused right now; empty when it is
+            allowed. `NOT_LATEST`: a later import of the Account isn't voided.
+            `HAS_ACCEPTED_ROWS`: some of its rows are Accepted.
+            `TOUCHES_CLOSED_MONTH`: an Imported transaction it recorded is
+            booked in a closed month, or it is the first import and the start
+            date's month is closed. A voided import lists none.
+          items:
+            type: string
+            x-extensible-enum:
+              - NOT_LATEST
+              - HAS_ACCEPTED_ROWS
+              - TOUCHES_CLOSED_MONTH
+            example: NOT_LATEST
     StatementImportList:
       type: object
       description: A Connection's Statement imports
@@ -1990,6 +2434,15 @@ components:
           description: Every line of the file that can't be read, with the reason
           items:
             $ref: '#/components/schemas/RowError'
+        rows_in_closed_months_not_in_books:
+          type: integer
+          format: int32
+          description: |
+            For a failed Balance check: the file's rows booked in a closed
+            month, and so ignored, that are neither certain repeats nor look
+            like an earlier Imported transaction. The books likely miss them:
+            Reopen back to their month and import again (ADR-0024)
+          example: 1
         expected_balance:
           $ref: '#/components/schemas/Money'
         export_balance:
@@ -2059,6 +2512,10 @@ components:
           type: string
           format: uuid
           description: The Transaction that reversed this one, once it is reversed
+        imported_transaction_id:
+          type: string
+          format: uuid
+          description: The Imported transaction whose Accept recorded it
     Transaction:
       type: object
       description: |
@@ -2295,7 +2752,8 @@ components:
         - pending
         - suspected_duplicates
         - uncategorised
-        - flagged
+        - unchecked_statement_imports
+        - reopen_blocked
       properties:
         account_id:
           type: string
@@ -2308,17 +2766,20 @@ components:
           example: 2026-01
         state:
           type: string
-          description: Whether the month is closed
+          description: |
+            `OPEN` for the Account's one open month, `CLOSED` for every month
+            before it and `NOT_OPEN_YET` for every month after it (ADR-0024)
           x-extensible-enum:
             - OPEN
             - CLOSED
+            - NOT_OPEN_YET
           example: OPEN
         statement_balance:
           $ref: '#/components/schemas/Money'
         closed_at:
           type: string
           format: date-time
-          description: When the month closed; absent while it is open
+          description: When the month closed; absent unless it is closed
           example: '2026-02-03T18:00:00Z'
         computed_balance:
           $ref: '#/components/schemas/Money'
@@ -2337,10 +2798,131 @@ components:
           format: int32
           description: The month's Transactions whose other side is in Uncategorised
           example: 2
-        flagged:
+        unchecked_statement_imports:
+          type: array
+          description: |
+            The Statement imports with rows in or before the month whose
+            Balance check hasn't passed, as a Month close refusal lists them;
+            empty when there are none
+          items:
+            $ref: '#/components/schemas/UncheckedStatementImport'
+        reopen_blocked:
           type: boolean
-          description: Whether the month changed after it closed
+          description: |
+            Whether a Reopen of this month would be refused right now: always
+            true unless it is the Account's latest closed month and the open
+            month has no Accepted Transactions that aren't reversed
           example: false
+    AccountMonthList:
+      type: object
+      description: An Account's Booking months
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: Every Booking month of the Account, newest first
+          items:
+            $ref: '#/components/schemas/AccountMonth'
+    MonthProblem:
+      type: object
+      description: |
+        Problem details (RFC 9457) of a request that conflicts with the
+        current state. When it is about a month (`/problems/month-closed`,
+        `/problems/month-not-open-yet`, `/problems/month-not-ended`,
+        `/problems/statement-import-touches-closed-month`), `booking_month`
+        names it and `open_month` gives the Account's open month
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/month-closed
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Month closed
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 409
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+          example: January 2026 is closed. Reopen it to change its entries.
+        booking_month:
+          type: string
+          description: The month the problem is about, written YYYY-MM
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          example: 2026-01
+        open_month:
+          type: string
+          description: The Account's open month, written YYYY-MM
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          example: 2026-02
+    MonthReopenProblem:
+      type: object
+      description: |
+        Problem details (RFC 9457) of a refused Reopen. `reasons` lists every
+        failed condition; for `OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS` the
+        `open_month` and the `accepted` count are given beside it
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Identifies the problem type
+          example: /problems/month-reopen-refused
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+          example: Month can't be reopened
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          description: The HTTP status code
+          example: 409
+        detail:
+          type: string
+          description: A human-readable explanation of this occurrence
+          example: February 2026 has 3 Accepted Transactions. Reverse them before reopening January 2026.
+        reasons:
+          type: array
+          description: Every condition that stops the month being reopened
+          items:
+            type: string
+            x-extensible-enum:
+              - NOT_CLOSED
+              - NOT_LATEST_CLOSED
+              - OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS
+            example: OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS
+        booking_month:
+          type: string
+          description: The month asked to reopen, written YYYY-MM
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          example: 2026-01
+        open_month:
+          type: string
+          description: The Account's open month, written YYYY-MM
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          example: 2026-02
+        accepted:
+          type: integer
+          format: int32
+          description: The open month's Accepted Transactions that aren't reversed
+          example: 3
     MonthClosing:
       type: object
       description: The Statement balance a month closes with

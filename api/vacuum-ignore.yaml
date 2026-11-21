@@ -1,0 +1,24 @@
+# Waivers for vacuum (make lint-api). Each one is a deliberate deviation.
+#
+# The CSV mapping's date formats and separators are written as the bank file
+# writes them (DD/MM/YYYY, ',', ...). They were stored and documented that way
+# before they were listed as x-extensible-enum, and the UI's labels are tested
+# against these exact values, so UPPER_SNAKE_CASE [240] doesn't apply to them.
+should-declare-enum-values-using-upper-snake-case-format:
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][0]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][1]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][2]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][3]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][4]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][5]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][6]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][7]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][8]"
+  - "$.components.schemas.CsvMapping.properties.date_format['x-extensible-enum'][9]"
+  - "$.components.schemas.CsvMapping.properties.decimal_separator['x-extensible-enum'][0]"
+  - "$.components.schemas.CsvMapping.properties.decimal_separator['x-extensible-enum'][1]"
+  - "$.components.schemas.CsvMapping.properties.thousands_separator['x-extensible-enum'][0]"
+  - "$.components.schemas.CsvMapping.properties.thousands_separator['x-extensible-enum'][1]"
+  - "$.components.schemas.CsvMapping.properties.thousands_separator['x-extensible-enum'][2]"
+  - "$.components.schemas.CsvMapping.properties.thousands_separator['x-extensible-enum'][3]"
+  - "$.components.schemas.CsvMapping.properties.thousands_separator['x-extensible-enum'][4]"

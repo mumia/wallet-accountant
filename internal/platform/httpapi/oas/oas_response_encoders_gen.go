@@ -74,7 +74,7 @@ func encodeAcceptImportedTransactionResponse(response AcceptImportedTransactionR
 
 		return nil
 
-	case *AcceptImportedTransactionConflict:
+	case *MonthProblem:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -206,6 +206,93 @@ func encodeAddAccountResponse(response AddAccountRes, w http.ResponseWriter, spa
 	}
 }
 
+func encodeChangeAccountResponse(response ChangeAccountRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *Account:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ChangeAccountUnauthorized:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(401)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ChangeAccountNotFound:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(404)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ChangeAccountUnprocessableEntity:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(422)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
 func encodeChangeCategoryResponse(response ChangeCategoryRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *Category:
@@ -281,6 +368,93 @@ func encodeChangeCategoryResponse(response ChangeCategoryRes, w http.ResponseWri
 		return nil
 
 	case *ChangeCategoryUnprocessableEntity:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(422)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeChangeConnectionResponse(response ChangeConnectionRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *Connection:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ChangeConnectionUnauthorized:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(401)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ChangeConnectionNotFound:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(404)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ChangeConnectionUnprocessableEntity:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -494,7 +668,7 @@ func encodeCloseAccountMonthResponse(response CloseAccountMonthRes, w http.Respo
 
 		return nil
 
-	case *CloseAccountMonthConflict:
+	case *MonthProblem:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -641,6 +815,14 @@ func encodeCreateCategoryResponse(response CreateCategoryRes, w http.ResponseWri
 func encodeCreateConnectionResponse(response CreateConnectionRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *Connection:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(201)
 
@@ -945,7 +1127,7 @@ func encodeDiscardImportedTransactionResponse(response DiscardImportedTransactio
 
 		return nil
 
-	case *DiscardImportedTransactionConflict:
+	case *MonthProblem:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -1312,7 +1494,7 @@ func encodeKeepImportedTransactionResponse(response KeepImportedTransactionRes, 
 
 		return nil
 
-	case *KeepImportedTransactionConflict:
+	case *MonthProblem:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -1323,6 +1505,73 @@ func encodeKeepImportedTransactionResponse(response KeepImportedTransactionRes, 
 		}
 		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(409)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeListAccountMonthsResponse(response ListAccountMonthsRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *AccountMonthList:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ListAccountMonthsUnauthorized:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(401)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ListAccountMonthsNotFound:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(404)
 
 		e := new(jx.Encoder)
 		response.Encode(e)
@@ -2126,6 +2375,113 @@ func encodePreviewStatementImportResponse(response PreviewStatementImportRes, w 
 	}
 }
 
+func encodeReopenAccountMonthResponse(response ReopenAccountMonthRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *AccountMonth:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ReopenAccountMonthBadRequest:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(400)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ReopenAccountMonthUnauthorized:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(401)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ReopenAccountMonthNotFound:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(404)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *MonthReopenProblem:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(409)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
 func encodeReverseTransactionResponse(response ReverseTransactionRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *Transaction:
@@ -2188,7 +2544,7 @@ func encodeReverseTransactionResponse(response ReverseTransactionRes, w http.Res
 
 		return nil
 
-	case *ReverseTransactionConflict:
+	case *MonthProblem:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -2236,6 +2592,14 @@ func encodeReverseTransactionResponse(response ReverseTransactionRes, w http.Res
 func encodeSaveCsvMappingResponse(response SaveCsvMappingRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *Connection:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(200)
 
@@ -2288,6 +2652,93 @@ func encodeSaveCsvMappingResponse(response SaveCsvMappingRes, w http.ResponseWri
 		return nil
 
 	case *SaveCsvMappingUnprocessableEntity:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(422)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeTestCsvMappingResponse(response TestCsvMappingRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *CsvMappingTest:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *TestCsvMappingUnauthorized:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(401)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *TestCsvMappingNotFound:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(404)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *TestCsvMappingUnprocessableEntity:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -2481,7 +2932,7 @@ func encodeVoidStatementImportResponse(response VoidStatementImportRes, w http.R
 
 		return nil
 
-	case *VoidStatementImportConflict:
+	case *MonthProblem:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err

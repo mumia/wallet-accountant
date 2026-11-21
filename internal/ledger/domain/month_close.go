@@ -129,6 +129,33 @@ type MonthClosed struct {
 
 func (MonthClosed) isAccountEvent() {}
 
+// OpenMonth is the Account's one open Booking month (MonthLayout): the
+// first month from the start date's month that isn't closed (ADR-0024).
+// Until the fold holds it (ticket 02 of .scratch/ui-first-slice-backend),
+// it is derived from the Month closes.
+func (s AccountState) OpenMonth() string {
+	return FirstOpenMonth(s.StartDate, func(month string) bool {
+		_, closed := s.Closed[month]
+
+		return closed
+	})
+}
+
+// FirstOpenMonth is the first Booking month (MonthLayout) from the start
+// date's month that closed doesn't report as closed.
+func FirstOpenMonth(startDate time.Time, closed func(month string) bool) string {
+	month := time.Date(startDate.Year(), startDate.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+	for {
+		key := month.Format(MonthLayout)
+		if !closed(key) {
+			return key
+		}
+
+		month = month.AddDate(0, 1, 0)
+	}
+}
+
 // ClosingBalance is the computed balance at the end of the Booking month
 // (MonthLayout): the Opening balance plus every month up to this one.
 func (s AccountState) ClosingBalance(month string) sharedkernel.Decimal {

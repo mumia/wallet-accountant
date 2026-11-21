@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/mumia/wallet-accountant/internal/ingestion/domain"
@@ -44,14 +45,22 @@ func debitCreditMapping() domain.CSVMapping {
 }
 
 func created() domain.ConnectionEvent {
-	return domain.ConnectionCreated{AccountID: accountID, Kind: domain.ConnectionKindStatementFileImport}
+	return domain.ConnectionCreated{AccountID: accountID, Name: "Statement file", Kind: domain.ConnectionKindStatementFileImport}
 }
 
 func TestCreatingAStatementFileImportConnection(t *testing.T) {
 	t.Parallel()
 
 	decidertest.Given(t, domain.Connection).
-		When(domain.CreateConnection{AccountID: accountID, Kind: domain.ConnectionKindStatementFileImport}).
+		When(domain.CreateConnection{AccountID: accountID, Name: "Statement file", Kind: domain.ConnectionKindStatementFileImport}).
+		Then(created())
+}
+
+func TestAConnectionNameIsTrimmed(t *testing.T) {
+	t.Parallel()
+
+	decidertest.Given(t, domain.Connection).
+		When(domain.CreateConnection{AccountID: accountID, Name: "  Statement file ", Kind: domain.ConnectionKindStatementFileImport}).
 		Then(created())
 }
 
@@ -61,7 +70,7 @@ func TestCreatingAConnectionWithItsMapping(t *testing.T) {
 	m := signedMapping()
 
 	decidertest.Given(t, domain.Connection).
-		When(domain.CreateConnection{AccountID: accountID, Kind: domain.ConnectionKindStatementFileImport, CSVMapping: &m}).
+		When(domain.CreateConnection{AccountID: accountID, Name: "Statement file", Kind: domain.ConnectionKindStatementFileImport, CSVMapping: &m}).
 		Then(created(), domain.CSVMappingSaved{CSVMapping: m, MappingVersion: 1})
 }
 
@@ -75,11 +84,19 @@ func TestCreatingAConnectionRefusals(t *testing.T) {
 		cmd  domain.CreateConnection
 		want error
 	}{
-		"bank feed":    {domain.CreateConnection{AccountID: accountID, Kind: "bank_feed"}, domain.ErrBankFeedsNotSupported},
-		"unknown kind": {domain.CreateConnection{AccountID: accountID, Kind: "carrier_pigeon"}, domain.ErrUnknownConnectionKind},
-		"no Account":   {domain.CreateConnection{Kind: domain.ConnectionKindStatementFileImport}, domain.ErrConnectionAccountRequired},
+		"bank feed":    {domain.CreateConnection{AccountID: accountID, Name: "Statement file", Kind: "bank_feed"}, domain.ErrBankFeedsNotSupported},
+		"unknown kind": {domain.CreateConnection{AccountID: accountID, Name: "Statement file", Kind: "carrier_pigeon"}, domain.ErrUnknownConnectionKind},
+		"no Account":   {domain.CreateConnection{Name: "Statement file", Kind: domain.ConnectionKindStatementFileImport}, domain.ErrConnectionAccountRequired},
+		"blank name": {
+			domain.CreateConnection{AccountID: accountID, Name: "   ", Kind: domain.ConnectionKindStatementFileImport},
+			domain.ErrConnectionNameInvalid,
+		},
+		"name too long": {
+			domain.CreateConnection{AccountID: accountID, Name: strings.Repeat("é", 101), Kind: domain.ConnectionKindStatementFileImport},
+			domain.ErrConnectionNameInvalid,
+		},
 		"invalid mapping": {
-			domain.CreateConnection{AccountID: accountID, Kind: domain.ConnectionKindStatementFileImport, CSVMapping: &invalid},
+			domain.CreateConnection{AccountID: accountID, Name: "Statement file", Kind: domain.ConnectionKindStatementFileImport, CSVMapping: &invalid},
 			domain.ErrUnknownDateFormat,
 		},
 	} {
@@ -94,7 +111,7 @@ func TestCreatingAConnectionRefusals(t *testing.T) {
 		t.Parallel()
 
 		decidertest.Given(t, domain.Connection, created()).
-			When(domain.CreateConnection{AccountID: accountID, Kind: domain.ConnectionKindStatementFileImport}).
+			When(domain.CreateConnection{AccountID: accountID, Name: "Statement file", Kind: domain.ConnectionKindStatementFileImport}).
 			ThenError(domain.ErrConnectionAlreadyCreated)
 	})
 }

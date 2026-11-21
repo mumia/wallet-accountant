@@ -28,7 +28,7 @@ type accountMonth struct {
 	Pending             int    `json:"pending"`
 	SuspectedDuplicates int    `json:"suspected_duplicates"`
 	Uncategorised       int    `json:"uncategorised"`
-	Flagged             bool   `json:"flagged"`
+	ReopenBlocked       bool   `json:"reopen_blocked"`
 }
 
 type uncheckedImport struct {
@@ -110,8 +110,8 @@ func assertMonth(t *testing.T, got accountMonth, state string, pending, suspecte
 	t.Helper()
 
 	if got.State != state || got.Pending != pending || got.SuspectedDuplicates != suspected ||
-		got.Uncategorised != uncategorised || got.Flagged {
-		t.Errorf("%s = %+v, want %s with %d pending, %d suspected duplicates, %d uncategorised, unflagged",
+		got.Uncategorised != uncategorised {
+		t.Errorf("%s = %+v, want %s with %d pending, %d suspected duplicates, %d uncategorised",
 			got.BookingMonth, got, state, pending, suspected, uncategorised)
 	}
 }
@@ -159,11 +159,12 @@ func TestAMonthsStatusFollowsAcceptRecategoriseAndReverse(t *testing.T) {
 	assertMoney(t, "computed balance", *january.ComputedBalance, "3510.50")
 
 	february := f.month(t, "2026-02")
-	assertMonth(t, february, "OPEN", 1, 0, 0)
+	// Only the start date's month is open until it closes (ADR-0024).
+	assertMonth(t, february, "NOT_OPEN_YET", 1, 0, 0)
 	assertMoney(t, "computed balance", *february.ComputedBalance, "3510.50")
 
 	// A month with nothing in it yet.
-	assertMonth(t, f.month(t, "2026-05"), "OPEN", 0, 0, 0)
+	assertMonth(t, f.month(t, "2026-05"), "NOT_OPEN_YET", 0, 0, 0)
 }
 
 // An Account awaiting its first Statement import has no computed balance.
@@ -303,7 +304,7 @@ func TestAWaitingBalanceCheckRefusesTheClose(t *testing.T) {
 	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary", "Bonus")
 
 	assertMonth(t, f.month(t, "2026-01"), "OPEN", 0, 0, 0)
-	assertMonth(t, f.month(t, "2026-02"), "OPEN", 1, 1, 0)
+	assertMonth(t, f.month(t, "2026-02"), "NOT_OPEN_YET", 1, 1, 0)
 
 	p := f.refusedClose(t, "2026-01", "2610.50")
 	assertReasons(t, p, "BALANCE_CHECK_NOT_PASSED")
@@ -438,7 +439,7 @@ func TestClosingAMonthIsRefused(t *testing.T) {
 		t.Errorf("detail = %q, want it to say the month hasn't started", p.Detail)
 	}
 
-	assertMonth(t, f.month(t, next), "OPEN", 0, 0, 0)
+	assertMonth(t, f.month(t, next), "NOT_OPEN_YET", 0, 0, 0)
 
 	f.closeMonth(t, "2026-13", "0.00").AssertProblem(t, http.StatusBadRequest, "about:blank")
 	f.app.Get(t, f.monthPath("26-01"), f.token).AssertProblem(t, http.StatusBadRequest, "about:blank")

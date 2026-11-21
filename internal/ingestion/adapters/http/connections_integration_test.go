@@ -18,6 +18,7 @@ type mapping = map[string]any
 type connection struct {
 	ConnectionID      string  `json:"connection_id"`
 	AccountID         string  `json:"account_id"`
+	Name              string  `json:"name"`
 	Kind              string  `json:"kind"`
 	CSVMapping        mapping `json:"csv_mapping"`
 	CSVMappingVersion int     `json:"csv_mapping_version"`
@@ -197,9 +198,10 @@ func TestCreatingAConnectionAndListingIt(t *testing.T) {
 		t.Fatalf("before creating any: %+v, want none", got)
 	}
 
-	created := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT"})
+	created := f.create(t, map[string]any{"name": "  Statement file ", "kind": "STATEMENT_FILE_IMPORT"})
 
-	if created.ConnectionID == "" || created.AccountID != f.account || created.Kind != "STATEMENT_FILE_IMPORT" ||
+	if created.ConnectionID == "" || created.AccountID != f.account || created.Name != "Statement file" ||
+		created.Kind != "STATEMENT_FILE_IMPORT" ||
 		created.CSVMapping != nil || created.CSVMappingVersion != 0 {
 		t.Fatalf("created = %+v, want a statement file import of the Account with no mapping yet", created)
 	}
@@ -213,7 +215,7 @@ func TestCreatingAConnectionWithItsMapping(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, apitest.Start(t), "alice")
 
-	created := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
+	created := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
 
 	if !sameJSON(t, created.CSVMapping, signed()) || created.CSVMappingVersion != 1 {
 		t.Errorf("created = %+v, want the signed mapping at version 1", created)
@@ -223,7 +225,7 @@ func TestCreatingAConnectionWithItsMapping(t *testing.T) {
 func TestSavingEveryKindOfMapping(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, apitest.Start(t), "alice")
-	c := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT"})
+	c := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"})
 
 	for name, m := range map[string]mapping{
 		"signed by header":       signed(),
@@ -253,7 +255,7 @@ func TestSavingEveryKindOfMapping(t *testing.T) {
 func TestEverySaveChangesTheMappingVersion(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, apitest.Start(t), "alice")
-	c := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT"})
+	c := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"})
 
 	versions := make([]int, 0, 3)
 
@@ -271,7 +273,7 @@ func TestEverySaveChangesTheMappingVersion(t *testing.T) {
 func TestInvalidMappingsAreRefused(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, apitest.Start(t), "alice")
-	c := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
+	c := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
 
 	for name, tc := range map[string]struct {
 		mapping mapping
@@ -333,9 +335,10 @@ func TestCreatingAConnectionIsRefused(t *testing.T) {
 	f := newFixture(t, apitest.Start(t), "alice")
 
 	for name, body := range map[string]map[string]any{
-		"bank feed":       {"kind": "BANK_FEED"},
-		"unknown kind":    {"kind": "CARRIER_PIGEON"},
-		"lower-case kind": {"kind": "statement_file_import"},
+		"bank feed":       {"name": "Statement file", "kind": "BANK_FEED"},
+		"unknown kind":    {"name": "Statement file", "kind": "CARRIER_PIGEON"},
+		"lower-case kind": {"name": "Statement file", "kind": "statement_file_import"},
+		"blank name":      {"name": "   ", "kind": "STATEMENT_FILE_IMPORT"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f.app.Post(t, f.connections(), f.token, body).
@@ -343,9 +346,15 @@ func TestCreatingAConnectionIsRefused(t *testing.T) {
 		})
 	}
 
+	// The contract's maxLength refuses a long name before the handler runs.
+	t.Run("name too long", func(t *testing.T) {
+		f.app.Post(t, f.connections(), f.token, map[string]any{"name": strings.Repeat("x", 101), "kind": "STATEMENT_FILE_IMPORT"}).
+			AssertProblem(t, http.StatusBadRequest, "about:blank")
+	})
+
 	t.Run("invalid mapping", func(t *testing.T) {
 		f.app.Post(t, f.connections(), f.token, map[string]any{
-			"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": with(signed(), mapping{"date_format": "soon"}),
+			"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": with(signed(), mapping{"date_format": "soon"}),
 		}).AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-csv-mapping")
 	})
 
@@ -360,9 +369,9 @@ func TestAnAccountListsOnlyItsOwnConnections(t *testing.T) {
 	other := f
 	other.account = addAccount(t, f.app, f.token, f.household)
 
-	first := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT"})
-	second := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": debitCredit()})
-	other.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT"})
+	first := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"})
+	second := f.create(t, map[string]any{"name": "Card statements", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": debitCredit()})
+	other.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"})
 
 	got := f.list(t)
 	if len(got) != 2 || got[0].ConnectionID != first.ConnectionID || got[1].ConnectionID != second.ConnectionID {
@@ -381,7 +390,7 @@ func TestConnectionsOfAnUnknownAccountAre404(t *testing.T) {
 	unknown.account = f.household
 
 	unknown.app.Get(t, unknown.connections(), f.token).AssertProblem(t, http.StatusNotFound, "about:blank")
-	unknown.app.Post(t, unknown.connections(), f.token, map[string]any{"kind": "STATEMENT_FILE_IMPORT"}).
+	unknown.app.Post(t, unknown.connections(), f.token, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"}).
 		AssertProblem(t, http.StatusNotFound, "about:blank")
 	f.app.Put(t, f.connections()+"/"+f.account+"/csv-mapping", f.token, signed()).
 		AssertProblem(t, http.StatusNotFound, "about:blank")
@@ -391,7 +400,7 @@ func TestAConnectionSurvivesARebuild(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 	f := newFixture(t, app, "alice")
-	c := f.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
+	c := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
 
 	var saved connection
 	f.app.Put(t, f.mappingOf(c), f.token, debitCredit()).AssertJSON(t, http.StatusOK, &saved)
@@ -406,7 +415,7 @@ func TestAConnectionSurvivesARebuild(t *testing.T) {
 func TestCreatingAConnectionTwiceWithOneIdempotencyKeyCreatesOne(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, apitest.Start(t), "alice")
-	body := map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()}
+	body := map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()}
 
 	var first, replay connection
 	f.app.PostWithKey(t, f.connections(), f.token, "k1", body).AssertJSON(t, http.StatusCreated, &first)
@@ -426,7 +435,7 @@ func TestAnotherHouseholdsConnectionsAre404(t *testing.T) {
 	app := apitest.Start(t)
 	alice := newFixture(t, app, "alice")
 	bob := newFixture(t, app, "bob")
-	c := alice.create(t, map[string]any{"kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
+	c := alice.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()})
 
 	asBob := alice
 	asBob.token = bob.token
@@ -438,7 +447,7 @@ func TestAnotherHouseholdsConnectionsAre404(t *testing.T) {
 	for name, f := range map[string]fixture{"in Alice's Household": asBob, "through Bob's Household": throughBobs} {
 		t.Run(name, func(t *testing.T) {
 			app.Get(t, f.connections(), f.token).AssertProblem(t, http.StatusNotFound, "about:blank")
-			app.Post(t, f.connections(), f.token, map[string]any{"kind": "STATEMENT_FILE_IMPORT"}).
+			app.Post(t, f.connections(), f.token, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"}).
 				AssertProblem(t, http.StatusNotFound, "about:blank")
 			app.Put(t, f.mappingOf(c), f.token, debitCredit()).AssertProblem(t, http.StatusNotFound, "about:blank")
 		})

@@ -5,6 +5,10 @@ package oas
 // setDefaults set default value of fields.
 func (s *CsvMapping) setDefaults() {
 	{
+		val := string("UTF_8")
+		s.Encoding.SetTo(val)
+	}
+	{
 		val := bool(false)
 		s.HasHeaderRow.SetTo(val)
 	}

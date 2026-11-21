@@ -51,8 +51,22 @@ type AccountMonth struct {
 	Pending             int
 	SuspectedDuplicates int
 	Uncategorised       int
-	Flagged             bool
+	// State is the month's state as the API writes it: OPEN, CLOSED or
+	// NOT_OPEN_YET (ADR-0024).
+	State string
+	// UncheckedImports are the Statement imports with rows in or before
+	// the month whose Balance check hasn't passed.
+	UncheckedImports []domain.UncheckedImport
+	// ReopenBlocked says a Reopen of the month would be refused now.
+	ReopenBlocked bool
 }
+
+// The month states (ADR-0024).
+const (
+	MonthOpen       = "OPEN"
+	MonthClosed     = "CLOSED"
+	MonthNotOpenYet = "NOT_OPEN_YET"
+)
 
 // Months shows and closes Accounts' Booking months, reading what Ingestion
 // leaves unresolved through its port.
@@ -184,6 +198,18 @@ func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, i
 		Pending:             imports.Pending,
 		SuspectedDuplicates: imports.SuspectedDuplicates,
 		Uncategorised:       s.Uncategorised[key],
+		UncheckedImports:    imports.UncheckedImports,
+		// Reopen isn't implemented yet (ticket 04), so it is always refused.
+		ReopenBlocked: true,
+	}
+
+	switch open := s.OpenMonth(); {
+	case key < open:
+		out.State = MonthClosed
+	case key == open:
+		out.State = MonthOpen
+	default:
+		out.State = MonthNotOpenYet
 	}
 
 	if s.HasBalance() {
@@ -191,7 +217,7 @@ func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, i
 	}
 
 	if c, ok := s.Closed[key]; ok {
-		out.Closed, out.StatementBalance, out.ClosedAt, out.Flagged = true, c.StatementBalance, c.ClosedAt, c.Flagged
+		out.Closed, out.StatementBalance, out.ClosedAt = true, c.StatementBalance, c.ClosedAt
 	}
 
 	return out

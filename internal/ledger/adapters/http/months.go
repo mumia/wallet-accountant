@@ -75,7 +75,7 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 		string(balance.Currency))
 
 	conflict := func(typ, title, detail string) (oas.CloseAccountMonthRes, error) {
-		return new(oas.CloseAccountMonthConflict(httpapi.Problem(http.StatusConflict, typ, title, detail))), nil
+		return httpapi.MonthConflict(typ, title, detail, "", ""), nil
 	}
 	invalid := func(detail string) (oas.CloseAccountMonthRes, error) {
 		return &oas.MonthCloseProblem{
@@ -140,14 +140,7 @@ func refusedProblem(e *domain.MonthCloseRefusedError, req *oas.MonthClosing) (*o
 		p.Reasons = append(p.Reasons, reasonBalanceCheckNotPassed)
 
 		for _, u := range e.UncheckedImports {
-			check := "WAITING"
-			if u.Check == domain.ImportCheckFailed {
-				check = "FAILED"
-			}
-
-			p.UncheckedStatementImports = append(p.UncheckedStatementImports, oas.UncheckedStatementImport{
-				StatementImportID: u.StatementImportID, BalanceCheck: check,
-			})
+			p.UncheckedStatementImports = append(p.UncheckedStatementImports, uncheckedImportOut(u))
 		}
 	}
 
@@ -177,11 +170,16 @@ func accountMonthOut(m app.AccountMonth) (*oas.AccountMonth, error) {
 	out := &oas.AccountMonth{
 		AccountID:           m.AccountID,
 		BookingMonth:        m.Month.Format(domain.MonthLayout),
-		State:               "OPEN",
+		State:               m.State,
 		Pending:             int32(m.Pending),             //nolint:gosec // a count of rows
 		SuspectedDuplicates: int32(m.SuspectedDuplicates), //nolint:gosec // a count of rows
 		Uncategorised:       int32(m.Uncategorised),       //nolint:gosec // a count of Transactions
-		Flagged:             m.Flagged,
+		ReopenBlocked:       m.ReopenBlocked,
+	}
+
+	out.UncheckedStatementImports = make([]oas.UncheckedStatementImport, 0, len(m.UncheckedImports))
+	for _, u := range m.UncheckedImports {
+		out.UncheckedStatementImports = append(out.UncheckedStatementImports, uncheckedImportOut(u))
 	}
 
 	if m.ComputedBalance != nil {
@@ -199,10 +197,20 @@ func accountMonthOut(m app.AccountMonth) (*oas.AccountMonth, error) {
 			return nil, err
 		}
 
-		out.State = "CLOSED"
 		out.StatementBalance = oas.NewOptMoney(statement)
 		out.ClosedAt = oas.NewOptDateTime(m.ClosedAt)
 	}
 
 	return out, nil
+}
+
+// uncheckedImportOut is a Statement import whose Balance check stops a
+// Month close, as the API writes it.
+func uncheckedImportOut(u domain.UncheckedImport) oas.UncheckedStatementImport {
+	check := "WAITING"
+	if u.Check == domain.ImportCheckFailed {
+		check = "FAILED"
+	}
+
+	return oas.UncheckedStatementImport{StatementImportID: u.StatementImportID, BalanceCheck: check}
 }

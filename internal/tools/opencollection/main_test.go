@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -125,4 +127,50 @@ func hasHeader(headers []keyValue, name string) bool {
 	}
 
 	return false
+}
+
+// An object part of a multipart body (the mapping test's csv_mapping) is
+// written as the JSON text a client sends, the same on every run: never a
+// Go value's printed form, which holds pointers.
+func TestAnObjectMultipartPartIsJSON(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile("../../../api/openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc, err := parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := collection(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r struct {
+		HTTP struct {
+			Body multipartBody `yaml:"body"`
+		} `yaml:"http"`
+	}
+	if err := yaml.Unmarshal(files["connections/test-csv-mapping.yml"], &r); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range r.HTTP.Body.Data {
+		if p.Name != "csv_mapping" {
+			continue
+		}
+
+		var m map[string]any
+		if err := json.Unmarshal([]byte(fmt.Sprint(p.Value)), &m); err != nil || m["delimiter"] == nil {
+			t.Fatalf("csv_mapping = %v, want a CSV mapping as JSON text (%v)", p.Value, err)
+		}
+
+		return
+	}
+
+	t.Fatal("no csv_mapping part in connections/test-csv-mapping.yml")
 }
