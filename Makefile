@@ -12,9 +12,9 @@ VACUUM        := go tool vacuum lint --ruleset api/zalando-ruleset.yaml --no-ban
 CHART               := deploy/helm/wallet-accountant
 # The `# renovate:` comments let Renovate bump these (renovate.json).
 # renovate: datasource=go depName=helm.sh/helm/v4
-HELM_VERSION        := v4.3.0
+HELM_VERSION        := v4.3.2
 # renovate: datasource=go depName=github.com/yannh/kubeconform
-KUBECONFORM_VERSION := v0.7.0
+KUBECONFORM_VERSION := v0.8.0
 HELM                := bin/helm-$(HELM_VERSION)/helm
 KUBECONFORM         := bin/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
 CHART_REGISTRY      ?= oci://ghcr.io/mumia/charts
