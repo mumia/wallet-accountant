@@ -9,7 +9,7 @@ A place where money is held or owed, such as a bank account, a credit card, a lo
 _Avoid_: Wallet, pocket, source, asset account
 
 **Start date**:
-The day an Account's history in Wallet Accountant begins, and the date of its Opening balance. Bank rows booked before it are ignored.
+The day an Account's history in Wallet Accountant begins, and the date of its Opening balance. Its month is the Account's first Open month. Bank rows booked before it are ignored.
 _Avoid_: Opening date, Opening balance date, account opening date
 
 **Account currency**:
@@ -66,9 +66,21 @@ _Avoid_: Contribution, inter-household payment
 
 ## Closing a month
 
+**Open month**:
+The one Booking month of an Account that can be changed and closed. It starts as the start date's month and moves to the next month each time it closes (ADR-0024).
+_Avoid_: Current month, active month, period
+
+**Not open yet**:
+The state of every Booking month after the Open month. Rows booked in it can be seen, but nothing is Accepted into it until it becomes the Open month.
+_Avoid_: Future month, pending month, locked
+
 **Month close**:
-A User's confirmation that one Account's month has been reviewed. A month can close only when every Imported transaction is Matched, Accepted or Discarded, every relevant Balance check has passed, nothing is left in Uncategorised, and the computed balance equals the Statement balance. A gap is closed only by correcting the entry that is wrong, never by a balancing entry (ADR-0018). A closed month can still be edited, but any change is flagged.
+A User's confirmation, after the Open month has ended, that it has been reviewed and agrees with the bank. The month can close only when every Imported transaction booked in it is Matched, Accepted or Discarded, every relevant Balance check has passed, nothing is left in Uncategorised, and the computed balance equals the Statement balance. A gap is closed only by correcting the entry that is wrong, never by a balancing entry (ADR-0018). A closed month's amounts and descriptions can't change; only its Transactions' Categories can, and never to Uncategorised (ADR-0024).
 _Avoid_: Lock, freeze, period end
+
+**Reopen**:
+Taking back the latest Month close of an Account, while the Open month has no Accepted Transactions. The reopened month becomes the Open month again, the month after it goes back to Not open yet, and the month must be closed again with its Statement balance.
+_Avoid_: Unlock, undo close, unclose
 
 **Statement balance**:
 The balance an Account should have at the end of a month: the closing balance on the bank statement, or the amount a User counted for cash.
