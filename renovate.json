@@ -37,7 +37,7 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "The images the chart's values pin, in one PR",
+      "description": "The chart's default images, for self-hosters, in one PR. The env repo pins what its clusters run in its own values (with images.lock), so these defaults may be ahead of it",
       "matchManagers": ["helm-values"],
       "matchFileNames": ["deploy/helm/**"],
       "groupName": "chart images"

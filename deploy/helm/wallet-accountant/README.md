@@ -81,6 +81,8 @@ The longer `--timeout` covers the first install, where `migrate` retries until t
 
 Each release tag `vX.Y.Z` publishes chart version `X.Y.Z` with appVersion `vX.Y.Z`, and the image `ghcr.io/mumia/wallet-accountant:vX.Y.Z`. Leave `image.tag` empty and the chart runs the image of its own release. Both are signed with cosign (keyless) and carry build provenance attestations; `docs/architecture/conventions.md` ("Releases") shows how to verify them.
 
+The other images the chart runs (the collector's, `collector.image.*`, and the Zitadel setup Job's, `oidc.zitadelSetup.image.*`) have defaults that Renovate keeps current here, for self-hosters. An environment pins its own: the operator's environments (`wallet-accountant-deploy`) set both in their HelmRelease values, next to their `images.lock` entries, so what runs there is decided in that repo, and this chart's defaults may be ahead of it.
+
 ## Values
 
 | Value | Default | Description |

@@ -3,16 +3,24 @@
 # renovate-config-validator on its repository config (renovate.json), then a lookup-only dry run
 # (`--platform=local --dry-run=lookup`) over its working tree, prints every
 # dependency Renovate found, and fails when an expected one is missing or a
-# lookup failed.
+# lookup failed, or when updates that must land in one PR would not:
 #
-# Usage: check.sh <repo-dir> [<manager>:<depName> ...]
+# - the same dependency at the same new version in two files (an image in a
+#   manifest and in images.lock, say) always shares a branch;
+# - a `together:<depName>,<depName>,...` argument names dependencies that
+#   share a branch when they have updates (majors in a branch of their own).
+#
+# Only updates found today are compared, so a group with nothing to update
+# passes.
+#
+# Usage: check.sh <repo-dir> [<manager>:<depName> | together:<depName>,... ...]
 #
 # Needs docker and jq (Renovate runs in the renovate/renovate image, so no
 # Node.js on the host). RENOVATE_IMAGE overrides the image. GITHUB_COM_TOKEN,
 # when set, is passed on so GitHub lookups are not rate limited.
 set -eu
 
-repo=${1:?usage: check.sh <repo-dir> [<manager>:<depName> ...]}
+repo=${1:?usage: check.sh <repo-dir> [<manager>:<depName> | together:<depName>,... ...]}
 shift
 image=${RENOVATE_IMAGE:-renovate/renovate:44}
 repo=$(cd "$repo" && pwd)
@@ -48,10 +56,41 @@ if [ -z "$deps" ]; then
 fi
 printf 'manager\tdepName\tcurrent\tfile\tdepType\tupdates\tproblem\n%s\n' "$deps" | column -t -s "$(printf '\t')"
 
+# Every update and the branch (the PR) Renovate gives it.
+updates=$(grep '^{' "$log" | jq -c 'select(.msg == "packageFiles with updates") | .config | to_entries[]
+	| .key as $m | .value[] | .packageFile as $f | .deps[] | .depName as $d | (.updates // [])[]
+	| {manager: $m, dep: $d, file: $f, type: .updateType, new: (.newValue // .newDigest), branch: .branchName}')
+echo "== $repo: branches (one PR each)"
+if [ -n "$updates" ]; then
+	printf '%s\n' "$updates" | jq -rs 'sort_by(.branch, .dep, .file)[] | [.branch, .dep, .new, .file] | @tsv' |
+		column -t -s "$(printf '\t')"
+else
+	echo "(no updates)"
+fi
+
 status=0
+split=$(printf '%s\n' "$updates" | jq -rs 'map(select(. != null)) | group_by([.dep, .new])[]
+	| select((map(.branch) | unique | length) > 1)
+	| "\(.[0].dep) \(.[0].new): \(map("\(.file) -> \(.branch)") | join(", "))"')
+if [ -n "$split" ]; then
+	printf 'SPLIT: one dependency at one version goes to several PRs:\n%s\n' "$split" >&2
+	status=1
+fi
 for want in "$@"; do
 	manager=${want%%:*}
 	dep=${want#*:}
+	if [ "$manager" = together ]; then
+		apart=$(printf '%s\n' "$updates" | jq -rs --arg deps "$dep" '($deps | split(",")) as $names
+			| map(select(. != null and (.dep as $d | $names | index($d))))
+			| group_by(.type == "major")[]
+			| select((map(.branch) | unique | length) > 1)
+			| map("\(.dep) \(.new) -> \(.branch)") | join(", ")')
+		if [ -n "$apart" ]; then
+			echo "SPLIT: $dep must share one PR, but: $apart" >&2
+			status=1
+		fi
+		continue
+	fi
 	if ! printf '%s\n' "$deps" | awk -F '\t' -v m="$manager" -v d="$dep" '$1 == m && $2 == d { found = 1 } END { exit !found }'; then
 		echo "MISSING: $manager found no $dep" >&2
 		status=1
