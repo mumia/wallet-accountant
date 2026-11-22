@@ -173,6 +173,29 @@ func (i ledgerIngestion) MonthImports(ctx context.Context, tx *eventstore.Tx, ac
 	return monthImports(m), nil
 }
 
+// AccountImports implements ledgerapp.Ingestion.
+func (i ledgerIngestion) AccountImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+) (ledgerdomain.AccountImports, error) {
+	a, err := i.imported.AccountImports(ctx, tx, account)
+	if err != nil {
+		return ledgerdomain.AccountImports{}, err //nolint:wrapcheck // already wrapped by Ingestion
+	}
+
+	out := ledgerdomain.AccountImports{Months: make(map[string]ledgerdomain.MonthImports, len(a.Months))}
+
+	for m, c := range a.Months {
+		out.Months[m] = ledgerdomain.MonthImports{Pending: c.Pending, SuspectedDuplicates: c.SuspectedDuplicates}
+	}
+
+	for _, u := range a.Unchecked {
+		out.Unchecked = append(out.Unchecked, ledgerdomain.UncheckedImportFrom{
+			UncheckedImport: uncheckedImport(u.UncheckedImport), From: u.From,
+		})
+	}
+
+	return out, nil
+}
+
 // MonthImportsForClose implements ledgerapp.Ingestion.
 func (i ledgerIngestion) MonthImportsForClose(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time,
 ) (ledgerdomain.MonthImports, error) {
@@ -190,15 +213,19 @@ func monthImports(m ingestionapp.MonthImports) ledgerdomain.MonthImports {
 	out := ledgerdomain.MonthImports{Pending: m.Pending, SuspectedDuplicates: m.SuspectedDuplicates}
 
 	for _, u := range m.UncheckedImports {
-		check := ledgerdomain.ImportCheckWaiting
-		if u.BalanceCheck == ingestiondomain.BalanceCheckFailed {
-			check = ledgerdomain.ImportCheckFailed
-		}
-
-		out.UncheckedImports = append(out.UncheckedImports, ledgerdomain.UncheckedImport{
-			StatementImportID: u.ID, Check: check,
-		})
+		out.UncheckedImports = append(out.UncheckedImports, uncheckedImport(u))
 	}
 
 	return out
+}
+
+// uncheckedImport translates an unchecked Statement import into the
+// Ledger's terms.
+func uncheckedImport(u ingestionapp.UncheckedImport) ledgerdomain.UncheckedImport {
+	check := ledgerdomain.ImportCheckWaiting
+	if u.BalanceCheck == ingestiondomain.BalanceCheckFailed {
+		check = ledgerdomain.ImportCheckFailed
+	}
+
+	return ledgerdomain.UncheckedImport{StatementImportID: u.ID, Check: check}
 }

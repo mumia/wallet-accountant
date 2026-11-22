@@ -105,8 +105,11 @@ func (m *Months) Status(ctx context.Context, household, account uuid.UUID, month
 			return fmt.Errorf("load account %s: %w", account, err)
 		}
 
-		if !found {
+		switch {
+		case !found:
 			return ErrAccountNotFound
+		case month.Format(domain.MonthLayout) < fold.State.StartDate.Format(domain.MonthLayout):
+			return ErrMonthBeforeStartDate
 		}
 
 		imports, err := m.ingestion.MonthImports(ctx, tx, account, month)
@@ -120,6 +123,48 @@ func (m *Months) Status(ctx context.Context, household, account uuid.UUID, month
 	})
 	if err != nil {
 		return AccountMonth{}, fmt.Errorf("month %s of account %s: %w", month.Format(domain.MonthLayout), account, err)
+	}
+
+	return out, nil
+}
+
+// List returns every Booking month of the Account, newest first: from its
+// start date's month to the latest of the current calendar month (UTC, by
+// the server's clock) and the latest Booking month holding a non-Discarded
+// Imported transaction. It reads the Account's fold and, through
+// Ingestion, every month's counts and unchecked imports at once, in one
+// transaction.
+func (m *Months) List(ctx context.Context, household, account uuid.UUID) ([]AccountMonth, error) {
+	var out []AccountMonth
+
+	err := m.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		fold, found, err := m.accounts.Folds.Load(ctx, tx, account)
+		if err != nil {
+			return fmt.Errorf("load account %s: %w", account, err)
+		}
+
+		if !found {
+			return ErrAccountNotFound
+		}
+
+		imports, err := m.ingestion.AccountImports(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // already wrapped by Ingestion
+		}
+
+		first := fold.State.StartDate.Format(domain.MonthLayout)
+		last := max(first, tx.Now().UTC().Format(domain.MonthLayout), imports.LatestMonth())
+
+		for key := last; key >= first; key = domain.PreviousMonth(key) {
+			// Every key is written with MonthLayout.
+			month, _ := time.Parse(domain.MonthLayout, key)
+			out = append(out, accountMonthOf(account, month, fold.State, imports.Month(key)))
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("months of account %s: %w", account, err)
 	}
 
 	return out, nil

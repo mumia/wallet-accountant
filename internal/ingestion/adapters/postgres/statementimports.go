@@ -408,6 +408,62 @@ func (StatementImportReader) UndecidedSuspectedDuplicates(ctx context.Context, t
 	return n, nil
 }
 
+// AccountImports implements app.StatementImportReader with the same rules
+// as MonthImports: Discarded rows (every row of a voided import) never
+// count, and a voided import's check never does. An unchecked import blocks
+// every month from the earliest Booking month of its rows, kept on its row.
+func (StatementImportReader) AccountImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+) (app.AccountImports, error) {
+	a := app.AccountImports{Months: map[string]app.MonthCounts{}}
+
+	rows, err := tx.Query(ctx, `SELECT to_char(booking_date, 'YYYY-MM'),
+			count(*) FILTER (WHERE state = 'pending'), count(*) FILTER (WHERE state = 'suspected_duplicate')
+		FROM imported_transactions
+		WHERE household_id = $1 AND account_id = $2 AND state <> 'discarded'
+		GROUP BY 1`, tx.HouseholdID(), account)
+	if err != nil {
+		return app.AccountImports{}, fmt.Errorf("count the account's unresolved imported transactions: %w", err)
+	}
+
+	var (
+		month  string
+		counts app.MonthCounts
+	)
+
+	if _, err := pgx.ForEachRow(rows, []any{&month, &counts.Pending, &counts.SuspectedDuplicates}, func() error {
+		a.Months[month] = counts
+
+		return nil
+	}); err != nil {
+		return app.AccountImports{}, fmt.Errorf("count the account's unresolved imported transactions: %w", err)
+	}
+
+	unchecked, err := tx.Query(ctx, `SELECT id, balance_check, earliest_booking_month FROM statement_imports
+		WHERE household_id = $1 AND account_id = $2 AND voided_at IS NULL
+		  AND balance_check IN ('waiting', 'failed') AND earliest_booking_month IS NOT NULL
+		ORDER BY id`, tx.HouseholdID(), account)
+	if err != nil {
+		return app.AccountImports{}, fmt.Errorf("list the account's unchecked statement imports: %w", err)
+	}
+
+	a.Unchecked, err = pgx.CollectRows(unchecked, func(r pgx.CollectableRow) (app.UncheckedImportFrom, error) {
+		var (
+			u     app.UncheckedImportFrom
+			check string
+		)
+
+		err := r.Scan(&u.ID, &check, &u.From)
+		u.BalanceCheck = domain.BalanceCheck(check)
+
+		return u, err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return app.AccountImports{}, fmt.Errorf("list the account's unchecked statement imports: %w", err)
+	}
+
+	return a, nil
+}
+
 // MonthImports implements app.StatementImportReader. A voided import's rows
 // are all Discarded, and its Balance check, even a waiting one, never
 // counts. An import is relevant to the month when any of its rows, in any

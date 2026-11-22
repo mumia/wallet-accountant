@@ -29,6 +29,8 @@ type accountMonth struct {
 	SuspectedDuplicates int    `json:"suspected_duplicates"`
 	Uncategorised       int    `json:"uncategorised"`
 	ReopenBlocked       bool   `json:"reopen_blocked"`
+
+	UncheckedStatementImports []uncheckedImport `json:"unchecked_statement_imports"`
 }
 
 type uncheckedImport struct {
@@ -546,6 +548,8 @@ func TestAnotherHouseholdsMonthsAre404(t *testing.T) {
 		path := "/api/households/" + household + "/accounts/" + alice.account + "/months/2026-01"
 		app.Get(t, path, bob.token).AssertProblem(t, http.StatusNotFound, "about:blank")
 		app.Post(t, path+"/close", bob.token, statementBalance("2510.50", "EUR")).
+			AssertProblem(t, http.StatusNotFound, "about:blank")
+		app.Get(t, "/api/households/"+household+"/accounts/"+alice.account+"/months", bob.token).
 			AssertProblem(t, http.StatusNotFound, "about:blank")
 	}
 

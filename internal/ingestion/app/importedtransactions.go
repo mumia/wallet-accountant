@@ -252,6 +252,19 @@ func (s *ImportedTransactions) MonthImports(ctx context.Context, tx *eventstore.
 	return m, nil
 }
 
+// AccountImports reports, in the caller's transaction, what the Account's
+// Statement imports leave unresolved in every Booking month at once. The
+// Ledger's months list reads it.
+func (s *ImportedTransactions) AccountImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+) (AccountImports, error) {
+	a, err := s.checks.AccountImports(ctx, tx, account)
+	if err != nil {
+		return AccountImports{}, err //nolint:wrapcheck // already wrapped by the adapter
+	}
+
+	return a, nil
+}
+
 // MonthImportsForClose is MonthImports after locking the Account's
 // Statement imports, so an upload or a waiting Balance check running at the
 // same time is either seen whole or runs after the close. The Ledger calls

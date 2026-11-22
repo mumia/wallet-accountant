@@ -62,13 +62,40 @@ func (h *MonthHandler) GetAccountMonth(ctx context.Context, params oas.GetAccoun
 	got, err := h.months.Status(ctx, params.HouseholdID, params.AccountID, month)
 
 	switch {
-	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound):
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound),
+		errors.Is(err, app.ErrMonthBeforeStartDate):
 		return new(oas.GetAccountMonthNotFound(httpapi.NotFoundProblem())), nil
 	case err != nil:
 		return nil, fmt.Errorf("get account month: %w", err)
 	}
 
 	return accountMonthOut(got)
+}
+
+// ListAccountMonths implements listAccountMonths.
+func (h *MonthHandler) ListAccountMonths(ctx context.Context, params oas.ListAccountMonthsParams,
+) (oas.ListAccountMonthsRes, error) {
+	months, err := h.months.List(ctx, params.HouseholdID, params.AccountID)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound):
+		return new(oas.ListAccountMonthsNotFound(httpapi.NotFoundProblem())), nil
+	case err != nil:
+		return nil, fmt.Errorf("list account months: %w", err)
+	}
+
+	out := &oas.AccountMonthList{Items: make([]oas.AccountMonth, 0, len(months))}
+
+	for _, m := range months {
+		month, err := accountMonthOut(m)
+		if err != nil {
+			return nil, err
+		}
+
+		out.Items = append(out.Items, *month)
+	}
+
+	return out, nil
 }
 
 // CloseAccountMonth implements closeAccountMonth.

@@ -71,10 +71,7 @@ func (s AccountState) LatestClosed() string {
 		return ""
 	}
 
-	// Every month the fold holds was written with MonthLayout.
-	m, _ := time.Parse(MonthLayout, s.OpenMonth)
-
-	return m.AddDate(0, -1, 0).Format(MonthLayout)
+	return PreviousMonth(s.OpenMonth)
 }
 
 // ReopenRefusal is every reason the Booking month (MonthLayout) can't be

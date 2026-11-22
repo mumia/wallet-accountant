@@ -146,6 +146,10 @@ type Ingestion interface {
 	// MonthImports reports, in the caller's transaction, what the Account's
 	// Statement imports leave unresolved in the Booking month month.
 	MonthImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time) (domain.MonthImports, error)
+	// AccountImports reports, in the caller's transaction, what the
+	// Account's Statement imports leave unresolved in every Booking month,
+	// in one grouped query each for counts and for unchecked imports.
+	AccountImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (domain.AccountImports, error)
 	// MonthImportsForClose is MonthImports for a Month close: it first holds
 	// the Account's Statement imports until the transaction ends, so no
 	// upload or waiting Balance check runs between the read and the close
