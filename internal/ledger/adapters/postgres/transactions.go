@@ -180,7 +180,8 @@ func (TransactionReader) AccountTransactions(ctx context.Context, tx *eventstore
 			p.amount::text, p.currency, COALESCE(p.category_id, '00000000-0000-0000-0000-000000000000'),
 			COALESCE(c.name, ''),
 			COALESCE(t.reversal_of_transaction_id, '00000000-0000-0000-0000-000000000000'),
-			COALESCE(t.reversed_by_transaction_id, '00000000-0000-0000-0000-000000000000')
+			COALESCE(t.reversed_by_transaction_id, '00000000-0000-0000-0000-000000000000'),
+			COALESCE(t.imported_transaction_id, '00000000-0000-0000-0000-000000000000')
 		FROM account_postings p
 		JOIN ledger_transactions t ON t.household_id = p.household_id AND t.id = p.transaction_id
 		LEFT JOIN categories c ON c.household_id = p.household_id AND c.id = p.category_id
@@ -201,7 +202,7 @@ func (TransactionReader) AccountTransactions(ctx context.Context, tx *eventstore
 		)
 
 		if err := r.Scan(&t.TransactionID, &t.Ordinal, &t.BookingDate, &t.TransactionDate, &t.Description, &amount,
-			&t.Currency, &t.CategoryID, &t.CategoryName, &t.ReversalOf, &t.ReversedBy); err != nil {
+			&t.Currency, &t.CategoryID, &t.CategoryName, &t.ReversalOf, &t.ReversedBy, &t.ImportedTransactionID); err != nil {
 			return t, err //nolint:wrapcheck // wrapped below
 		}
 

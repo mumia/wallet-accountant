@@ -30,12 +30,13 @@ type transaction struct {
 }
 
 // listedTransaction is a line of an Account's Transaction list with its
-// reversal links.
+// reversal links and the Imported transaction it books.
 type listedTransaction struct {
 	accountTransaction
 
 	ReversalOfTransactionID string `json:"reversal_of_transaction_id"`
 	ReversedByTransactionID string `json:"reversed_by_transaction_id"`
+	ImportedTransactionID   string `json:"imported_transaction_id"`
 }
 
 func (f acceptFixture) transactionPath(id string) string {
