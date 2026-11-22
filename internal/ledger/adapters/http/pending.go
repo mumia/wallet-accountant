@@ -15,9 +15,3 @@ func (h *AccountHandler) ChangeAccount(context.Context, *oas.AccountChange, oas.
 ) (oas.ChangeAccountRes, error) {
 	return nil, httpapi.ErrNotImplemented
 }
-
-// ListAccountMonths implements listAccountMonths (ticket 07).
-func (h *MonthHandler) ListAccountMonths(context.Context, oas.ListAccountMonthsParams,
-) (oas.ListAccountMonthsRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}

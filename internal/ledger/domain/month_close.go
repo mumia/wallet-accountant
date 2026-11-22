@@ -64,6 +64,53 @@ type MonthImports struct {
 	UncheckedImports    []UncheckedImport
 }
 
+// UncheckedImportFrom is an UncheckedImport with the earliest Booking
+// month (MonthLayout) it has rows in: it stops that month and every later
+// one from closing.
+type UncheckedImportFrom struct {
+	UncheckedImport
+
+	From string
+}
+
+// AccountImports is what Ingestion reports about every Booking month of an
+// Account at once: per month holding a non-Discarded Imported transaction,
+// its pending and Suspected duplicate counts, and the Statement imports
+// whose Balance check is waiting or failed, in the order they are listed
+// for a single month.
+type AccountImports struct {
+	Months    map[string]MonthImports
+	Unchecked []UncheckedImportFrom
+}
+
+// LatestMonth is the latest Booking month (MonthLayout) holding a
+// non-Discarded Imported transaction; empty when there is none.
+func (a AccountImports) LatestMonth() string {
+	latest := ""
+
+	for m := range a.Months {
+		if m > latest {
+			latest = m
+		}
+	}
+
+	return latest
+}
+
+// Month is what the Booking month (MonthLayout) has left unresolved, as
+// MonthImports reports it for that month alone.
+func (a AccountImports) Month(month string) MonthImports {
+	out := MonthImports{Pending: a.Months[month].Pending, SuspectedDuplicates: a.Months[month].SuspectedDuplicates}
+
+	for _, u := range a.Unchecked {
+		if u.From <= month {
+			out.UncheckedImports = append(out.UncheckedImports, u.UncheckedImport)
+		}
+	}
+
+	return out
+}
+
 // BalanceMismatch is a computed closing balance that differs from the
 // Statement balance; Difference is the Statement balance minus the
 // computed one.
@@ -173,6 +220,15 @@ func NextMonth(month string) string {
 	m, _ := time.Parse(MonthLayout, month)
 
 	return m.AddDate(0, 1, 0).Format(MonthLayout)
+}
+
+// PreviousMonth is the Booking month (MonthLayout) before month, January
+// rolling back into December.
+func PreviousMonth(month string) string {
+	// Every month the fold holds was written with MonthLayout.
+	m, _ := time.Parse(MonthLayout, month)
+
+	return m.AddDate(0, -1, 0).Format(MonthLayout)
 }
 
 // ClosingBalance is the computed balance at the end of the Booking month
