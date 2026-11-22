@@ -21,9 +21,3 @@ func (h *MonthHandler) ListAccountMonths(context.Context, oas.ListAccountMonthsP
 ) (oas.ListAccountMonthsRes, error) {
 	return nil, httpapi.ErrNotImplemented
 }
-
-// ReopenAccountMonth implements reopenAccountMonth (ticket 04).
-func (h *MonthHandler) ReopenAccountMonth(context.Context, oas.ReopenAccountMonthParams,
-) (oas.ReopenAccountMonthRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}

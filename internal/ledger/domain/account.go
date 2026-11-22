@@ -272,6 +272,8 @@ func decideAccount(s AccountState, c AccountCommand) ([]AccountEvent, error) {
 		return reopenOpeningBalance(s, c)
 	case CloseMonth:
 		return closeMonth(s, c)
+	case ReopenMonth:
+		return reopenMonth(s, c)
 	default:
 		return nil, nil
 	}
@@ -495,6 +497,9 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 			StatementBalance: ev.StatementBalance, ClosedAt: e.Time.Truncate(time.Microsecond), ClosedBy: e.ActorID,
 		})
 		s.OpenMonth = NextMonth(ev.Month)
+	case MonthReopened:
+		s.Closed = reopened(s.Closed, ev.Month)
+		s.OpenMonth = ev.Month
 	case TransactionRecategorised:
 		month := bookingMonth(ev.BookingDate)
 
