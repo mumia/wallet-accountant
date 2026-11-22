@@ -414,7 +414,7 @@ func (StatementImportReader) UndecidedSuspectedDuplicates(ctx context.Context, t
 // every month from the earliest Booking month of its rows, kept on its row.
 func (StatementImportReader) AccountImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
 ) (app.AccountImports, error) {
-	a := app.AccountImports{Months: map[string]app.MonthCounts{}}
+	a := app.AccountImports{Months: map[string]app.RowCounts{}}
 
 	rows, err := tx.Query(ctx, `SELECT to_char(booking_date, 'YYYY-MM'),
 			count(*) FILTER (WHERE state = 'pending'), count(*) FILTER (WHERE state = 'suspected_duplicate')
@@ -427,7 +427,7 @@ func (StatementImportReader) AccountImports(ctx context.Context, tx *eventstore.
 
 	var (
 		month  string
-		counts app.MonthCounts
+		counts app.RowCounts
 	)
 
 	if _, err := pgx.ForEachRow(rows, []any{&month, &counts.Pending, &counts.SuspectedDuplicates}, func() error {
@@ -462,6 +462,45 @@ func (StatementImportReader) AccountImports(ctx context.Context, tx *eventstore.
 	}
 
 	return a, nil
+}
+
+// UnresolvedRows implements app.StatementImportReader. Only pending and
+// Suspected duplicate rows are read, which
+// imported_transactions_state_idx covers.
+func (StatementImportReader) UnresolvedRows(ctx context.Context, tx *eventstore.Tx, account *uuid.UUID,
+) (map[uuid.UUID]app.RowCounts, error) {
+	q := `SELECT account_id, count(*) FILTER (WHERE state = 'pending'),
+			count(*) FILTER (WHERE state = 'suspected_duplicate')
+		FROM imported_transactions
+		WHERE household_id = $1 AND state IN ('pending', 'suspected_duplicate')`
+	args := []any{tx.HouseholdID()}
+
+	if account != nil {
+		q += ` AND account_id = $2`
+		args = append(args, *account)
+	}
+
+	rows, err := tx.Query(ctx, q+` GROUP BY account_id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("count unresolved imported transactions: %w", err)
+	}
+
+	out := map[uuid.UUID]app.RowCounts{}
+
+	var (
+		id     uuid.UUID
+		counts app.RowCounts
+	)
+
+	if _, err := pgx.ForEachRow(rows, []any{&id, &counts.Pending, &counts.SuspectedDuplicates}, func() error {
+		out[id] = counts
+
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("count unresolved imported transactions: %w", err)
+	}
+
+	return out, nil
 }
 
 // MonthImports implements app.StatementImportReader. A voided import's rows

@@ -73,8 +73,15 @@ type Account struct {
 	// OpenMonth is the Account's one open Booking month (MonthLayout).
 	OpenMonth string
 	// Pending and SuspectedDuplicates count the Account's Imported
-	// transactions in those states, in every month. They stay 0 until
-	// ticket 08 of .scratch/ui-first-slice-backend reads them.
+	// transactions in those states, in every month, read through Ingestion
+	// in the request's transaction.
+	Pending             int
+	SuspectedDuplicates int
+}
+
+// ImportedRows counts an Account's pending and Suspected duplicate Imported
+// transactions.
+type ImportedRows struct {
 	Pending             int
 	SuspectedDuplicates int
 }
@@ -108,14 +115,15 @@ type NewAccount struct {
 
 // Accounts manages a Household's Accounts.
 type Accounts struct {
-	scope    HouseholdScope
-	accounts AccountAggregate
-	reader   AccountReader
+	scope     HouseholdScope
+	accounts  AccountAggregate
+	reader    AccountReader
+	ingestion Ingestion
 }
 
 // NewAccounts returns the Accounts service.
-func NewAccounts(scope HouseholdScope, accounts AccountAggregate, reader AccountReader) *Accounts {
-	return &Accounts{scope: scope, accounts: accounts, reader: reader}
+func NewAccounts(scope HouseholdScope, accounts AccountAggregate, reader AccountReader, ingestion Ingestion) *Accounts {
+	return &Accounts{scope: scope, accounts: accounts, reader: reader, ingestion: ingestion}
 }
 
 // Add adds an Account to the Household, awaiting its first Statement import
@@ -147,15 +155,27 @@ func (a *Accounts) Add(ctx context.Context, household uuid.UUID, req NewAccount)
 	return added, nil
 }
 
-// List returns every Account of the Household.
+// List returns every Account of the Household, with their pending and
+// Suspected duplicate counts read in one grouped query.
 func (a *Accounts) List(ctx context.Context, household uuid.UUID) ([]Account, error) {
 	var list []Account
 
 	err := a.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
 		var err error
-		list, err = a.reader.Accounts(ctx, tx)
+		if list, err = a.reader.Accounts(ctx, tx); err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
 
-		return err //nolint:wrapcheck // the adapter's error
+		counts, err := a.ingestion.UnresolvedRows(ctx, tx, nil)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		for i := range list {
+			list[i].withImportedRows(counts[list[i].ID])
+		}
+
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
@@ -179,6 +199,13 @@ func (a *Accounts) Get(ctx context.Context, household, account uuid.UUID) (Accou
 		}
 
 		got = accountOf(account, fold.State)
+
+		counts, err := a.ingestion.UnresolvedRows(ctx, tx, &account)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		got.withImportedRows(counts[account])
 
 		return nil
 	})
@@ -233,6 +260,10 @@ func (a *Accounts) AccountForImport(ctx context.Context, tx *eventstore.Tx, acco
 	}
 
 	return accountOf(account, fold.State), nil
+}
+
+func (a *Account) withImportedRows(r ImportedRows) {
+	a.Pending, a.SuspectedDuplicates = r.Pending, r.SuspectedDuplicates
 }
 
 func accountOf(id uuid.UUID, s domain.AccountState) Account {

@@ -196,6 +196,22 @@ func (i ledgerIngestion) AccountImports(ctx context.Context, tx *eventstore.Tx, 
 	return out, nil
 }
 
+// UnresolvedRows implements ledgerapp.Ingestion.
+func (i ledgerIngestion) UnresolvedRows(ctx context.Context, tx *eventstore.Tx, account *uuid.UUID,
+) (map[uuid.UUID]ledgerapp.ImportedRows, error) {
+	counts, err := i.imported.UnresolvedRows(ctx, tx, account)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already wrapped by Ingestion
+	}
+
+	out := make(map[uuid.UUID]ledgerapp.ImportedRows, len(counts))
+	for id, c := range counts {
+		out[id] = ledgerapp.ImportedRows{Pending: c.Pending, SuspectedDuplicates: c.SuspectedDuplicates}
+	}
+
+	return out, nil
+}
+
 // MonthImportsForClose implements ledgerapp.Ingestion.
 func (i ledgerIngestion) MonthImportsForClose(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, month time.Time,
 ) (ledgerdomain.MonthImports, error) {

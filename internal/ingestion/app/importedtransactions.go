@@ -265,6 +265,20 @@ func (s *ImportedTransactions) AccountImports(ctx context.Context, tx *eventstor
 	return a, nil
 }
 
+// UnresolvedRows counts, in the caller's transaction, the pending and
+// Suspected duplicate Imported transactions of the Account, or of every
+// Account of the Household when account is nil, over every Booking month.
+// An Account with none is absent. The Ledger's Account reads use it.
+func (s *ImportedTransactions) UnresolvedRows(ctx context.Context, tx *eventstore.Tx, account *uuid.UUID,
+) (map[uuid.UUID]RowCounts, error) {
+	counts, err := s.checks.UnresolvedRows(ctx, tx, account)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already wrapped by the adapter
+	}
+
+	return counts, nil
+}
+
 // MonthImportsForClose is MonthImports after locking the Account's
 // Statement imports, so an upload or a waiting Balance check running at the
 // same time is either seen whole or runs after the close. The Ledger calls

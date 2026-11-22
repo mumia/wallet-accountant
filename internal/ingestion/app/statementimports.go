@@ -224,6 +224,11 @@ type StatementImportReader interface {
 	// AccountImports reports every Booking month of the Account at once, in
 	// one grouped query for the counts and one for the unchecked imports.
 	AccountImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (AccountImports, error)
+	// UnresolvedRows counts, per Account, the pending and Suspected
+	// duplicate Imported transactions in every Booking month, in one
+	// grouped query: of the one Account, or of every Account of the
+	// Household when account is nil. An Account with none is absent.
+	UnresolvedRows(ctx context.Context, tx *eventstore.Tx, account *uuid.UUID) (map[uuid.UUID]RowCounts, error)
 	// MonthImports counts the Account's pending and Suspected duplicate
 	// Imported transactions booked in the month, and lists its non-voided
 	// Statement imports with rows booked in or before the month whose
@@ -238,13 +243,13 @@ type StatementImportReader interface {
 // failed, each with the earliest Booking month it has rows in. The
 // Ledger's months list reads it.
 type AccountImports struct {
-	Months    map[string]MonthCounts
+	Months    map[string]RowCounts
 	Unchecked []UncheckedImportFrom
 }
 
-// MonthCounts counts a Booking month's pending and Suspected duplicate
-// Imported transactions.
-type MonthCounts struct {
+// RowCounts counts pending and Suspected duplicate Imported transactions,
+// of a Booking month or of a whole Account.
+type RowCounts struct {
 	Pending             int
 	SuspectedDuplicates int
 }
