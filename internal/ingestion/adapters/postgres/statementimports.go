@@ -25,7 +25,7 @@ var _ eventstore.FoldStore[domain.StatementImportState] = StatementImportFolds{}
 
 const statementImportColumns = `connection_id, account_id, file_hash, mapping_version, currency, export_balance::text,
 	rows_imported, rows_skipped, rows_ignored, rows_total::text, opening_balance::text, balance_check, recorded_at,
-	voided_at, suspected_duplicates`
+	voided_at, suspected_duplicates, rows_ignored_in_closed_months, earliest_booking_month`
 
 func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState, error) {
 	var (
@@ -34,12 +34,13 @@ func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState
 		opening       *string
 		balanceCheck  string
 		voidedAt      *time.Time
+		earliest      *string
 	)
 
 	dest := append([]any{
 		&s.ConnectionID, &s.AccountID, &s.FileHash, &s.MappingVersion, &s.Currency, &export,
 		&s.RowsImported, &s.RowsSkipped, &s.RowsIgnored, &total, &opening, &balanceCheck, &s.RecordedAt, &voidedAt,
-		&s.SuspectedDuplicates,
+		&s.SuspectedDuplicates, &s.RowsIgnoredInClosedMonths, &earliest,
 	}, extra...)
 
 	if err := row.Scan(dest...); err != nil {
@@ -50,6 +51,10 @@ func scanStatementImport(row pgx.Row, extra ...any) (domain.StatementImportState
 
 	if voidedAt != nil {
 		s.VoidedAt = *voidedAt
+	}
+
+	if earliest != nil {
+		s.EarliestBookingMonth = *earliest
 	}
 
 	var err error
@@ -106,16 +111,23 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 		voidedAt = &s.VoidedAt
 	}
 
+	var earliest *string
+	if s.EarliestBookingMonth != "" {
+		earliest = &s.EarliestBookingMonth
+	}
+
 	args := []any{
 		tx.HouseholdID(), id, s.ConnectionID, s.AccountID, s.FileHash, s.MappingVersion, s.Currency,
 		s.ExportBalance.String(), s.RowsImported, s.RowsIgnored, s.RowsTotal.String(), opening, string(s.BalanceCheck),
 		s.RecordedAt, f.Version, f.SchemaVersion, s.RowsSkipped, voidedAt, s.SuspectedDuplicates,
+		s.RowsIgnoredInClosedMonths, earliest,
 	}
 	q := `INSERT INTO statement_imports (household_id, id, connection_id, account_id, file_hash, mapping_version, currency,
 	          export_balance, rows_imported, rows_ignored, rows_total, opening_balance, balance_check, recorded_at,
-	          version, schema_version, rows_skipped, voided_at, suspected_duplicates)
+	          version, schema_version, rows_skipped, voided_at, suspected_duplicates, rows_ignored_in_closed_months,
+	          earliest_booking_month)
 	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17,
-	              $18, $19)
+	              $18, $19, $20, $21)
 	      ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
@@ -123,8 +135,9 @@ func (StatementImportFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid
 		q = `UPDATE statement_imports SET connection_id = $3, account_id = $4, file_hash = $5, mapping_version = $6,
 		         currency = $7, export_balance = $8::numeric, rows_imported = $9, rows_ignored = $10,
 		         rows_total = $11::numeric, opening_balance = $12::numeric, balance_check = $13, recorded_at = $14,
-		         version = $15, schema_version = $16, rows_skipped = $17, voided_at = $18, suspected_duplicates = $19
-		     WHERE household_id = $1 AND id = $2 AND version = $20`
+		         version = $15, schema_version = $16, rows_skipped = $17, voided_at = $18, suspected_duplicates = $19,
+		         rows_ignored_in_closed_months = $20, earliest_booking_month = $21
+		     WHERE household_id = $1 AND id = $2 AND version = $22`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)

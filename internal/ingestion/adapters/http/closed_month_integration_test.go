@@ -82,42 +82,21 @@ func TestAClosedMonthsTransactionsAreLocked(t *testing.T) {
 	f.assertBalance(t, "2510.50")
 }
 
-// lateJanuary is a later file with a new January row and one that looks
-// like January's salary, uploaded after January closed. Its check waits
-// for the Suspected duplicate.
-const lateJanuary = "Date;Description;Amount\n" +
-	"20/01/2026;Bonus;100,00\n" +
-	"15/01/2026;SALARY;3.000,00\n"
-
-// Rows booked in a closed month can't be Accepted, kept or Discarded: the
-// month comes before the row's own state (spec story 5).
+// A closed month's Imported transactions can't be Accepted or Discarded:
+// the month comes before the row's own state (spec story 5). A later
+// upload can't bring a pending or Suspected duplicate row into a closed
+// month, since its rows there are ignored (spec story 12), so the
+// Ingestion check for those is only a backstop.
 func TestAClosedMonthsImportedTransactionsAreLocked(t *testing.T) {
 	t.Parallel()
 	f, _, _ := januaryClosed(t, apitest.Start(t), "alice")
-
-	f.upload(t, "", lateJanuary, "2600.00", "").AssertJSON(t, http.StatusCreated, &statementImport{})
-
-	for _, i := range f.imported(t, "?state=PENDING").Items {
-		f.pending[i.Description] = i
-	}
-
-	suspected := f.suspected(t)["SALARY"].ImportedTransactionID
-
-	assertMonthClosed(t, f.accept(t, "Bonus", nil))
-	assertMonthClosed(t, f.discard(t, "Bonus"))
-	assertMonthClosed(t, f.app.Do(t, http.MethodPost, f.importedPath(suspected, "keep"), f.token, nil))
-	assertMonthClosed(t, f.app.Do(t, http.MethodPost, f.importedPath(suspected, "discard"), f.token, nil))
 
 	// Already Accepted, but the closed month is said first.
 	assertMonthClosed(t, f.accept(t, "Rent", nil))
 	assertMonthClosed(t, f.discard(t, "Rent"))
 
-	if got := f.imported(t, "?state=PENDING"); len(got.Items) != 2 {
-		t.Errorf("pending = %+v, want the Bonus and February's coffee untouched", got.Items)
-	}
-
-	if got := f.suspected(t); len(got) != 1 {
-		t.Errorf("suspected = %+v, want the salary lookalike still undecided", got)
+	if got := f.imported(t, "?state=ACCEPTED"); len(got.Items) != 2 {
+		t.Errorf("accepted = %+v, want Rent and Salary untouched", got.Items)
 	}
 
 	f.assertBalance(t, "2510.50")

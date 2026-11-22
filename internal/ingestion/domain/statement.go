@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,11 +31,126 @@ var (
 type Statement struct {
 	Rows    []StatementRow
 	Ignored int
+	// InClosedMonths are the rows WithoutClosedMonths split off: booked in
+	// a month before the Account's Open month, they are ignored (ADR-0024).
+	InClosedMonths []StatementRow
 	// Skipped counts the certain repeats WithoutCertainRepeats left out.
 	Skipped int
 	// Suspected counts the rows WithSuspectedDuplicates marked.
 	Suspected int
 	Total     sharedkernel.Decimal
+}
+
+// WithoutClosedMonths splits off every row booked in a month before the
+// Account's Open month (YYYY-MM) into InClosedMonths, and works the total
+// out again. It runs before certain repeats and Suspected duplicates are
+// told, so a closed month's rows never become either (ADR-0024).
+func (s Statement) WithoutClosedMonths(openMonth string) Statement {
+	out := s
+	out.Rows, out.InClosedMonths, out.Total = []StatementRow{}, slices.Clone(s.InClosedMonths), sharedkernel.Decimal{}
+
+	for _, r := range s.Rows {
+		if r.BookingDate.Format(MonthLayout) < openMonth {
+			out.InClosedMonths = append(out.InClosedMonths, r)
+
+			continue
+		}
+
+		out.Rows = append(out.Rows, r)
+		out.Total = out.Total.Add(r.Amount)
+	}
+
+	return out
+}
+
+// EarliestBookingMonth is the earliest Booking month (YYYY-MM) of the
+// rows; empty when there are none.
+func (s Statement) EarliestBookingMonth() string {
+	earliest := ""
+
+	for _, r := range s.Rows {
+		if m := r.BookingDate.Format(MonthLayout); earliest == "" || m < earliest {
+			earliest = m
+		}
+	}
+
+	return earliest
+}
+
+// MonthRows counts a statement file's rows in one Booking month (YYYY-MM).
+type MonthRows struct {
+	Month string
+	Rows  int
+}
+
+// ClosedMonthsNotInBooks counts, per closed month, the rows split off by
+// WithoutClosedMonths that are neither a certain repeat nor a lookalike of
+// an earlier Imported transaction of the Account: the bank has them, the
+// books don't, and only reopening the month lets them in (spec story 13).
+// Months come in order.
+func (s Statement) ClosedMonthsNotInBooks(earlier []ImportedKey) []MonthRows {
+	idx := indexEarlier(earlier)
+	counts := map[string]int{}
+
+	for _, r := range s.InClosedMonths {
+		if _, known := idx.resembled(r); !known {
+			counts[r.BookingDate.Format(MonthLayout)]++
+		}
+	}
+
+	out := make([]MonthRows, 0, len(counts))
+	for _, m := range slices.Sorted(maps.Keys(counts)) {
+		out = append(out, MonthRows{Month: m, Rows: counts[m]})
+	}
+
+	return out
+}
+
+// MonthLayout is how a Booking month is written.
+const MonthLayout = "2006-01"
+
+// earlierIndex is the Account's earlier Imported transactions indexed once,
+// keeping the first of each key, so each row is told in constant time.
+type earlierIndex struct {
+	byBankID map[string]sharedkernel.ID
+	byLook   map[lookKey]sharedkernel.ID
+}
+
+func indexEarlier(earlier []ImportedKey) earlierIndex {
+	idx := earlierIndex{
+		byBankID: make(map[string]sharedkernel.ID, len(earlier)),
+		byLook:   make(map[lookKey]sharedkernel.ID, len(earlier)),
+	}
+
+	for _, k := range earlier {
+		if k.BankTransactionID != "" {
+			if _, ok := idx.byBankID[k.BankTransactionID]; !ok {
+				idx.byBankID[k.BankTransactionID] = k.ID
+			}
+		}
+
+		look := lookKeyOf(k.BookingDate, k.Amount, k.Description)
+		if _, ok := idx.byLook[look]; !ok {
+			idx.byLook[look] = k.ID
+		}
+	}
+
+	return idx
+}
+
+// resembled is the earlier Imported transaction the row is a certain repeat
+// or a lookalike of: the same bank transaction ID or, for a row without
+// one, the same Booking date, amount and normalised description.
+func (idx earlierIndex) resembled(r StatementRow) (sharedkernel.ID, bool) {
+	if r.BankTransactionID != "" {
+		id, ok := idx.byBankID[r.BankTransactionID]
+
+		return id, ok
+	}
+
+	id, ok := idx.byLook[lookKeyOf(r.BookingDate, r.Amount, r.Description)]
+
+	return id, ok
 }
 
 // ImportedKey is an earlier Imported transaction of the Account as
@@ -59,37 +176,10 @@ func (s Statement) WithSuspectedDuplicates(earlier []ImportedKey) Statement {
 	out := s
 	out.Rows, out.Suspected = make([]StatementRow, 0, len(s.Rows)), s.Suspected
 
-	// Index the earlier Imported transactions once, keeping the first of
-	// each key, so each row is told in constant time.
-	byBankID := make(map[string]sharedkernel.ID, len(earlier))
-	byLook := make(map[lookKey]sharedkernel.ID, len(earlier))
-
-	for _, k := range earlier {
-		if k.BankTransactionID != "" {
-			if _, ok := byBankID[k.BankTransactionID]; !ok {
-				byBankID[k.BankTransactionID] = k.ID
-			}
-		}
-
-		look := lookKeyOf(k.BookingDate, k.Amount, k.Description)
-		if _, ok := byLook[look]; !ok {
-			byLook[look] = k.ID
-		}
-	}
+	idx := indexEarlier(earlier)
 
 	for _, r := range s.Rows {
-		var (
-			id    sharedkernel.ID
-			found bool
-		)
-
-		if r.BankTransactionID != "" {
-			id, found = byBankID[r.BankTransactionID]
-		} else {
-			id, found = byLook[lookKeyOf(r.BookingDate, r.Amount, r.Description)]
-		}
-
-		if found {
+		if id, found := idx.resembled(r); found {
 			r.Resembles = id
 			out.Suspected++
 		}
@@ -144,7 +234,8 @@ func NormaliseDescription(d string) string {
 // repeat, and rows are compared only with earlier imports, never with each
 // other.
 func (s Statement) WithoutCertainRepeats(earlier []ImportedKey) Statement {
-	out := Statement{Rows: []StatementRow{}, Ignored: s.Ignored, Skipped: s.Skipped}
+	out := s
+	out.Rows, out.Total = []StatementRow{}, sharedkernel.Decimal{}
 
 	repeats := make(map[repeatKey]bool, len(earlier))
 	for _, k := range earlier {

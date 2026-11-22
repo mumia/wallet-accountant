@@ -397,19 +397,34 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 			First:          first,
 		}
 
+		// A first import never meets a closed month: its start month is
+		// the Open month until the first import is recorded (ADR-0024).
 		if !first {
+			// Read with the Account's fold locked FOR SHARE, so a Close or
+			// Reopen waits until this import is recorded.
+			months, err := s.ledger.AccountMonthsForShare(ctx, tx, r.connection.AccountID)
+			if err != nil {
+				return err //nolint:wrapcheck // the port's error
+			}
+
 			soFar, err := s.reader.ImportedSoFar(ctx, tx, r.connection.AccountID)
 			if err != nil {
 				return err //nolint:wrapcheck // the adapter's error
 			}
 
-			r.statement = r.statement.WithoutCertainRepeats(soFar.Keys).WithSuspectedDuplicates(soFar.Keys)
+			// Rows in a closed month are split off first, so they are
+			// never certain repeats or Suspected duplicates.
+			r.statement = r.statement.WithoutClosedMonths(months.OpenMonth).
+				WithoutCertainRepeats(soFar.Keys).WithSuspectedDuplicates(soFar.Keys)
 			cmd.OpeningBalance, cmd.EarlierTotal = soFar.OpeningBalance, soFar.Total
+			cmd.ClosedMonthsNotInBooks = r.statement.ClosedMonthsNotInBooks(soFar.Keys)
 		}
 
 		cmd.RowsImported, cmd.RowsSkipped = len(r.statement.Rows), r.statement.Skipped
 		cmd.SuspectedDuplicates = r.statement.Suspected
 		cmd.RowsIgnored, cmd.RowsTotal = r.statement.Ignored, r.statement.Total
+		cmd.RowsIgnoredInClosedMonths = len(r.statement.InClosedMonths)
+		cmd.EarliestBookingMonth = r.statement.EarliestBookingMonth()
 
 		res, err := s.imports.Execute(ctx, tx, importID, cmd)
 		if err != nil {

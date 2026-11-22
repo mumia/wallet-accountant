@@ -42,11 +42,25 @@ var (
 // Account's Opening balance and Imported transactions, with the new rows,
 // add up to, the Export balance they should equal, and the difference
 // (Export balance minus expected), in the Account currency.
+// ClosedMonthsNotInBooks counts, per closed month, the file's rows there
+// that aren't in the books, which may explain the difference (ADR-0024).
 type BalanceCheckFailedError struct {
-	Expected      sharedkernel.Decimal
-	ExportBalance sharedkernel.Decimal
-	Difference    sharedkernel.Decimal
-	Currency      string
+	Expected               sharedkernel.Decimal
+	ExportBalance          sharedkernel.Decimal
+	Difference             sharedkernel.Decimal
+	Currency               string
+	ClosedMonthsNotInBooks []MonthRows
+}
+
+// RowsInClosedMonthsNotInBooks is how many of the file's rows in closed
+// months aren't in the books.
+func (e *BalanceCheckFailedError) RowsInClosedMonthsNotInBooks() int {
+	n := 0
+	for _, m := range e.ClosedMonthsNotInBooks {
+		n += m.Rows
+	}
+
+	return n
 }
 
 func (e *BalanceCheckFailedError) Error() string {
@@ -84,7 +98,13 @@ type StatementImportState struct {
 	// duplicates (spec story 40).
 	SuspectedDuplicates int
 	RowsIgnored         int
-	RowsTotal           sharedkernel.Decimal
+	// RowsIgnoredInClosedMonths counts the rows booked in a closed month,
+	// which are ignored (ADR-0024).
+	RowsIgnoredInClosedMonths int
+	// EarliestBookingMonth is the earliest Booking month (YYYY-MM) of the
+	// Imported transactions it recorded; empty when it recorded none.
+	EarliestBookingMonth string
+	RowsTotal            sharedkernel.Decimal
 	// OpeningBalance is set only for the Account's first import.
 	OpeningBalance *sharedkernel.Decimal
 	BalanceCheck   BalanceCheck
@@ -107,21 +127,28 @@ type (
 	// Opening balance. A later import carries the Account's Opening balance
 	// and the total of its earlier non-Discarded Imported transactions, for
 	// its Balance check. RowsImported includes the SuspectedDuplicates.
+	// RowsIgnoredInClosedMonths counts the rows booked in a closed month,
+	// and ClosedMonthsNotInBooks those of them that aren't in the books,
+	// which a failed check names. EarliestBookingMonth is that of the rows
+	// imported.
 	RecordStatementImport struct {
-		ConnectionID        sharedkernel.ID
-		AccountID           sharedkernel.ID
-		FileHash            string
-		MappingVersion      int
-		Currency            string
-		ExportBalance       sharedkernel.Decimal
-		RowsImported        int
-		RowsSkipped         int
-		SuspectedDuplicates int
-		RowsIgnored         int
-		RowsTotal           sharedkernel.Decimal
-		First               bool
-		OpeningBalance      sharedkernel.Decimal
-		EarlierTotal        sharedkernel.Decimal
+		ConnectionID              sharedkernel.ID
+		AccountID                 sharedkernel.ID
+		FileHash                  string
+		MappingVersion            int
+		Currency                  string
+		ExportBalance             sharedkernel.Decimal
+		RowsImported              int
+		RowsSkipped               int
+		SuspectedDuplicates       int
+		RowsIgnored               int
+		RowsIgnoredInClosedMonths int
+		ClosedMonthsNotInBooks    []MonthRows
+		EarliestBookingMonth      string
+		RowsTotal                 sharedkernel.Decimal
+		First                     bool
+		OpeningBalance            sharedkernel.Decimal
+		EarlierTotal              sharedkernel.Decimal
 	}
 
 	// RunBalanceCheck runs a waiting Balance check once the import's last
@@ -156,19 +183,25 @@ type (
 	// and the Balance check waits for them; this event is what tells the
 	// Household (spec story 40a).
 	StatementImportRecorded struct {
-		ConnectionID        sharedkernel.ID       `json:"connectionid"`
-		AccountID           sharedkernel.ID       `json:"accountid"`
-		FileHash            string                `json:"filehash"`
-		MappingVersion      int                   `json:"mappingversion"`
-		Currency            string                `json:"currency"`
-		ExportBalance       sharedkernel.Decimal  `json:"exportbalance"`
-		RowsImported        int                   `json:"rowsimported"`
-		RowsSkipped         int                   `json:"rowsskipped,omitempty"`
-		SuspectedDuplicates int                   `json:"suspectedduplicates,omitempty"`
-		RowsIgnored         int                   `json:"rowsignored"`
-		RowsTotal           sharedkernel.Decimal  `json:"rowstotal"`
-		OpeningBalance      *sharedkernel.Decimal `json:"openingbalance,omitempty"`
-		BalanceCheck        BalanceCheck          `json:"balancecheck"`
+		ConnectionID        sharedkernel.ID      `json:"connectionid"`
+		AccountID           sharedkernel.ID      `json:"accountid"`
+		FileHash            string               `json:"filehash"`
+		MappingVersion      int                  `json:"mappingversion"`
+		Currency            string               `json:"currency"`
+		ExportBalance       sharedkernel.Decimal `json:"exportbalance"`
+		RowsImported        int                  `json:"rowsimported"`
+		RowsSkipped         int                  `json:"rowsskipped,omitempty"`
+		SuspectedDuplicates int                  `json:"suspectedduplicates,omitempty"`
+		RowsIgnored         int                  `json:"rowsignored"`
+		// RowsIgnoredInClosedMonths counts the rows booked in a closed
+		// month, which are ignored (ADR-0024).
+		RowsIgnoredInClosedMonths int `json:"rowsignoredinclosedmonths,omitempty"`
+		// EarliestBookingMonth is the earliest Booking month (YYYY-MM) of
+		// the rows imported; empty when none were.
+		EarliestBookingMonth string                `json:"earliestbookingmonth,omitempty"`
+		RowsTotal            sharedkernel.Decimal  `json:"rowstotal"`
+		OpeningBalance       *sharedkernel.Decimal `json:"openingbalance,omitempty"`
+		BalanceCheck         BalanceCheck          `json:"balancecheck"`
 	}
 
 	// WaitingCheckPassed is recorded when a waiting Balance check runs and
@@ -241,6 +274,9 @@ func recordStatementImport(s StatementImportState, c RecordStatementImport) ([]S
 		RowsIgnored:    c.RowsIgnored,
 		RowsTotal:      c.RowsTotal,
 		BalanceCheck:   BalanceCheckPassed,
+
+		RowsIgnoredInClosedMonths: c.RowsIgnoredInClosedMonths,
+		EarliestBookingMonth:      c.EarliestBookingMonth,
 	}
 
 	recorded.SuspectedDuplicates = c.SuspectedDuplicates
@@ -272,6 +308,8 @@ func recordStatementImport(s StatementImportState, c RecordStatementImport) ([]S
 			ExportBalance: c.ExportBalance,
 			Difference:    c.ExportBalance.Sub(expected),
 			Currency:      currency.Code(),
+
+			ClosedMonthsNotInBooks: c.ClosedMonthsNotInBooks,
 		}
 	}
 
@@ -336,9 +374,12 @@ func evolveStatementImport(s StatementImportState, e decider.Envelope[StatementI
 			SuspectedDuplicates: ev.SuspectedDuplicates,
 			RowsIgnored:         ev.RowsIgnored,
 			RowsTotal:           ev.RowsTotal,
-			OpeningBalance:      ev.OpeningBalance,
-			BalanceCheck:        ev.BalanceCheck,
-			RecordedAt:          e.Time,
+
+			RowsIgnoredInClosedMonths: ev.RowsIgnoredInClosedMonths,
+			EarliestBookingMonth:      ev.EarliestBookingMonth,
+			OpeningBalance:            ev.OpeningBalance,
+			BalanceCheck:              ev.BalanceCheck,
+			RecordedAt:                e.Time,
 		}
 	}
 
