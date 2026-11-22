@@ -39,6 +39,8 @@ type balanceCheckProblem struct {
 	ExpectedBalance *money `json:"expected_balance"`
 	ExportBalance   *money `json:"export_balance"`
 	Difference      *money `json:"difference"`
+
+	RowsInClosedMonthsNotInBooks *int `json:"rows_in_closed_months_not_in_books"`
 }
 
 // newLaterImportFixture is an import fixture whose Connection reads bank

@@ -36,6 +36,7 @@ type preview struct {
 	ExportBalance              money  `json:"export_balance"`
 	RowCount                   int    `json:"row_count"`
 	RowsIgnoredBeforeStartDate int    `json:"rows_ignored_before_start_date"`
+	RowsIgnoredInClosedMonths  *int   `json:"rows_ignored_in_closed_months"`
 	RowsTotal                  money  `json:"rows_total"`
 }
 
@@ -48,6 +49,7 @@ type statementImport struct {
 	RowsSkippedAsCertainRepeats int    `json:"rows_skipped_as_certain_repeats"`
 	SuspectedDuplicates         int    `json:"suspected_duplicates"`
 	RowsIgnoredBeforeStartDate  int    `json:"rows_ignored_before_start_date"`
+	RowsIgnoredInClosedMonths   int    `json:"rows_ignored_in_closed_months"`
 	RowsTotal                   money  `json:"rows_total"`
 	OpeningBalance              *money `json:"opening_balance"`
 	BalanceCheck                string `json:"balance_check"`
@@ -285,13 +287,19 @@ func TestConfirmingAFirstImportRecordsItsOpeningBalance(t *testing.T) {
 
 	p := f.previewed(t, statement, "2500.00")
 
+	// A first import never meets a closed month (ADR-0024).
+	if p.RowsIgnoredInClosedMonths == nil || *p.RowsIgnoredInClosedMonths != 0 {
+		t.Errorf("preview = %+v, want no rows ignored in closed months", p)
+	}
+
 	res := f.upload(t, "", statement, "2500.00", p.PreviewID)
 
 	var si statementImport
 	res.AssertJSON(t, http.StatusCreated, &si)
 
 	if si.StatementImportID == "" || si.ConnectionID != f.connection || si.AccountID != f.account ||
-		si.RowsImported != 3 || si.RowsIgnoredBeforeStartDate != 1 || si.BalanceCheck != "PASSED" || si.ImportedAt == "" {
+		si.RowsImported != 3 || si.RowsIgnoredBeforeStartDate != 1 || si.RowsIgnoredInClosedMonths != 0 ||
+		si.BalanceCheck != "PASSED" || si.ImportedAt == "" {
 		t.Errorf("statement import = %+v", si)
 	}
 

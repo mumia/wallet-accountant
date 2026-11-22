@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	ht "github.com/ogen-go/ogen/http"
@@ -353,12 +354,24 @@ func refusal(err error) (outcome, bool) {
 }
 
 // balanceCheckFailed answers a later import refused by its Balance check
-// with the expected balance, the Export balance and the difference.
+// with the expected balance, the Export balance and the difference. When
+// rows of the file in closed months aren't in the books, it counts them
+// and names each month to Reopen (spec story 13).
 func balanceCheckFailed(e *domain.BalanceCheckFailedError) (outcome, bool) {
-	p := fileProblem(BalanceCheckFailedType, "Balance check failed", fmt.Sprintf(
+	detail := fmt.Sprintf(
 		"The Account's Opening balance and Imported transactions, with this file's new rows, come to %s %s, "+
 			"but the Export balance is %s %s (difference %s). Nothing was imported: check the file, its mapping "+
-			"and the Export balance.", e.Expected, e.Currency, e.ExportBalance, e.Currency, e.Difference))
+			"and the Export balance.", e.Expected, e.Currency, e.ExportBalance, e.Currency, e.Difference)
+
+	if n := e.RowsInClosedMonthsNotInBooks(); n > 0 {
+		detail += " " + closedMonthsNotInBooks(e.ClosedMonthsNotInBooks)
+	}
+
+	p := fileProblem(BalanceCheckFailedType, "Balance check failed", detail)
+
+	if n := e.RowsInClosedMonthsNotInBooks(); n > 0 {
+		p.RowsInClosedMonthsNotInBooks = oas.NewOptInt32(int32(n)) //nolint:gosec // a statement file is far smaller
+	}
 
 	for dst, v := range map[*oas.OptMoney]sharedkernel.Decimal{
 		&p.ExpectedBalance: e.Expected, &p.ExportBalance: e.ExportBalance, &p.Difference: e.Difference,
@@ -374,6 +387,47 @@ func balanceCheckFailed(e *domain.BalanceCheckFailedError) (outcome, bool) {
 	}
 
 	return outcome{refused: p}, true
+}
+
+// closedMonthsNotInBooks says how many of the file's rows fall in closed
+// months without being in the books, and which months to Reopen, latest
+// first, since only the latest closed month reopens:
+// "2 rows of this file fall in closed January 2026 and aren't in the books.
+// Reopen January 2026, then import the file again." Months come in order.
+func closedMonthsNotInBooks(months []domain.MonthRows) string {
+	if len(months) == 1 {
+		m, name := months[0], httpapi.MonthWords(months[0].Month)
+		if m.Rows == 1 {
+			return fmt.Sprintf("1 row of this file falls in closed %s and isn't in the books. "+
+				"Reopen %s, then import the file again.", name, name)
+		}
+
+		return fmt.Sprintf("%d rows of this file fall in closed %s and aren't in the books. "+
+			"Reopen %s, then import the file again.", m.Rows, name, name)
+	}
+
+	total := 0
+	counts := make([]string, 0, len(months))
+	reopen := make([]string, 0, len(months))
+
+	for _, m := range months {
+		total += m.Rows
+		counts = append(counts, fmt.Sprintf("%d in %s", m.Rows, httpapi.MonthWords(m.Month)))
+		reopen = append([]string{httpapi.MonthWords(m.Month)}, reopen...)
+	}
+
+	return fmt.Sprintf("%d rows of this file fall in closed months and aren't in the books: %s. "+
+		"Reopen %s, then import the file again.", total, listWords(counts), strings.Join(reopen, ", then "))
+}
+
+// listWords joins words as a sentence lists them: "a", "a and b",
+// "a, b and c".
+func listWords(words []string) string {
+	if len(words) <= 1 {
+		return strings.Join(words, "")
+	}
+
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
 }
 
 func fileProblem(typ, title, detail string) *oas.StatementFileProblem {
@@ -398,10 +452,11 @@ func statementImportResponse(i app.StatementImport) (*oas.StatementImport, error
 		StatementImportID:           i.ID,
 		ConnectionID:                s.ConnectionID,
 		AccountID:                   s.AccountID,
-		RowsImported:                int32(s.RowsImported),        //nolint:gosec // a statement file is far smaller
-		RowsSkippedAsCertainRepeats: int32(s.RowsSkipped),         //nolint:gosec // a statement file is far smaller
-		SuspectedDuplicates:         int32(s.SuspectedDuplicates), //nolint:gosec // a statement file is far smaller
-		RowsIgnoredBeforeStartDate:  int32(s.RowsIgnored),         //nolint:gosec // a statement file is far smaller
+		RowsImported:                int32(s.RowsImported),              //nolint:gosec // a statement file is far smaller
+		RowsSkippedAsCertainRepeats: int32(s.RowsSkipped),               //nolint:gosec // a statement file is far smaller
+		SuspectedDuplicates:         int32(s.SuspectedDuplicates),       //nolint:gosec // a statement file is far smaller
+		RowsIgnoredBeforeStartDate:  int32(s.RowsIgnored),               //nolint:gosec // a statement file is far smaller
+		RowsIgnoredInClosedMonths:   int32(s.RowsIgnoredInClosedMonths), //nolint:gosec // a statement file is far smaller
 		BalanceCheck:                balanceChecksOut[s.BalanceCheck],
 		ImportedAt:                  s.RecordedAt,
 	}

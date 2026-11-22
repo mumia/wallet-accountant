@@ -67,7 +67,9 @@ func (e *MonthError) Error() string {
 func (e *MonthError) Unwrap() error { return e.Err }
 
 // monthOf is the Booking month of the row, written YYYY-MM.
-func monthOf(row domain.ImportedTransactionState) string { return row.BookingDate.Format("2006-01") }
+func monthOf(row domain.ImportedTransactionState) string {
+	return row.BookingDate.Format(domain.MonthLayout)
+}
 
 // closedMonth refuses the row with ErrMonthClosed when it is booked before
 // the Open month; nil otherwise.
