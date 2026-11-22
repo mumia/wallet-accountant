@@ -97,6 +97,9 @@ type AccountTransaction struct {
 	// ReversedBy is the Transaction that reversed this one; uuid.Nil while
 	// it isn't reversed.
 	ReversedBy uuid.UUID
+	// ImportedTransactionID is the Imported transaction whose Accept
+	// recorded this one; uuid.Nil for any other Transaction.
+	ImportedTransactionID uuid.UUID
 }
 
 // TransactionFilter picks a page of an Account's Transactions. Month is the
