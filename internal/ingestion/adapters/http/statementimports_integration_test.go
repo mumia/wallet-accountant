@@ -41,19 +41,20 @@ type preview struct {
 }
 
 type statementImport struct {
-	StatementImportID           string `json:"statement_import_id"`
-	ConnectionID                string `json:"connection_id"`
-	AccountID                   string `json:"account_id"`
-	ExportBalance               money  `json:"export_balance"`
-	RowsImported                int    `json:"rows_imported"`
-	RowsSkippedAsCertainRepeats int    `json:"rows_skipped_as_certain_repeats"`
-	SuspectedDuplicates         int    `json:"suspected_duplicates"`
-	RowsIgnoredBeforeStartDate  int    `json:"rows_ignored_before_start_date"`
-	RowsIgnoredInClosedMonths   int    `json:"rows_ignored_in_closed_months"`
-	RowsTotal                   money  `json:"rows_total"`
-	OpeningBalance              *money `json:"opening_balance"`
-	BalanceCheck                string `json:"balance_check"`
-	ImportedAt                  string `json:"imported_at"`
+	StatementImportID           string   `json:"statement_import_id"`
+	ConnectionID                string   `json:"connection_id"`
+	AccountID                   string   `json:"account_id"`
+	ExportBalance               money    `json:"export_balance"`
+	RowsImported                int      `json:"rows_imported"`
+	RowsSkippedAsCertainRepeats int      `json:"rows_skipped_as_certain_repeats"`
+	SuspectedDuplicates         int      `json:"suspected_duplicates"`
+	RowsIgnoredBeforeStartDate  int      `json:"rows_ignored_before_start_date"`
+	RowsIgnoredInClosedMonths   int      `json:"rows_ignored_in_closed_months"`
+	RowsTotal                   money    `json:"rows_total"`
+	OpeningBalance              *money   `json:"opening_balance"`
+	BalanceCheck                string   `json:"balance_check"`
+	VoidBlockedBy               []string `json:"void_blocked_by"`
+	ImportedAt                  string   `json:"imported_at"`
 }
 
 type account struct {

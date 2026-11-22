@@ -59,6 +59,10 @@ var (
 	// ErrStatementImportAlreadyVoided is returned for voiding an import
 	// twice.
 	ErrStatementImportAlreadyVoided = domain.ErrStatementImportAlreadyVoided
+	// ErrStatementImportTouchesClosedMonth is returned, as a
+	// *domain.TouchesClosedMonthError, for voiding an import that touches a
+	// closed month.
+	ErrStatementImportTouchesClosedMonth = domain.ErrStatementImportTouchesClosedMonth
 )
 
 // DuplicateImportError is returned for a file already imported through the
@@ -179,9 +183,11 @@ func NewImportedTransactionAggregate(folds eventstore.FoldStore[domain.ImportedT
 }
 
 // StatementImport is a Statement import as the API sees it.
+// VoidBlockedBy is every reason a Void of it would be refused now.
 type StatementImport struct {
-	ID    uuid.UUID
-	State domain.StatementImportState
+	ID            uuid.UUID
+	State         domain.StatementImportState
+	VoidBlockedBy []domain.VoidBlock
 }
 
 // StatementImportReader reads the Household's Statement import folds.
@@ -202,6 +208,9 @@ type StatementImportReader interface {
 	// LatestImport returns the Account's latest non-voided Statement
 	// import, if it has one.
 	LatestImport(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (uuid.UUID, bool, error)
+	// AcceptedRows counts, per Statement import of the Connection, its
+	// Accepted Imported transactions; an import with none is absent.
+	AcceptedRows(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID) (map[uuid.UUID]int, error)
 	// RowsOf returns every Imported transaction of the Statement import.
 	RowsOf(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID) ([]ImportRowState, error)
 	// ImportedUpTo returns the Account's Opening balance and the total of
@@ -461,7 +470,11 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 			}
 		}
 
-		recorded = StatementImport{ID: importID, State: res.State}
+		// Just recorded, it is the latest, with nothing Accepted, and its
+		// rows are all in or after the Open month.
+		recorded = StatementImport{ID: importID, State: res.State, VoidBlockedBy: res.State.VoidBlockedBy(
+			domain.VoidStatementImport{Latest: true, OpenMonth: r.account.OpenMonth, StartMonth: monthOfDate(r.account.StartDate)},
+		)}
 
 		return nil
 	})
@@ -473,8 +486,10 @@ func (s *StatementImports) Upload(ctx context.Context, household, connection uui
 }
 
 // Void withdraws the Account's latest Statement import, while none of its
-// rows are Accepted, so a corrected file can be uploaded (ADR-0018): with
-// the Account's imports locked, it records the void, Discards every row
+// rows are Accepted and it touches no closed month, so a corrected file can
+// be uploaded (ADR-0018, ADR-0024): with the Account's imports locked, and
+// its Open month read with its fold locked FOR SHARE so a Close or Reopen
+// waits, it records the void, Discards every row
 // and, for the Account's first import, reverses the Opening balance
 // Transaction through the Ledger, all in one database transaction. The
 // voided import releases its file (consistency map: Void Statement import).
@@ -520,7 +535,15 @@ func (s *StatementImports) Void(ctx context.Context, household, connection, id u
 			}
 		}
 
-		res, err := s.imports.Execute(ctx, tx, id, domain.VoidStatementImport{Latest: latest == id, AcceptedRows: accepted})
+		months, err := s.ledger.AccountMonthsForShare(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		res, err := s.imports.Execute(ctx, tx, id, domain.VoidStatementImport{
+			Latest: latest == id, AcceptedRows: accepted,
+			OpenMonth: months.OpenMonth, StartMonth: monthOfDate(months.StartDate),
+		})
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}
@@ -550,12 +573,13 @@ func (s *StatementImports) Void(ctx context.Context, household, connection, id u
 	return voided, nil
 }
 
-// List returns every Statement import of the Connection.
+// List returns every Statement import of the Connection, each with every
+// reason a Void of it would be refused now.
 func (s *StatementImports) List(ctx context.Context, household, connection uuid.UUID) ([]StatementImport, error) {
 	var list []StatementImport
 
 	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		_, found, err := s.connections.Folds.Load(ctx, tx, connection)
+		fold, found, err := s.connections.Folds.Load(ctx, tx, connection)
 		if err != nil {
 			return err //nolint:wrapcheck // the adapter's error
 		}
@@ -564,9 +588,33 @@ func (s *StatementImports) List(ctx context.Context, household, connection uuid.
 			return ErrConnectionNotFound
 		}
 
-		list, err = s.reader.StatementImports(ctx, tx, connection)
+		if list, err = s.reader.StatementImports(ctx, tx, connection); err != nil || len(list) == 0 {
+			return err //nolint:wrapcheck // the adapter's error
+		}
 
-		return err //nolint:wrapcheck // the adapter's error
+		account, err := s.ledger.ImportAccount(ctx, tx, fold.State.AccountID)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		latest, _, err := s.reader.LatestImport(ctx, tx, fold.State.AccountID)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		accepted, err := s.reader.AcceptedRows(ctx, tx, connection)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		for i, imp := range list {
+			list[i].VoidBlockedBy = imp.State.VoidBlockedBy(domain.VoidStatementImport{
+				Latest: imp.ID == latest, AcceptedRows: accepted[imp.ID],
+				OpenMonth: account.OpenMonth, StartMonth: monthOfDate(account.StartDate),
+			})
+		}
+
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list statement imports: %w", err)
@@ -574,6 +622,9 @@ func (s *StatementImports) List(ctx context.Context, household, connection uuid.
 
 	return list, nil
 }
+
+// monthOfDate is the month (YYYY-MM) of a date.
+func monthOfDate(d time.Time) string { return d.Format(domain.MonthLayout) }
 
 // read reads the statement file through the Connection for its Account,
 // refusing a file the Connection already imported. With lock, the

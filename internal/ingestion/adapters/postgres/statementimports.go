@@ -239,6 +239,35 @@ func (StatementImportReader) LatestImport(ctx context.Context, tx *eventstore.Tx
 	return id, true, nil
 }
 
+// AcceptedRows implements app.StatementImportReader in one grouped query.
+func (StatementImportReader) AcceptedRows(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID) (map[uuid.UUID]int, error) {
+	rows, err := tx.Query(ctx, `SELECT t.statement_import_id, count(*)
+		FROM imported_transactions t
+		JOIN statement_imports s ON s.household_id = t.household_id AND s.id = t.statement_import_id
+		WHERE t.household_id = $1 AND s.connection_id = $2 AND t.state = 'accepted'
+		GROUP BY t.statement_import_id`, tx.HouseholdID(), connection)
+	if err != nil {
+		return nil, fmt.Errorf("count accepted rows: %w", err)
+	}
+
+	accepted := map[uuid.UUID]int{}
+
+	var (
+		id    uuid.UUID
+		count int
+	)
+
+	if _, err := pgx.ForEachRow(rows, []any{&id, &count}, func() error {
+		accepted[id] = count
+
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("count accepted rows: %w", err)
+	}
+
+	return accepted, nil
+}
+
 // RowsOf implements app.StatementImportReader.
 func (StatementImportReader) RowsOf(ctx context.Context, tx *eventstore.Tx, statementImport uuid.UUID) ([]app.ImportRowState, error) {
 	rows, err := tx.Query(ctx, `SELECT id, state FROM imported_transactions
