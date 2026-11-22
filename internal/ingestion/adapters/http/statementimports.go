@@ -37,6 +37,8 @@ const (
 	NotTheLatestStatementImportType    = "/problems/not-the-latest-statement-import"
 	StatementImportHasAcceptedRowsType = "/problems/statement-import-has-accepted-rows"
 	StatementImportAlreadyVoidedType   = "/problems/statement-import-already-voided"
+
+	StatementImportTouchesClosedMonthType = "/problems/statement-import-touches-closed-month"
 )
 
 // MaxStatementFile is the largest statement file accepted, far above any
@@ -149,6 +151,8 @@ func (h *StatementImportHandler) VoidStatementImport(ctx context.Context, params
 ) (oas.VoidStatementImportRes, error) {
 	voided, err := h.imports.Void(ctx, params.HouseholdID, params.ConnectionID, params.StatementImportID)
 
+	var touches *domain.TouchesClosedMonthError
+
 	conflict := func(typ, title, detail string) (oas.VoidStatementImportRes, error) {
 		return httpapi.MonthConflict(typ, title, detail, "", ""), nil
 	}
@@ -165,6 +169,12 @@ func (h *StatementImportHandler) VoidStatementImport(ctx context.Context, params
 	case errors.Is(err, app.ErrStatementImportHasAcceptedRows), errors.Is(err, app.ErrImportedTransactionAlreadyAccepted):
 		return conflict(StatementImportHasAcceptedRowsType, "Statement import has Accepted rows",
 			"Some of the Statement import's Imported transactions are Accepted: reverse their Transactions first.")
+	case errors.As(err, &touches):
+		month := httpapi.MonthWords(touches.Month)
+
+		return httpapi.MonthConflict(StatementImportTouchesClosedMonthType, "Statement import touches a closed month",
+			fmt.Sprintf("This import has rows in %s, which is closed. Reopen %s first.", month, month),
+			touches.Month, touches.OpenMonth), nil
 	case err != nil:
 		return nil, fmt.Errorf("void statement import: %w", err)
 	}
@@ -442,13 +452,27 @@ var balanceChecksOut = map[domain.BalanceCheck]string{
 	domain.BalanceCheckFailed:  "FAILED",
 }
 
+var voidBlockNames = map[domain.VoidBlock]string{
+	domain.VoidBlockedNotLatest:          "NOT_LATEST",
+	domain.VoidBlockedHasAcceptedRows:    "HAS_ACCEPTED_ROWS",
+	domain.VoidBlockedTouchesClosedMonth: "TOUCHES_CLOSED_MONTH",
+}
+
+// voidBlocksOut writes the reasons a Void would be refused as the API names
+// them; an empty list when it is allowed.
+func voidBlocksOut(blocks []domain.VoidBlock) []string {
+	out := make([]string, 0, len(blocks))
+	for _, b := range blocks {
+		out = append(out, voidBlockNames[b])
+	}
+
+	return out
+}
+
 func statementImportResponse(i app.StatementImport) (*oas.StatementImport, error) {
 	s := i.State
 	out := &oas.StatementImport{
-		// Worked out from the Open month in ticket 06 of
-		// .scratch/ui-first-slice-backend; until then Void is offered and
-		// its 409s still refuse it.
-		VoidBlockedBy:               []string{},
+		VoidBlockedBy:               voidBlocksOut(i.VoidBlockedBy),
 		StatementImportID:           i.ID,
 		ConnectionID:                s.ConnectionID,
 		AccountID:                   s.AccountID,

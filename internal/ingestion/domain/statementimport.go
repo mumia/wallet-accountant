@@ -33,6 +33,10 @@ var (
 	// ErrStatementImportHasAcceptedRows is returned for voiding a Statement
 	// import with Accepted rows: their Transactions are reversed first.
 	ErrStatementImportHasAcceptedRows = errors.New("statement import has accepted rows")
+	// ErrStatementImportTouchesClosedMonth is returned, as a
+	// *TouchesClosedMonthError, for voiding a Statement import that touches
+	// a closed month: voiding never changes a closed month (ADR-0024).
+	ErrStatementImportTouchesClosedMonth = errors.New("statement import touches a closed month")
 	// ErrBalanceCheckNotWaiting is returned for running the Balance check
 	// of a Statement import whose check isn't waiting.
 	ErrBalanceCheckNotWaiting = errors.New("balance check is not waiting")
@@ -69,6 +73,30 @@ func (e *BalanceCheckFailedError) Error() string {
 }
 
 func (e *BalanceCheckFailedError) Unwrap() error { return ErrBalanceCheckFailed }
+
+// TouchesClosedMonthError refuses voiding a Statement import that touches
+// a closed month: Month is the earliest closed month it touches, and
+// OpenMonth the Account's Open month (both YYYY-MM).
+type TouchesClosedMonthError struct {
+	Month     string
+	OpenMonth string
+}
+
+func (e *TouchesClosedMonthError) Error() string {
+	return fmt.Sprintf("%s: %s (the open month is %s)", ErrStatementImportTouchesClosedMonth, e.Month, e.OpenMonth)
+}
+
+func (e *TouchesClosedMonthError) Unwrap() error { return ErrStatementImportTouchesClosedMonth }
+
+// VoidBlock is a reason voiding a Statement import would be refused.
+type VoidBlock string
+
+// The reasons a Void is refused, in the order they are checked.
+const (
+	VoidBlockedNotLatest          VoidBlock = "not_latest"
+	VoidBlockedHasAcceptedRows    VoidBlock = "has_accepted_rows"
+	VoidBlockedTouchesClosedMonth VoidBlock = "touches_closed_month"
+)
 
 // BalanceCheck is the state of a Statement import's Balance check.
 type BalanceCheck string
@@ -162,10 +190,14 @@ type (
 
 	// VoidStatementImport withdraws the import (ADR-0018). Latest says it
 	// is the Account's latest non-voided import; AcceptedRows counts its
-	// Accepted Imported transactions.
+	// Accepted Imported transactions. OpenMonth and StartMonth (YYYY-MM)
+	// are the Account's Open month and its start date's month, which say
+	// whether the import touches a closed month (ADR-0024).
 	VoidStatementImport struct {
 		Latest       bool
 		AcceptedRows int
+		OpenMonth    string
+		StartMonth   string
 	}
 )
 
@@ -316,8 +348,54 @@ func recordStatementImport(s StatementImportState, c RecordStatementImport) ([]S
 	return []StatementImportEvent{recorded}, nil
 }
 
+// ClosedMonthTouched is the earliest closed month (YYYY-MM) the import
+// touches, before the Account's Open month openMonth: the earliest Booking
+// month of the Imported transactions it recorded, in any state, or, for
+// the first import, the start date's month startMonth, where its Opening
+// balance is booked. Empty when it touches none. Rows it ignored never
+// count (ADR-0024).
+func (s StatementImportState) ClosedMonthTouched(openMonth, startMonth string) string {
+	touched := ""
+
+	if s.OpeningBalance != nil && startMonth != "" && startMonth < openMonth {
+		touched = startMonth
+	}
+
+	if m := s.EarliestBookingMonth; m != "" && m < openMonth && (touched == "" || m < touched) {
+		touched = m
+	}
+
+	return touched
+}
+
+// VoidBlockedBy is every reason voiding the import would be refused now,
+// in the order they are checked; none for an import that is voided, or
+// isn't recorded.
+func (s StatementImportState) VoidBlockedBy(c VoidStatementImport) []VoidBlock {
+	if !s.Recorded || s.Voided() {
+		return nil
+	}
+
+	var blocks []VoidBlock
+
+	if !c.Latest {
+		blocks = append(blocks, VoidBlockedNotLatest)
+	}
+
+	if c.AcceptedRows > 0 {
+		blocks = append(blocks, VoidBlockedHasAcceptedRows)
+	}
+
+	if s.ClosedMonthTouched(c.OpenMonth, c.StartMonth) != "" {
+		blocks = append(blocks, VoidBlockedTouchesClosedMonth)
+	}
+
+	return blocks
+}
+
 // voidStatementImport voids the Account's latest import while none of its
-// rows are Accepted (spec stories 43d, 43f).
+// rows are Accepted (spec stories 43d, 43f) and it touches no closed month
+// (spec story 14).
 func voidStatementImport(s StatementImportState, c VoidStatementImport) ([]StatementImportEvent, error) {
 	switch {
 	case !s.Recorded:
@@ -328,6 +406,10 @@ func voidStatementImport(s StatementImportState, c VoidStatementImport) ([]State
 		return nil, ErrNotTheLatestStatementImport
 	case c.AcceptedRows > 0:
 		return nil, fmt.Errorf("%w: %d", ErrStatementImportHasAcceptedRows, c.AcceptedRows)
+	}
+
+	if m := s.ClosedMonthTouched(c.OpenMonth, c.StartMonth); m != "" {
+		return nil, &TouchesClosedMonthError{Month: m, OpenMonth: c.OpenMonth}
 	}
 
 	return []StatementImportEvent{StatementImportVoided{}}, nil
