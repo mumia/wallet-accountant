@@ -150,6 +150,11 @@ type Ingestion interface {
 	// Account's Statement imports leave unresolved in every Booking month,
 	// in one grouped query each for counts and for unchecked imports.
 	AccountImports(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (domain.AccountImports, error)
+	// UnresolvedRows counts, in the caller's transaction, the pending and
+	// Suspected duplicate Imported transactions of the Account, or of every
+	// Account of the Household when account is nil, over every Booking
+	// month, in one grouped query. An Account with none is absent.
+	UnresolvedRows(ctx context.Context, tx *eventstore.Tx, account *uuid.UUID) (map[uuid.UUID]ImportedRows, error)
 	// MonthImportsForClose is MonthImports for a Month close: it first holds
 	// the Account's Statement imports until the transaction ends, so no
 	// upload or waiting Balance check runs between the read and the close

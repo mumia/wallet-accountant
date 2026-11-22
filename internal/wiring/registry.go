@@ -74,7 +74,8 @@ func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
 	// the Ledger port exists.
 	imported := &ingestionapp.ImportedTransactions{}
 	accountAggregate := ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{})
-	accounts := ledgerapp.NewAccounts(households, accountAggregate, ledgerpg.AccountReader{})
+	accounts := ledgerapp.NewAccounts(households, accountAggregate, ledgerpg.AccountReader{},
+		ledgerIngestion{imported: imported})
 	transactions := ledgerapp.NewTransactions(households, accountAggregate,
 		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}),
 		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}),
