@@ -117,7 +117,7 @@ require (
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/daixiang0/gci v0.13.7 // indirect
 	github.com/dave/dst v0.28.0 // indirect
-	github.com/daveshanley/vacuum v0.42.1 // indirect
+	github.com/daveshanley/vacuum v0.42.3 // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
@@ -252,7 +252,7 @@ require (
 	github.com/pb33f/jsonpath v0.8.5 // indirect
 	github.com/pb33f/jsonschema/v6 v6.0.3 // indirect
 	github.com/pb33f/libasyncapi v0.0.7 // indirect
-	github.com/pb33f/libopenapi v0.43.2 // indirect
+	github.com/pb33f/libopenapi v0.44.0 // indirect
 	github.com/pb33f/libopenapi-validator v0.16.5 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
