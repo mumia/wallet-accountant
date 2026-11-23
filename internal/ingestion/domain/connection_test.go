@@ -210,6 +210,8 @@ func TestValidMappings(t *testing.T) {
 		"skipped leading lines":    func(m *domain.CSVMapping) { m.SkipLeadingLines = 3 },
 		"every optional field":     everyOptionalField,
 		"compact date format":      func(m *domain.CSVMapping) { m.DateFormat = "YYYYMMDD" },
+		"UTF-8":                    func(m *domain.CSVMapping) { m.Encoding = domain.EncodingUTF8 },
+		"Windows-1252":             func(m *domain.CSVMapping) { m.Encoding = domain.EncodingWindows1252 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -298,6 +300,7 @@ func TestInvalidMappings(t *testing.T) {
 		},
 		"same separators":        {signedMapping, func(m *domain.CSVMapping) { m.ThousandsSeparator = "," }, domain.ErrInvalidCSVMapping},
 		"negative skipped lines": {signedMapping, func(m *domain.CSVMapping) { m.SkipLeadingLines = -1 }, domain.ErrInvalidCSVMapping},
+		"unknown encoding":       {signedMapping, func(m *domain.CSVMapping) { m.Encoding = "latin_9" }, domain.ErrInvalidCSVMapping},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

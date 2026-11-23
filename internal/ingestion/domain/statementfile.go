@@ -77,8 +77,7 @@ func parseStatementFile(m CSVMapping, file []byte, places int32) ([]StatementRow
 		return nil, err
 	}
 
-	file = bytes.TrimPrefix(file, []byte("\xef\xbb\xbf"))
-	file, skipped := skipLines(file, m.SkipLeadingLines)
+	file, skipped := skipLines(m.Encoding.decode(file), m.SkipLeadingLines)
 
 	r := csv.NewReader(bytes.NewReader(file))
 	r.Comma, _ = utf8.DecodeRuneInString(m.Delimiter)
