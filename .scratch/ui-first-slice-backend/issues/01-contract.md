@@ -11,7 +11,7 @@
 - [x] Interim values that pass response validation: `open_month` = the first month from the start date's month that isn't in `Closed`; `pending`/`suspected_duplicates` 0; `reopen_blocked` true; `unchecked_statement_imports` from the existing `MonthImports`; `void_blocked_by` empty; `rows_ignored_in_closed_months` 0; `state` from the interim `open_month`; `flagged` no longer emitted
 - [x] Connection `name` is required on create, so it is recorded in `ConnectionCreated` and on the lookup row and returned (uniqueness and rename come in ticket 10); existing tests send names
 - [x] `make lint` and `make test-integration` pass
-- [ ] After merge: annotated tag `v0.2.0` on the merge commit, then tell the UI repo
+- [x] After merge: annotated tag `v0.2.0` on the merge commit, then tell the UI repo
 - [x] Do not change the contract's shape: anything that seems wrong is a comment on the spec
 
 ## Comments
@@ -28,3 +28,5 @@ Implementation notes (2026-11-21):
 - **400 or 422**: the schema's `maxLength` gives 400 before the handler runs. The contract now says only a name of spaces gets 422 (Connection create and rename, Account rename).
 - **Tests**: `flag_integration_test.go` is deleted, because `flagged` is no longer in the API and tickets 02–06 test the rules that replace it. Its `januaryBonus` moved to `void_integration_test.go`. Month tests expect `NOT_OPEN_YET` for months after the open one. Connection test bodies carry names, with added cases for trimming, a blank name and a too long name.
 - **Checks**: `make lint` (golangci-lint 0 issues, vacuum 100) and `go test -tags integration ./...` pass.
+
+2026-11-23: `v0.2.0` tagged on the contract merge commit (d0e5de4). `v0.3.0` tagged on 8e8e908, after every ticket in this slice landed; the contract's shape is unchanged since `v0.2.0`.
