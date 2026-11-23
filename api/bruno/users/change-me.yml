@@ -1,0 +1,22 @@
+info:
+  name: Change your display name
+  type: http
+  seq: 2
+http:
+  method: PATCH
+  url: '{{baseUrl}}/me'
+  body:
+    type: json
+    data: |-
+      {
+        "display_name": "Ana"
+      }
+  auth: inherit
+docs: |-
+  Changes the caller's display name, the name other members of their
+  Households see. A User who registered before display names existed
+  has none until they set one here. A name of only spaces gets 422
+  `/problems/invalid-user`, and an empty or too long one 400. Names
+  needn't be unique. The same name again records nothing.
+
+  Operation `changeMe`.

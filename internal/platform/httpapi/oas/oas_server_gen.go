@@ -63,6 +63,15 @@ type Handler interface {
 	//
 	// PATCH /households/{household_id}/accounts/{account_id}/connections/{connection_id}
 	ChangeConnection(ctx context.Context, req *ConnectionChange, params ChangeConnectionParams) (ChangeConnectionRes, error)
+	// ChangeMe implements changeMe operation.
+	//
+	// Changes the caller's display name, the name other members of their Households see. A User who
+	// registered before display names existed has none until they set one here. A name of only spaces gets
+	// 422 `/problems/invalid-user`, and an empty or too long one 400. Names needn't be unique. The same
+	// name again records nothing.
+	//
+	// PATCH /me
+	ChangeMe(ctx context.Context, req *MeChange) (ChangeMeRes, error)
 	// ChangeTransaction implements changeTransaction operation.
 	//
 	// Sets the Category on the non-Account side of the Transaction, for example to categorise one Accepted
@@ -127,11 +136,38 @@ type Handler interface {
 	//
 	// POST /households
 	CreateHousehold(ctx context.Context, req *HouseholdCreation, params CreateHouseholdParams) (CreateHouseholdRes, error)
+	// CreateInvitation implements createInvitation operation.
+	//
+	// Issues an Invitation to the Household (ADR-0025). Whoever redeems its code becomes a member: someone
+	// unregistered with `createRegistration`, which also makes them a User, and a User with
+	// `createMembership`. The code is single-use, expires 24 hours after it is issued, and is returned
+	// only in this response, never in a list. A replay with the same Idempotency-Key returns the same
+	// code.
+	//
+	// POST /households/{household_id}/invitations
+	CreateInvitation(ctx context.Context, params CreateInvitationParams) (CreateInvitationRes, error)
+	// CreateMembership implements createMembership operation.
+	//
+	// Redeems an Invitation to a Household as a User, making them a member of that Household (ADR-0025).
+	// It answers with the Household joined. An unknown, expired, revoked or already used code, and any
+	// code that names no Household, gets 422 `/problems/invalid-invitation`, one generic problem, so codes
+	// can't be probed. A User who is already a member of the Household gets 409
+	// `/problems/already-a-member`, and the code stays unused. An unregistered caller gets 403
+	// `/problems/registration-required`, and redeems the code with `createRegistration` instead.
+	//
+	// POST /memberships
+	CreateMembership(ctx context.Context, req *MembershipCreation, params CreateMembershipParams) (CreateMembershipRes, error)
 	// CreateRegistration implements createRegistration operation.
 	//
 	// Redeems an Invitation code, making the signed-in identity a User with the role the Invitation grants
-	// (ADR-0017). An unknown, expired, superseded or already used code gets 422 with one generic problem,
-	// so codes can't be probed. An identity that is already a User gets 409.
+	// and the display name it gives (ADR-0017). An Invitation to a Household also makes the new User a
+	// member of that Household, in the same step (ADR-0025). An unknown, expired, superseded, revoked or
+	// already used code gets 422 with one generic problem, so codes can't be probed. A display name of
+	// only spaces gets 422 `/problems/invalid-user`. An identity that is already a User gets 409
+	// `/problems/already-registered`, and redeems an Invitation to a Household with `createMembership`
+	// instead.
+	//
+	// `display_name` is required since `v0.4.0`.
 	//
 	// POST /registrations
 	CreateRegistration(ctx context.Context, req *Registration, params CreateRegistrationParams) (CreateRegistrationRes, error)
@@ -262,12 +298,27 @@ type Handler interface {
 	//
 	// GET /households/{household_id}/accounts/{account_id}/imported-transactions
 	ListImportedTransactions(ctx context.Context, params ListImportedTransactionsParams) (ListImportedTransactionsRes, error)
+	// ListInvitations implements listInvitations operation.
+	//
+	// Lists the Household's open Invitations, oldest first: those not redeemed, not revoked and not
+	// expired. It never returns a code.
+	//
+	// GET /households/{household_id}/invitations
+	ListInvitations(ctx context.Context, params ListInvitationsParams) (ListInvitationsRes, error)
+	// ListMembers implements listMembers operation.
+	//
+	// Lists every member of the Household, oldest first, with their display name and when they joined.
+	// Every member is equal and sees everything in the Household (ADR-0003).
+	//
+	// GET /households/{household_id}/members
+	ListMembers(ctx context.Context, params ListMembersParams) (ListMembersRes, error)
 	// ListNotifications implements listNotifications operation.
 	//
 	// Lists every Notification of the Household, newest first, with whether the caller has marked it read.
 	// Notifications are raised a little after what caused them, by a deferred handler (ADR-0013): a
 	// Statement import with Suspected duplicates raises a `SUSPECTED_DUPLICATES_FOUND` one linking to the
-	// import.
+	// import, and someone joining, leaving or being removed raises a `MEMBER_JOINED`, `MEMBER_LEFT` or
+	// `MEMBER_REMOVED` one naming them.
 	//
 	// GET /households/{household_id}/notifications
 	ListNotifications(ctx context.Context, params ListNotificationsParams) (ListNotificationsRes, error)
@@ -303,6 +354,15 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports/previews
 	PreviewStatementImport(ctx context.Context, req *StatementImportPreviewUploadMultipart, params PreviewStatementImportParams) (PreviewStatementImportRes, error)
+	// RemoveMember implements removeMember operation.
+	//
+	// Removes the member from the Household. With the caller's own User ID the caller leaves. Any member
+	// may remove any other (ADR-0025). The removed User loses access at once but stays a User, and can
+	// rejoin only through a new Invitation. The Household's only member gets 409 `/problems/last-member`.
+	// A User who isn't a member gets 404.
+	//
+	// DELETE /households/{household_id}/members/{user_id}
+	RemoveMember(ctx context.Context, params RemoveMemberParams) (RemoveMemberRes, error)
 	// ReopenAccountMonth implements reopenAccountMonth operation.
 	//
 	// Takes back the Account's latest Month close (ADR-0024). The month becomes the open month again, its
@@ -330,6 +390,13 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/transactions/{transaction_id}/reverse
 	ReverseTransaction(ctx context.Context, params ReverseTransactionParams) (ReverseTransactionRes, error)
+	// RevokeInvitation implements revokeInvitation operation.
+	//
+	// Revokes an open Invitation of the Household, whichever member issued it. Its code then gets the same
+	// 422 as any invalid code. An Invitation that isn't open (redeemed, revoked or expired) gets 404.
+	//
+	// DELETE /households/{household_id}/invitations/{invitation_id}
+	RevokeInvitation(ctx context.Context, params RevokeInvitationParams) (RevokeInvitationRes, error)
 	// SaveCsvMapping implements saveCsvMapping operation.
 	//
 	// Replaces the Connection's CSV mapping. The mapping is validated as a whole: a missing required

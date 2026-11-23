@@ -35,6 +35,9 @@ var (
 type User struct {
 	ID                      uuid.UUID
 	IsInstanceAdministrator bool
+	// DisplayName is empty for a User who registered before display names
+	// existed and hasn't set one.
+	DisplayName string
 }
 
 // Lookups finds Invitations and Users by their lookup rows. All of them are
@@ -88,11 +91,11 @@ func (u *Users) Me(ctx context.Context, id authn.Identity) (User, error) {
 }
 
 // Register redeems the Invitation code for the identity and registers it as
-// a User with the Invitation's role. The Invitation and the User are decided
+// a User with the Invitation's role and the display name it chose. The Invitation and the User are decided
 // in one database transaction, each under its own version check, so two
 // concurrent redemptions of one code can't both succeed: the loser retries
 // and finds the Invitation redeemed (ADR-0017).
-func (u *Users) Register(ctx context.Context, id authn.Identity, code string) (User, error) {
+func (u *Users) Register(ctx context.Context, id authn.Identity, code, displayName string) (User, error) {
 	userID, err := uuid.NewV7()
 	if err != nil {
 		return User{}, fmt.Errorf("user id: %w", err)
@@ -129,12 +132,17 @@ func (u *Users) Register(ctx context.Context, id authn.Identity, code string) (U
 			Subject:      id.Subject,
 			InvitationID: invitationID,
 			Role:         redeemed.State.Role,
+			DisplayName:  displayName,
 		})
 		if err != nil {
 			return err //nolint:wrapcheck // already wrapped by the runtime
 		}
 
-		user = User{ID: userID, IsInstanceAdministrator: registered.State.IsInstanceAdministrator}
+		user = User{
+			ID:                      userID,
+			IsInstanceAdministrator: registered.State.IsInstanceAdministrator,
+			DisplayName:             registered.State.DisplayName,
+		}
 
 		return nil
 	})

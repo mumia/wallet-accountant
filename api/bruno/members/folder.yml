@@ -1,0 +1,9 @@
+info:
+  name: Members
+  type: folder
+  seq: 2
+request:
+  auth: inherit
+docs:
+  content: Who belongs to a Household, joining it and leaving it (ADR-0003, ADR-0025)
+  type: text/markdown

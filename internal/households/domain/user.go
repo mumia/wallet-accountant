@@ -2,13 +2,18 @@ package domain
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel/decider"
 )
 
-// ErrUserAlreadyRegistered is returned for registering a User twice.
-var ErrUserAlreadyRegistered = errors.New("user already registered")
+var (
+	// ErrUserAlreadyRegistered is returned for registering a User twice.
+	ErrUserAlreadyRegistered = errors.New("user already registered")
+	// ErrDisplayNameRequired is returned for a blank display name.
+	ErrDisplayNameRequired = errors.New("display name required")
+)
 
 // UserState is a User's fold.
 type UserState struct {
@@ -17,6 +22,9 @@ type UserState struct {
 	Subject                 string
 	InvitationID            sharedkernel.ID
 	IsInstanceAdministrator bool
+	// DisplayName is what other members see; empty for a User who
+	// registered before display names existed and hasn't set one.
+	DisplayName string
 }
 
 type (
@@ -24,12 +32,13 @@ type (
 	UserCommand interface{ isUserCommand() }
 
 	// RegisterUser registers the OIDC identity as a User, with the role of
-	// the Invitation it redeemed.
+	// the Invitation it redeemed and the display name it chose.
 	RegisterUser struct {
 		Issuer       string
 		Subject      string
 		InvitationID sharedkernel.ID
 		Role         Role
+		DisplayName  string
 	}
 )
 
@@ -46,6 +55,9 @@ type (
 		Subject      string          `json:"subject"`
 		InvitationID sharedkernel.ID `json:"invitationid"`
 		Role         Role            `json:"role"`
+		// DisplayName is absent on events recorded before display names
+		// existed.
+		DisplayName string `json:"displayname,omitempty"`
 	}
 )
 
@@ -64,6 +76,13 @@ func decideUser(s UserState, c UserCommand) ([]UserEvent, error) {
 			return nil, ErrUserAlreadyRegistered
 		}
 
+		name := strings.TrimSpace(c.DisplayName)
+		if name == "" {
+			return nil, ErrDisplayNameRequired
+		}
+
+		c.DisplayName = name
+
 		return []UserEvent{UserRegistered(c)}, nil
 	default:
 		return nil, nil
@@ -75,6 +94,7 @@ func evolveUser(s UserState, e decider.Envelope[UserEvent]) UserState {
 		s.Registered = true
 		s.Issuer, s.Subject, s.InvitationID = ev.Issuer, ev.Subject, ev.InvitationID
 		s.IsInstanceAdministrator = ev.Role == RoleInstanceAdministrator
+		s.DisplayName = ev.DisplayName
 	}
 
 	return s

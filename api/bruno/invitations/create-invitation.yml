@@ -1,0 +1,26 @@
+info:
+  name: Invite someone to the Household
+  type: http
+  seq: 1
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/invitations'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  auth: inherit
+docs: |-
+  Issues an Invitation to the Household (ADR-0025). Whoever redeems
+  its code becomes a member: someone unregistered with
+  `createRegistration`, which also makes them a User, and a User with
+  `createMembership`. The code is single-use, expires 24 hours after
+  it is issued, and is returned only in this response, never in a
+  list. A replay with the same Idempotency-Key returns the same code.
+
+  Operation `createInvitation`.

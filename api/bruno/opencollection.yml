@@ -38,6 +38,12 @@ request:
     - name: household_id
       value: ""
       description: The Household's ID
+    - name: user_id
+      value: ""
+      description: The User's ID
+    - name: invitation_id
+      value: ""
+      description: The Invitation's ID
     - name: category_id
       value: ""
       description: The Category's ID

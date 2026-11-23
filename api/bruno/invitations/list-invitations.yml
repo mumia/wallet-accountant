@@ -1,0 +1,18 @@
+info:
+  name: The Household's open Invitations
+  type: http
+  seq: 2
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id/invitations'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+  auth: inherit
+docs: |-
+  Lists the Household's open Invitations, oldest first: those not
+  redeemed, not revoked and not expired. It never returns a code.
+
+  Operation `listInvitations`.

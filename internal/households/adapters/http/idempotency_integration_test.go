@@ -130,7 +130,7 @@ func TestReplayingARegistrationReturnsTheStoredUser(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 	token := app.TokenFor("https://issuer.example", "alice")
-	body := map[string]string{"invitation_code": app.SeedInvitation(t)}
+	body := map[string]string{"invitation_code": app.SeedInvitation(t), "display_name": "Ana"}
 
 	var registered, replayed me
 	app.PostWithKey(t, "/api/registrations", token, "key-1", body).AssertJSON(t, http.StatusCreated, &registered)

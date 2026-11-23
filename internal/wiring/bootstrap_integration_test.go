@@ -44,11 +44,11 @@ func TestBootstrapAdmitsTheFirstInstanceAdministratorOnce(t *testing.T) {
 	owner := app.TokenFor("https://issuer.example", "owner")
 
 	// The rerun replaced the earlier code.
-	app.Post(t, "/api/registrations", owner, map[string]string{"invitation_code": first}).
+	app.Post(t, "/api/registrations", owner, map[string]string{"invitation_code": first, "display_name": "Ana"}).
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-invitation")
 
 	var registered me
-	app.Post(t, "/api/registrations", owner, map[string]string{"invitation_code": second}).
+	app.Post(t, "/api/registrations", owner, map[string]string{"invitation_code": second, "display_name": "Ana"}).
 		AssertJSON(t, http.StatusCreated, &registered)
 
 	if !registered.IsInstanceAdministrator {

@@ -1,7 +1,7 @@
 info:
   name: Imported transactions
   type: folder
-  seq: 9
+  seq: 11
 request:
   auth: inherit
 docs:
