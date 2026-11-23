@@ -69,10 +69,16 @@ type (
 	SaveCSVMapping struct {
 		CSVMapping CSVMapping
 	}
+
+	// RenameConnection gives the Connection a new name.
+	RenameConnection struct {
+		Name string
+	}
 )
 
 func (CreateConnection) isConnectionCommand() {}
 func (SaveCSVMapping) isConnectionCommand()   {}
+func (RenameConnection) isConnectionCommand() {}
 
 type (
 	// ConnectionEvent is a Connection's event.
@@ -91,10 +97,16 @@ type (
 		CSVMapping     CSVMapping `json:"csvmapping"`
 		MappingVersion int        `json:"mappingversion"`
 	}
+
+	// ConnectionRenamed is recorded when a Connection gets a new name.
+	ConnectionRenamed struct {
+		Name string `json:"name"`
+	}
 )
 
 func (ConnectionCreated) isConnectionEvent() {}
 func (CSVMappingSaved) isConnectionEvent()   {}
+func (ConnectionRenamed) isConnectionEvent() {}
 
 // Connection is the Connection Decider.
 var Connection = decider.Decider[ConnectionState, ConnectionCommand, ConnectionEvent]{
@@ -112,6 +124,8 @@ func decideConnection(s ConnectionState, c ConnectionCommand) ([]ConnectionEvent
 		}
 
 		return saveMapping(s, c.CSVMapping)
+	case RenameConnection:
+		return renameConnection(s, c)
 	default:
 		return nil, nil
 	}
@@ -153,6 +167,25 @@ func createConnection(s ConnectionState, c CreateConnection) ([]ConnectionEvent,
 	return events, nil
 }
 
+// renameConnection records the new name, trimmed; the same name again
+// records nothing.
+func renameConnection(s ConnectionState, c RenameConnection) ([]ConnectionEvent, error) {
+	if !s.Created {
+		return nil, ErrConnectionNotCreated
+	}
+
+	name, err := connectionName(c.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	if name == s.Name {
+		return nil, nil
+	}
+
+	return []ConnectionEvent{ConnectionRenamed{Name: name}}, nil
+}
+
 // ConnectionNameMaxLength is the longest Connection name, in characters.
 const ConnectionNameMaxLength = 100
 
@@ -182,6 +215,8 @@ func evolveConnection(s ConnectionState, e decider.Envelope[ConnectionEvent]) Co
 	case CSVMappingSaved:
 		m := ev.CSVMapping
 		s.CSVMapping, s.MappingVersion = &m, ev.MappingVersion
+	case ConnectionRenamed:
+		s.Name = ev.Name
 	}
 
 	return s

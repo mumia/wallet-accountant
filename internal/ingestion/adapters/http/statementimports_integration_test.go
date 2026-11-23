@@ -429,7 +429,7 @@ func TestConfirmingIsRefused(t *testing.T) {
 	t.Run("a Connection without a mapping", func(t *testing.T) {
 		t.Parallel()
 		f := newImportFixture(t, app, "no-mapping")
-		f.connection = f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"}).ConnectionID
+		f.connection = f.create(t, map[string]any{"name": "Without a mapping", "kind": "STATEMENT_FILE_IMPORT"}).ConnectionID
 
 		f.preview(t, statement, "1", "1").AssertProblem(t, http.StatusUnprocessableEntity, "/problems/csv-mapping-required")
 		f.assertNothingImported(t)

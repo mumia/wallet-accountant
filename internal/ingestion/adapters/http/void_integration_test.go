@@ -330,7 +330,7 @@ func TestVoidIsIdempotentAndScopedToTheHousehold(t *testing.T) {
 	}
 
 	// Alice through another of her Connections.
-	other := alice.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()}).ConnectionID
+	other := alice.create(t, map[string]any{"name": "Second statement file", "kind": "STATEMENT_FILE_IMPORT", "csv_mapping": signed()}).ConnectionID
 	app.Do(t, http.MethodPost, "/api/households/"+alice.household+"/connections/"+other+"/statement-imports/"+
 		first.StatementImportID+"/void", alice.token, nil).AssertProblem(t, http.StatusNotFound, "about:blank")
 	alice.void(t, "0198f0a0-0000-7000-8000-00000000dead").AssertProblem(t, http.StatusNotFound, "about:blank")

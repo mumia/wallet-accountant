@@ -17,8 +17,9 @@ import (
 
 // Problem types for a Connection or a CSV mapping the domain refuses.
 const (
-	InvalidConnectionType = "/problems/invalid-connection"
-	InvalidCSVMappingType = "/problems/invalid-csv-mapping"
+	InvalidConnectionType   = "/problems/invalid-connection"
+	ConnectionNameTakenType = "/problems/connection-name-taken"
+	InvalidCSVMappingType   = "/problems/invalid-csv-mapping"
 )
 
 // The API's spellings of the domain's values. A value the API doesn't know
@@ -92,8 +93,9 @@ func (h *ConnectionHandler) CreateConnection(ctx context.Context, req *oas.Conne
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound):
 		return new(oas.CreateConnectionNotFound(httpapi.NotFoundProblem())), nil
 	case errors.Is(err, domain.ErrConnectionNameInvalid):
-		return invalid(InvalidConnectionType, "Invalid Connection",
-			"The name must be 1 to 100 characters, not counting spaces around it.")
+		return invalid(InvalidConnectionType, "Invalid Connection", connectionNameInvalidDetail)
+	case errors.Is(err, app.ErrConnectionNameTaken):
+		return invalid(ConnectionNameTakenType, connectionNameTakenTitle, connectionNameTakenDetail(string(req.Name)))
 	case errors.Is(err, domain.ErrBankFeedsNotSupported):
 		return invalid(InvalidConnectionType, "Invalid Connection", "Bank feed Connections are not supported yet.")
 	case errors.Is(err, domain.ErrUnknownConnectionKind):
@@ -126,6 +128,32 @@ func (h *ConnectionHandler) ListConnections(ctx context.Context, params oas.List
 	return &oas.ConnectionList{Items: items}, nil
 }
 
+// ChangeConnection implements changeConnection: it renames the Connection.
+func (h *ConnectionHandler) ChangeConnection(ctx context.Context, req *oas.ConnectionChange,
+	params oas.ChangeConnectionParams,
+) (oas.ChangeConnectionRes, error) {
+	renamed, err := h.connections.Rename(ctx, params.HouseholdID, params.AccountID, params.ConnectionID, string(req.Name))
+
+	invalid := func(problemType, title, detail string) (oas.ChangeConnectionRes, error) {
+		p := httpapi.Problem(http.StatusUnprocessableEntity, problemType, title, detail)
+
+		return new(oas.ChangeConnectionUnprocessableEntity(p)), nil
+	}
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrConnectionNotFound):
+		return new(oas.ChangeConnectionNotFound(httpapi.NotFoundProblem())), nil
+	case errors.Is(err, domain.ErrConnectionNameInvalid):
+		return invalid(InvalidConnectionType, "Invalid Connection", connectionNameInvalidDetail)
+	case errors.Is(err, app.ErrConnectionNameTaken):
+		return invalid(ConnectionNameTakenType, connectionNameTakenTitle, connectionNameTakenDetail(string(req.Name)))
+	case err != nil:
+		return nil, fmt.Errorf("rename connection: %w", err)
+	}
+
+	return connectionResponse(renamed), nil
+}
+
 // SaveCsvMapping implements saveCsvMapping.
 func (h *ConnectionHandler) SaveCsvMapping(ctx context.Context, req *oas.CsvMapping, params oas.SaveCsvMappingParams) (oas.SaveCsvMappingRes, error) {
 	saved, err := h.connections.SaveCSVMapping(ctx, params.HouseholdID, params.AccountID, params.ConnectionID, mappingIn(*req))
@@ -142,6 +170,18 @@ func (h *ConnectionHandler) SaveCsvMapping(ctx context.Context, req *oas.CsvMapp
 	}
 
 	return connectionResponse(saved), nil
+}
+
+// The copy of a refused Connection name.
+const (
+	connectionNameInvalidDetail = "The name must be 1 to 100 characters, not counting spaces around it."
+	connectionNameTakenTitle    = "Connection name taken"
+)
+
+// connectionNameTakenDetail names the refused name as the domain keeps it,
+// trimmed.
+func connectionNameTakenDetail(name string) string {
+	return `This Account already has a Connection named "` + strings.TrimSpace(name) + `".`
 }
 
 // mappingDetail lists every problem of an invalid mapping.
