@@ -20,6 +20,7 @@ const (
 	ConnectionStreamType       = "ingestion.connection"
 	ConnectionCreatedType      = "io.walletaccountant.ingestion.connection.created.v1"
 	ConnectionMappingSavedType = "io.walletaccountant.ingestion.connection.csvmappingsaved.v1"
+	ConnectionRenamedType      = "io.walletaccountant.ingestion.connection.renamed.v1"
 )
 
 var (
@@ -32,6 +33,10 @@ var (
 	// ErrConnectionNotFound is returned for a Connection that is not one of
 	// the Account's.
 	ErrConnectionNotFound = errors.New("connection not found")
+	// ErrConnectionNameTaken is returned for a Connection name another of
+	// the Account's Connections has, ignoring case. The fold store's unique
+	// index decides it.
+	ErrConnectionNameTaken = errors.New("connection name taken")
 )
 
 // HouseholdScope is the Households port every Household-scoped request runs
@@ -57,6 +62,7 @@ func NewConnectionAggregate(folds eventstore.FoldStore[domain.ConnectionState]) 
 	codec := eventstore.NewCodec[domain.ConnectionEvent](Source)
 	eventstore.Register[domain.ConnectionEvent, domain.ConnectionCreated](codec, ConnectionCreatedType)
 	eventstore.Register[domain.ConnectionEvent, domain.CSVMappingSaved](codec, ConnectionMappingSavedType)
+	eventstore.Register[domain.ConnectionEvent, domain.ConnectionRenamed](codec, ConnectionRenamedType)
 
 	return ConnectionAggregate{
 		StreamType:        ConnectionStreamType,
@@ -151,21 +157,34 @@ func (c *Connections) List(ctx context.Context, household, account uuid.UUID) ([
 	return list, nil
 }
 
+// Rename gives the Connection a new name; the same name again records
+// nothing.
+func (c *Connections) Rename(ctx context.Context, household, account, connection uuid.UUID, name string) (Connection, error) {
+	var renamed Connection
+
+	err := c.inConnection(ctx, household, account, connection, func(ctx context.Context, tx *eventstore.Tx) error {
+		res, err := c.connections.Execute(ctx, tx, connection, domain.RenameConnection{Name: name})
+		if err != nil {
+			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		renamed = connectionOf(connection, res.State)
+
+		return nil
+	})
+	if err != nil {
+		return Connection{}, fmt.Errorf("rename connection %s: %w", connection, err)
+	}
+
+	return renamed, nil
+}
+
 // SaveCSVMapping validates the mapping as a whole and saves it as the
 // Connection's new mapping version (consistency map: Save CSV mapping).
 func (c *Connections) SaveCSVMapping(ctx context.Context, household, account, connection uuid.UUID, m domain.CSVMapping) (Connection, error) {
 	var saved Connection
 
-	err := c.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		fold, found, err := c.connections.Folds.Load(ctx, tx, connection)
-		if err != nil {
-			return err //nolint:wrapcheck // the adapter's error
-		}
-
-		if !found || fold.State.AccountID != account {
-			return ErrConnectionNotFound
-		}
-
+	err := c.inConnection(ctx, household, account, connection, func(ctx context.Context, tx *eventstore.Tx) error {
 		res, err := c.connections.Execute(ctx, tx, connection, domain.SaveCSVMapping{CSVMapping: m})
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
@@ -180,6 +199,26 @@ func (c *Connections) SaveCSVMapping(ctx context.Context, household, account, co
 	}
 
 	return saved, nil
+}
+
+// inConnection runs fn in the Household's request transaction once the
+// Connection is known to be one of the Account's.
+func (c *Connections) inConnection(ctx context.Context, household, account, connection uuid.UUID,
+	fn func(ctx context.Context, tx *eventstore.Tx) error,
+) error {
+	//nolint:wrapcheck // the callers wrap it
+	return c.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		fold, found, err := c.connections.Folds.Load(ctx, tx, connection)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !found || fold.State.AccountID != account {
+			return ErrConnectionNotFound
+		}
+
+		return fn(ctx, tx)
+	})
 }
 
 // inAccount runs fn in the Household's request transaction once the

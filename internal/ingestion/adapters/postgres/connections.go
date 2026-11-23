@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mumia/wallet-accountant/internal/ingestion/app"
 	"github.com/mumia/wallet-accountant/internal/ingestion/domain"
@@ -19,6 +20,8 @@ import (
 )
 
 // ConnectionFolds stores Connection folds. The CSV mapping is kept as JSON.
+// A name another Connection of the Account has, ignoring case, is refused
+// with app.ErrConnectionNameTaken.
 type ConnectionFolds struct{}
 
 var _ eventstore.FoldStore[domain.ConnectionState] = ConnectionFolds{}
@@ -75,6 +78,12 @@ func (ConnectionFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "connections_name_idx" {
+		return fmt.Errorf("%w: %q", app.ErrConnectionNameTaken, s.Name)
+	}
+
 	if err != nil {
 		return fmt.Errorf("save connection: %w", err)
 	}

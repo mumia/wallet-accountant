@@ -149,6 +149,55 @@ func TestSavingAMappingOfAConnectionNotCreated(t *testing.T) {
 		ThenError(domain.ErrConnectionNotCreated)
 }
 
+func TestRenamingAConnection(t *testing.T) {
+	t.Parallel()
+
+	decidertest.Given(t, domain.Connection, created()).
+		When(domain.RenameConnection{Name: "  Card statements "}).
+		Then(domain.ConnectionRenamed{Name: "Card statements"})
+
+	renamed := decidertest.Given(t, domain.Connection, created(),
+		domain.ConnectionEvent(domain.ConnectionRenamed{Name: "Card statements"}))
+	if s := renamed.State(); s.Name != "Card statements" || s.AccountID != accountID {
+		t.Errorf("state = %+v, want the new name on the same Account", s)
+	}
+
+	// Only the case changes: that is a new name.
+	decidertest.Given(t, domain.Connection, created()).
+		When(domain.RenameConnection{Name: "statement file"}).
+		Then(domain.ConnectionRenamed{Name: "statement file"})
+}
+
+func TestRenamingAConnectionToItsOwnNameRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	decidertest.Given(t, domain.Connection, created()).
+		When(domain.RenameConnection{Name: " Statement file  "}).
+		Then()
+}
+
+func TestRenamingAConnectionRefusals(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		past []domain.ConnectionEvent
+		name string
+		want error
+	}{
+		"not created":   {nil, "Card statements", domain.ErrConnectionNotCreated},
+		"blank name":    {[]domain.ConnectionEvent{created()}, "   ", domain.ErrConnectionNameInvalid},
+		"name too long": {[]domain.ConnectionEvent{created()}, strings.Repeat("é", 101), domain.ErrConnectionNameInvalid},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			decidertest.Given(t, domain.Connection, tc.past...).
+				When(domain.RenameConnection{Name: tc.name}).
+				ThenError(tc.want)
+		})
+	}
+}
+
 func TestValidMappings(t *testing.T) {
 	t.Parallel()
 
