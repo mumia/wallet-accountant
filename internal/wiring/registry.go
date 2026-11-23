@@ -94,7 +94,7 @@ func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
 		Categories:   categories,
 		Accounts:     accounts,
 		Transactions: transactions,
-		Connections:  ingestionapp.NewConnections(households, accounts, connections, ingestionpg.ConnectionReader{}),
+		Connections:  ingestionapp.NewConnections(households, accounts, ledger, connections, ingestionpg.ConnectionReader{}),
 		StatementImports: ingestionapp.NewStatementImports(households, ledger, connections, statementImports, rows,
 			ingestionpg.StatementImportReader{}),
 		ImportedTransactions: imported,
