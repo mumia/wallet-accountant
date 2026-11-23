@@ -25,7 +25,9 @@ SMOKE_BUILD=${SMOKE_BUILD:-bin/local-smoke-build.env}
 CTX="k3d-$LOCAL_CLUSTER"
 KUBECTL="kubectl --context $CTX"
 NS=wallet-accountant
-make_local() { $MAKE --no-print-directory LOCAL_BUILD="$SMOKE_BUILD" "$@"; }
+# LOCAL_UI_BUILD is empty, so the stand-in UI is deployed even when a newer
+# real UI build is in the registry.
+make_local() { $MAKE --no-print-directory LOCAL_BUILD="$SMOKE_BUILD" LOCAL_UI_BUILD= "$@"; }
 
 started=$(date +%s)
 step() { printf '\nsmoke [%ss]: %s\n' "$(($(date +%s) - started))" "$*"; }

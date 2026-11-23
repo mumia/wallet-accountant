@@ -55,6 +55,10 @@ LOCAL_FLUX          := flux --context k3d-$(LOCAL_CLUSTER)
 # The last build `make local-deploy` pushed (image tag and chart version), and
 # the copy of the env repo local-push stages for the artifact.
 LOCAL_BUILD         := bin/local-build.env
+# The real UI's last build, which wallet-accountant-ui's `make local-deploy`
+# records (its image in the registry and tag); local-push deploys it with the
+# app, or the stand-in UI when that build is newer (deploy/local/stage.sh).
+LOCAL_UI_BUILD      ?= ../wallet-accountant-ui/bin/local-build.env
 LOCAL_STAGE         := bin/local-artifact
 LOCAL_ORIGIN        := $(if $(filter 443,$(LOCAL_HTTPS_PORT)),,:$(LOCAL_HTTPS_PORT))
 # The stand-in UI (spec "Testing Decisions"): a test fixture meeting the UI
@@ -67,7 +71,7 @@ LOCAL_STAND_IN_UI   ?=
 PLAYWRIGHT_VERSION  := v1.65.1-noble
 PLAYWRIGHT_IMAGE    := mcr.microsoft.com/playwright:$(PLAYWRIGHT_VERSION)
 export ENV_REPO LOCAL_CLUSTER LOCAL_REGISTRY LOCAL_REGISTRY_PORT LOCAL_REGISTRY_DIR LOCAL_REGISTRY_CONFIG LOCAL_HTTP_PORT LOCAL_HTTPS_PORT OBSERVABILITY LOCAL_MKCERT_CA LOCAL_ENV_REPO_DIR
-export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD STAND_IN_UI PLAYWRIGHT_IMAGE
+export LOCAL_DB_PORT LOCAL_OTLP_PORT LOCAL_BUILD LOCAL_UI_BUILD STAND_IN_UI PLAYWRIGHT_IMAGE
 
 # Production (the env repo's clusters/prod), reached over Tailscale with the
 # admin kubeconfig infra/homelab writes: `tofu output -raw kubeconfig >
@@ -202,7 +206,7 @@ local-build: $(HELM)
 		ui=localhost:$(LOCAL_REGISTRY_PORT)/wallet-accountant-stand-in-ui:$$tag; \
 		docker build -t $$ui $(STAND_IN_UI); \
 		docker push -q $$ui; \
-		printf 'WALLET_ACCOUNTANT_UI_TAG=%s\n' $$tag >> $(LOCAL_BUILD); \
+		printf 'WALLET_ACCOUNTANT_UI_IMAGE=wallet-accountant-stand-in-ui\nWALLET_ACCOUNTANT_UI_TAG=%s\n' $$tag >> $(LOCAL_BUILD); \
 		echo "local-build: stand-in UI $$ui"; \
 	fi
 

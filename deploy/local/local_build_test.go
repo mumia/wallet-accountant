@@ -54,7 +54,7 @@ func TestLocalBuildRecordsTheBuildItPushed(t *testing.T) {
 	if !ok {
 		t.Fatalf("local-build failed; calls:\n%s", strings.Join(calls, "\n"))
 	}
-	for _, key := range []string{"WALLET_ACCOUNTANT_VERSION=", "WALLET_ACCOUNTANT_IMAGE_TAG=local-", "WALLET_ACCOUNTANT_UI_TAG=local-"} {
+	for _, key := range []string{"WALLET_ACCOUNTANT_VERSION=", "WALLET_ACCOUNTANT_IMAGE_TAG=local-", "WALLET_ACCOUNTANT_UI_IMAGE=wallet-accountant-stand-in-ui\n", "WALLET_ACCOUNTANT_UI_TAG=local-"} {
 		if !strings.Contains(build, key) {
 			t.Errorf("build file has no %s:\n%s", key, build)
 		}
