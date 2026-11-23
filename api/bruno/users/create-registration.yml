@@ -1,7 +1,7 @@
 info:
   name: Redeem an Invitation
   type: http
-  seq: 2
+  seq: 3
 http:
   method: POST
   url: '{{baseUrl}}/registrations'
@@ -13,13 +13,21 @@ http:
     type: json
     data: |-
       {
-        "invitation_code": "string"
+        "invitation_code": "string",
+        "display_name": "Ana"
       }
   auth: inherit
 docs: |-
   Redeems an Invitation code, making the signed-in identity a User with
-  the role the Invitation grants (ADR-0017). An unknown, expired,
-  superseded or already used code gets 422 with one generic problem, so
-  codes can't be probed. An identity that is already a User gets 409.
+  the role the Invitation grants and the display name it gives
+  (ADR-0017). An Invitation to a Household also makes the new User a
+  member of that Household, in the same step (ADR-0025). An unknown,
+  expired, superseded, revoked or already used code gets 422 with one
+  generic problem, so codes can't be probed. A display name of only
+  spaces gets 422 `/problems/invalid-user`. An identity that is already
+  a User gets 409 `/problems/already-registered`, and redeems an
+  Invitation to a Household with `createMembership` instead.
+
+  `display_name` is required since `v0.4.0`.
 
   Operation `createRegistration`.

@@ -1,0 +1,37 @@
+info:
+  name: Join a Household
+  type: http
+  seq: 1
+http:
+  method: POST
+  url: '{{baseUrl}}/memberships'
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "invitation_code": "string"
+      }
+  auth: inherit
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.status === 201) {
+          bru.setVar("household_id", res.body.household_id);
+        }
+docs: |-
+  Redeems an Invitation to a Household as a User, making them a member
+  of that Household (ADR-0025). It answers with the Household joined.
+  An unknown, expired, revoked or already used code, and any code that
+  names no Household, gets 422 `/problems/invalid-invitation`, one
+  generic problem, so codes can't be probed. A User who is already a
+  member of the Household gets 409 `/problems/already-a-member`, and
+  the code stays unused. An unregistered caller gets 403
+  `/problems/registration-required`, and redeems the code with
+  `createRegistration` instead.
+
+  Operation `createMembership`.

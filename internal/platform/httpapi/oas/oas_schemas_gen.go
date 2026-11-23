@@ -847,6 +847,18 @@ type ChangeConnectionUnprocessableEntity Problem
 
 func (*ChangeConnectionUnprocessableEntity) changeConnectionRes() {}
 
+type ChangeMeForbidden Problem
+
+func (*ChangeMeForbidden) changeMeRes() {}
+
+type ChangeMeUnauthorized Problem
+
+func (*ChangeMeUnauthorized) changeMeRes() {}
+
+type ChangeMeUnprocessableEntity Problem
+
+func (*ChangeMeUnprocessableEntity) changeMeRes() {}
+
 type ChangeTransactionConflict Problem
 
 func (*ChangeTransactionConflict) changeTransactionRes() {}
@@ -1070,6 +1082,30 @@ func (*CreateHouseholdUnauthorized) createHouseholdRes() {}
 type CreateHouseholdUnprocessableEntity Problem
 
 func (*CreateHouseholdUnprocessableEntity) createHouseholdRes() {}
+
+type CreateInvitationNotFound Problem
+
+func (*CreateInvitationNotFound) createInvitationRes() {}
+
+type CreateInvitationUnauthorized Problem
+
+func (*CreateInvitationUnauthorized) createInvitationRes() {}
+
+type CreateMembershipConflict Problem
+
+func (*CreateMembershipConflict) createMembershipRes() {}
+
+type CreateMembershipForbidden Problem
+
+func (*CreateMembershipForbidden) createMembershipRes() {}
+
+type CreateMembershipUnauthorized Problem
+
+func (*CreateMembershipUnauthorized) createMembershipRes() {}
+
+type CreateMembershipUnprocessableEntity Problem
+
+func (*CreateMembershipUnprocessableEntity) createMembershipRes() {}
 
 type CreateRegistrationConflict Problem
 
@@ -1475,6 +1511,10 @@ type DiscardImportedTransactionUnauthorized Problem
 
 func (*DiscardImportedTransactionUnauthorized) discardImportedTransactionRes() {}
 
+type DisplayName string
+
+type DisplayNameOut string
+
 type GetAccountMonthBadRequest Problem
 
 func (*GetAccountMonthBadRequest) getAccountMonthRes() {}
@@ -1551,8 +1591,9 @@ func (s *Household) SetBaseCurrency(val CurrencyCode) {
 	s.BaseCurrency = val
 }
 
-func (*Household) createHouseholdRes() {}
-func (*Household) getHouseholdRes()    {}
+func (*Household) createHouseholdRes()  {}
+func (*Household) createMembershipRes() {}
+func (*Household) getHouseholdRes()     {}
 
 // A new Household.
 // Ref: #/components/schemas/HouseholdCreation
@@ -1813,6 +1854,122 @@ func (s *ImportedTransactionPage) SetNextCursor(val OptString) {
 
 func (*ImportedTransactionPage) listImportedTransactionsRes() {}
 
+// An open Invitation to a Household, without its code.
+// Ref: #/components/schemas/Invitation
+type Invitation struct {
+	// The Invitation's ID (UUIDv7).
+	InvitationID uuid.UUID `json:"invitation_id"`
+	IssuedBy     UserRef   `json:"issued_by"`
+	// When it was issued.
+	IssuedAt time.Time `json:"issued_at"`
+	// When its code stops working.
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// GetInvitationID returns the value of InvitationID.
+func (s *Invitation) GetInvitationID() uuid.UUID {
+	return s.InvitationID
+}
+
+// GetIssuedBy returns the value of IssuedBy.
+func (s *Invitation) GetIssuedBy() UserRef {
+	return s.IssuedBy
+}
+
+// GetIssuedAt returns the value of IssuedAt.
+func (s *Invitation) GetIssuedAt() time.Time {
+	return s.IssuedAt
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *Invitation) GetExpiresAt() time.Time {
+	return s.ExpiresAt
+}
+
+// SetInvitationID sets the value of InvitationID.
+func (s *Invitation) SetInvitationID(val uuid.UUID) {
+	s.InvitationID = val
+}
+
+// SetIssuedBy sets the value of IssuedBy.
+func (s *Invitation) SetIssuedBy(val UserRef) {
+	s.IssuedBy = val
+}
+
+// SetIssuedAt sets the value of IssuedAt.
+func (s *Invitation) SetIssuedAt(val time.Time) {
+	s.IssuedAt = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *Invitation) SetExpiresAt(val time.Time) {
+	s.ExpiresAt = val
+}
+
+type InvitationCode string
+
+// A Household's open Invitations.
+// Ref: #/components/schemas/InvitationList
+type InvitationList struct {
+	// The open Invitations, oldest first.
+	Items []Invitation `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *InvitationList) GetItems() []Invitation {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *InvitationList) SetItems(val []Invitation) {
+	s.Items = val
+}
+
+func (*InvitationList) listInvitationsRes() {}
+
+// A new Invitation to a Household, with the code only this response carries.
+// Ref: #/components/schemas/IssuedInvitation
+type IssuedInvitation struct {
+	// The Invitation's ID (UUIDv7).
+	InvitationID uuid.UUID `json:"invitation_id"`
+	// The code to hand to the person invited; shown only here.
+	Code string `json:"code"`
+	// When the code stops working, 24 hours after it was issued.
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// GetInvitationID returns the value of InvitationID.
+func (s *IssuedInvitation) GetInvitationID() uuid.UUID {
+	return s.InvitationID
+}
+
+// GetCode returns the value of Code.
+func (s *IssuedInvitation) GetCode() string {
+	return s.Code
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *IssuedInvitation) GetExpiresAt() time.Time {
+	return s.ExpiresAt
+}
+
+// SetInvitationID sets the value of InvitationID.
+func (s *IssuedInvitation) SetInvitationID(val uuid.UUID) {
+	s.InvitationID = val
+}
+
+// SetCode sets the value of Code.
+func (s *IssuedInvitation) SetCode(val string) {
+	s.Code = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *IssuedInvitation) SetExpiresAt(val time.Time) {
+	s.ExpiresAt = val
+}
+
+func (*IssuedInvitation) createInvitationRes() {}
+
 type KeepImportedTransactionNotFound Problem
 
 func (*KeepImportedTransactionNotFound) keepImportedTransactionRes() {}
@@ -1885,6 +2042,22 @@ type ListImportedTransactionsUnauthorized Problem
 
 func (*ListImportedTransactionsUnauthorized) listImportedTransactionsRes() {}
 
+type ListInvitationsNotFound Problem
+
+func (*ListInvitationsNotFound) listInvitationsRes() {}
+
+type ListInvitationsUnauthorized Problem
+
+func (*ListInvitationsUnauthorized) listInvitationsRes() {}
+
+type ListMembersNotFound Problem
+
+func (*ListMembersNotFound) listMembersRes() {}
+
+type ListMembersUnauthorized Problem
+
+func (*ListMembersUnauthorized) listMembersRes() {}
+
 type ListNotificationsNotFound Problem
 
 func (*ListNotificationsNotFound) listNotificationsRes() {}
@@ -1915,7 +2088,8 @@ type Me struct {
 	// The User's ID (UUIDv7).
 	UserID uuid.UUID `json:"user_id"`
 	// Whether the User controls who is admitted to the instance.
-	IsInstanceAdministrator bool `json:"is_instance_administrator"`
+	IsInstanceAdministrator bool              `json:"is_instance_administrator"`
+	DisplayName             OptDisplayNameOut `json:"display_name"`
 }
 
 // GetUserID returns the value of UserID.
@@ -1928,6 +2102,11 @@ func (s *Me) GetIsInstanceAdministrator() bool {
 	return s.IsInstanceAdministrator
 }
 
+// GetDisplayName returns the value of DisplayName.
+func (s *Me) GetDisplayName() OptDisplayNameOut {
+	return s.DisplayName
+}
+
 // SetUserID sets the value of UserID.
 func (s *Me) SetUserID(val uuid.UUID) {
 	s.UserID = val
@@ -1938,8 +2117,105 @@ func (s *Me) SetIsInstanceAdministrator(val bool) {
 	s.IsInstanceAdministrator = val
 }
 
+// SetDisplayName sets the value of DisplayName.
+func (s *Me) SetDisplayName(val OptDisplayNameOut) {
+	s.DisplayName = val
+}
+
+func (*Me) changeMeRes()           {}
 func (*Me) createRegistrationRes() {}
 func (*Me) getMeRes()              {}
+
+// A new display name for the caller.
+// Ref: #/components/schemas/MeChange
+type MeChange struct {
+	DisplayName DisplayName `json:"display_name"`
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *MeChange) GetDisplayName() DisplayName {
+	return s.DisplayName
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *MeChange) SetDisplayName(val DisplayName) {
+	s.DisplayName = val
+}
+
+// A member of a Household.
+// Ref: #/components/schemas/Member
+type Member struct {
+	// The member's User ID.
+	UserID      uuid.UUID         `json:"user_id"`
+	DisplayName OptDisplayNameOut `json:"display_name"`
+	// When they became a member, by creating the Household or redeeming an Invitation.
+	JoinedAt time.Time `json:"joined_at"`
+}
+
+// GetUserID returns the value of UserID.
+func (s *Member) GetUserID() uuid.UUID {
+	return s.UserID
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *Member) GetDisplayName() OptDisplayNameOut {
+	return s.DisplayName
+}
+
+// GetJoinedAt returns the value of JoinedAt.
+func (s *Member) GetJoinedAt() time.Time {
+	return s.JoinedAt
+}
+
+// SetUserID sets the value of UserID.
+func (s *Member) SetUserID(val uuid.UUID) {
+	s.UserID = val
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *Member) SetDisplayName(val OptDisplayNameOut) {
+	s.DisplayName = val
+}
+
+// SetJoinedAt sets the value of JoinedAt.
+func (s *Member) SetJoinedAt(val time.Time) {
+	s.JoinedAt = val
+}
+
+// A Household's members.
+// Ref: #/components/schemas/MemberList
+type MemberList struct {
+	// The members, oldest first.
+	Items []Member `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *MemberList) GetItems() []Member {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *MemberList) SetItems(val []Member) {
+	s.Items = val
+}
+
+func (*MemberList) listMembersRes() {}
+
+// An Invitation code to a Household, redeemed by a User.
+// Ref: #/components/schemas/MembershipCreation
+type MembershipCreation struct {
+	InvitationCode InvitationCode `json:"invitation_code"`
+}
+
+// GetInvitationCode returns the value of InvitationCode.
+func (s *MembershipCreation) GetInvitationCode() InvitationCode {
+	return s.InvitationCode
+}
+
+// SetInvitationCode sets the value of InvitationCode.
+func (s *MembershipCreation) SetInvitationCode(val InvitationCode) {
+	s.InvitationCode = val
+}
 
 // An amount of money: an exact decimal in its currency, with that currency's number of decimal places
 // (ADR-0007), for example EUR 2, JPY 0, BTC 8 and ETH 18.
@@ -2331,7 +2607,9 @@ func (*MonthReopenProblem) reopenAccountMonthRes() {}
 
 // A Household-level message every member sees, with read state per User. A
 // `SUSPECTED_DUPLICATES_FOUND` one links to the Statement import whose Suspected duplicates wait to be
-// kept or Discarded.
+// kept or Discarded, and carries `statement_import_id`, `connection_id`, `account_id` and
+// `suspected_duplicates`. A `MEMBER_JOINED`, `MEMBER_LEFT` or `MEMBER_REMOVED` one carries `member`,
+// and a `MEMBER_REMOVED` one also `removed_by`. Fields of other kinds are absent.
 // Ref: #/components/schemas/Notification
 type Notification struct {
 	// The Notification's ID (UUIDv7).
@@ -2339,13 +2617,15 @@ type Notification struct {
 	// What the Notification is about.
 	Kind string `json:"kind"`
 	// The Statement import the Notification links to.
-	StatementImportID uuid.UUID `json:"statement_import_id"`
+	StatementImportID OptUUID `json:"statement_import_id"`
 	// The Connection the Statement import came through.
-	ConnectionID uuid.UUID `json:"connection_id"`
+	ConnectionID OptUUID `json:"connection_id"`
 	// The Account of the Statement import.
-	AccountID uuid.UUID `json:"account_id"`
+	AccountID OptUUID `json:"account_id"`
 	// The Suspected duplicates the Statement import brought.
-	SuspectedDuplicates int32 `json:"suspected_duplicates"`
+	SuspectedDuplicates OptInt32   `json:"suspected_duplicates"`
+	Member              OptUserRef `json:"member"`
+	RemovedBy           OptUserRef `json:"removed_by"`
 	// When the Notification was raised.
 	CreatedAt time.Time `json:"created_at"`
 	// Whether the caller has marked it read.
@@ -2363,23 +2643,33 @@ func (s *Notification) GetKind() string {
 }
 
 // GetStatementImportID returns the value of StatementImportID.
-func (s *Notification) GetStatementImportID() uuid.UUID {
+func (s *Notification) GetStatementImportID() OptUUID {
 	return s.StatementImportID
 }
 
 // GetConnectionID returns the value of ConnectionID.
-func (s *Notification) GetConnectionID() uuid.UUID {
+func (s *Notification) GetConnectionID() OptUUID {
 	return s.ConnectionID
 }
 
 // GetAccountID returns the value of AccountID.
-func (s *Notification) GetAccountID() uuid.UUID {
+func (s *Notification) GetAccountID() OptUUID {
 	return s.AccountID
 }
 
 // GetSuspectedDuplicates returns the value of SuspectedDuplicates.
-func (s *Notification) GetSuspectedDuplicates() int32 {
+func (s *Notification) GetSuspectedDuplicates() OptInt32 {
 	return s.SuspectedDuplicates
+}
+
+// GetMember returns the value of Member.
+func (s *Notification) GetMember() OptUserRef {
+	return s.Member
+}
+
+// GetRemovedBy returns the value of RemovedBy.
+func (s *Notification) GetRemovedBy() OptUserRef {
+	return s.RemovedBy
 }
 
 // GetCreatedAt returns the value of CreatedAt.
@@ -2403,23 +2693,33 @@ func (s *Notification) SetKind(val string) {
 }
 
 // SetStatementImportID sets the value of StatementImportID.
-func (s *Notification) SetStatementImportID(val uuid.UUID) {
+func (s *Notification) SetStatementImportID(val OptUUID) {
 	s.StatementImportID = val
 }
 
 // SetConnectionID sets the value of ConnectionID.
-func (s *Notification) SetConnectionID(val uuid.UUID) {
+func (s *Notification) SetConnectionID(val OptUUID) {
 	s.ConnectionID = val
 }
 
 // SetAccountID sets the value of AccountID.
-func (s *Notification) SetAccountID(val uuid.UUID) {
+func (s *Notification) SetAccountID(val OptUUID) {
 	s.AccountID = val
 }
 
 // SetSuspectedDuplicates sets the value of SuspectedDuplicates.
-func (s *Notification) SetSuspectedDuplicates(val int32) {
+func (s *Notification) SetSuspectedDuplicates(val OptInt32) {
 	s.SuspectedDuplicates = val
+}
+
+// SetMember sets the value of Member.
+func (s *Notification) SetMember(val OptUserRef) {
+	s.Member = val
+}
+
+// SetRemovedBy sets the value of RemovedBy.
+func (s *Notification) SetRemovedBy(val OptUserRef) {
+	s.RemovedBy = val
 }
 
 // SetCreatedAt sets the value of CreatedAt.
@@ -2723,6 +3023,52 @@ func (o OptDateTime) Get() (v time.Time, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptDateTime) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptDisplayNameOut returns new OptDisplayNameOut with value set to v.
+func NewOptDisplayNameOut(v DisplayNameOut) OptDisplayNameOut {
+	return OptDisplayNameOut{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDisplayNameOut is optional DisplayNameOut.
+type OptDisplayNameOut struct {
+	Value DisplayNameOut
+	Set   bool
+}
+
+// IsSet returns true if OptDisplayNameOut was set.
+func (o OptDisplayNameOut) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDisplayNameOut) Reset() {
+	var v DisplayNameOut
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDisplayNameOut) SetTo(v DisplayNameOut) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDisplayNameOut) Get() (v DisplayNameOut, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDisplayNameOut) Or(d DisplayNameOut) DisplayNameOut {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -3073,6 +3419,52 @@ func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 	return d
 }
 
+// NewOptUserRef returns new OptUserRef with value set to v.
+func NewOptUserRef(v UserRef) OptUserRef {
+	return OptUserRef{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptUserRef is optional UserRef.
+type OptUserRef struct {
+	Value UserRef
+	Set   bool
+}
+
+// IsSet returns true if OptUserRef was set.
+func (o OptUserRef) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptUserRef) Reset() {
+	var v UserRef
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptUserRef) SetTo(v UserRef) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptUserRef) Get() (v UserRef, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptUserRef) Or(d UserRef) UserRef {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // One statement file row as a CSV mapping reads it.
 // Ref: #/components/schemas/ParsedStatementRow
 type ParsedStatementRow struct {
@@ -3274,22 +3666,49 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 	s.Response = val
 }
 
-// An Invitation code to redeem.
+// An Invitation code to redeem, and the new User's display name.
 // Ref: #/components/schemas/Registration
 type Registration struct {
-	// The Invitation code, exactly as it was handed out.
-	InvitationCode string `json:"invitation_code"`
+	InvitationCode InvitationCode `json:"invitation_code"`
+	DisplayName    DisplayName    `json:"display_name"`
 }
 
 // GetInvitationCode returns the value of InvitationCode.
-func (s *Registration) GetInvitationCode() string {
+func (s *Registration) GetInvitationCode() InvitationCode {
 	return s.InvitationCode
 }
 
+// GetDisplayName returns the value of DisplayName.
+func (s *Registration) GetDisplayName() DisplayName {
+	return s.DisplayName
+}
+
 // SetInvitationCode sets the value of InvitationCode.
-func (s *Registration) SetInvitationCode(val string) {
+func (s *Registration) SetInvitationCode(val InvitationCode) {
 	s.InvitationCode = val
 }
+
+// SetDisplayName sets the value of DisplayName.
+func (s *Registration) SetDisplayName(val DisplayName) {
+	s.DisplayName = val
+}
+
+type RemoveMemberConflict Problem
+
+func (*RemoveMemberConflict) removeMemberRes() {}
+
+// RemoveMemberNoContent is response for RemoveMember operation.
+type RemoveMemberNoContent struct{}
+
+func (*RemoveMemberNoContent) removeMemberRes() {}
+
+type RemoveMemberNotFound Problem
+
+func (*RemoveMemberNotFound) removeMemberRes() {}
+
+type RemoveMemberUnauthorized Problem
+
+func (*RemoveMemberUnauthorized) removeMemberRes() {}
 
 type ReopenAccountMonthBadRequest Problem
 
@@ -3403,6 +3822,19 @@ func (*ReverseTransactionUnauthorized) reverseTransactionRes() {}
 type ReverseTransactionUnprocessableEntity Problem
 
 func (*ReverseTransactionUnprocessableEntity) reverseTransactionRes() {}
+
+// RevokeInvitationNoContent is response for RevokeInvitation operation.
+type RevokeInvitationNoContent struct{}
+
+func (*RevokeInvitationNoContent) revokeInvitationRes() {}
+
+type RevokeInvitationNotFound Problem
+
+func (*RevokeInvitationNotFound) revokeInvitationRes() {}
+
+type RevokeInvitationUnauthorized Problem
+
+func (*RevokeInvitationUnauthorized) revokeInvitationRes() {}
 
 // Why one line of a statement file can't be read.
 // Ref: #/components/schemas/RowError
@@ -4252,6 +4684,34 @@ func (*UploadStatementImportNotFound) uploadStatementImportRes() {}
 type UploadStatementImportUnauthorized Problem
 
 func (*UploadStatementImportUnauthorized) uploadStatementImportRes() {}
+
+// A User, with their display name, who may no longer be a member.
+// Ref: #/components/schemas/UserRef
+type UserRef struct {
+	// The User's ID.
+	UserID      uuid.UUID         `json:"user_id"`
+	DisplayName OptDisplayNameOut `json:"display_name"`
+}
+
+// GetUserID returns the value of UserID.
+func (s *UserRef) GetUserID() uuid.UUID {
+	return s.UserID
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *UserRef) GetDisplayName() OptDisplayNameOut {
+	return s.DisplayName
+}
+
+// SetUserID sets the value of UserID.
+func (s *UserRef) SetUserID(val uuid.UUID) {
+	s.UserID = val
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *UserRef) SetDisplayName(val OptDisplayNameOut) {
+	s.DisplayName = val
+}
 
 type VoidStatementImportNotFound Problem
 

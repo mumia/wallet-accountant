@@ -75,9 +75,9 @@ Ticket 01 writes these into `api/openapi.yaml`. Every other ticket implements pa
   - `PATCH /me` (`changeMe`): body `{ display_name }`. Answers with `Me`.
 - **Changed schemas:**
   - `Registration` gets a required `display_name`. **This breaks the UI's `/register` form,** which must add the field. The bootstrap Invitation is redeemed through the same endpoint, so the first User names themselves too.
-  - `Me` gets a nullable `display_name`.
-  - `Notification.kind` gets `MEMBER_JOINED`, `MEMBER_LEFT` and `MEMBER_REMOVED`, with nullable `member` and `removed_by` fields, each `{ user_id, display_name }`. Names are included because a removed member is no longer in the members list.
-- **Display name:** trimmed, 1–64 characters and not unique. A blank value gets 400 through the existing validation problem.
+  - `Me` gets an optional `display_name`, absent while the User has none (the contract leaves fields out rather than sending `null`).
+  - `Notification.kind` gets `MEMBER_JOINED`, `MEMBER_LEFT` and `MEMBER_REMOVED`, with optional `member` and `removed_by` fields, each a `UserRef` `{ user_id, display_name }`. Names are included because a removed member is no longer in the members list. `statement_import_id`, `connection_id`, `account_id` and `suspected_duplicates` are no longer required: they are present only on `SUSPECTED_DUPLICATES_FOUND`.
+- **Display name:** trimmed, 1–64 characters and not unique. An empty, missing or too long one gets 400 from the schema, and one of only spaces gets 422 `/problems/invalid-user`, as Account names do.
 - **New problem types:**
   - `/problems/already-a-member`: 409 from `createMembership` when the User is already a member of the Household. The code stays unused.
   - `/problems/last-member`: 409 from `removeMember` when the member is the only one.
@@ -120,7 +120,7 @@ Notes on this command:
 
 ### Households: User display name
 
-- `UserRegistered` gains `displayname`. It is omitted on events recorded before this change, and the fold reads it as null.
+- `UserRegistered` gains `displayname`. It is omitted on events recorded before this change, and the fold reads it as no name.
 - `RenameUser` records `user.renamed { displayname }`. The same name again records nothing. This is an instance-scope command on the caller's own User only.
 - **Personal data:** the display name joins the issuer and subject as personal data in the permanent event store. That's acceptable while instances are self-hosted (ADR-0005, ADR-0017's erasure caveat).
 
@@ -198,7 +198,7 @@ Add or update these rows in `docs/architecture/consistency.md`:
   - Listing shows only open Invitations, and the code never appears in a list.
   - A non-member gets 404 on every new Household route.
   - Remove, leave and the last-member refusal; a removed member gets 404 on their next request and lands with zero Households.
-  - Rename through `PATCH /me`; the members list reflects the rename; a legacy User shows a null display name.
+  - Rename through `PATCH /me`; the members list reflects the rename; a legacy User has no `display_name`.
   - Idempotency-Key replay on `createInvitation` returns the same code.
   - Notifications for joined, left and removed appear after events are drained, and none is raised for creating a Household.
 - **Row-level security:** an adapter-level test shows that a Household Invitation's fold rows are invisible from another Household and from instance scope, and that the code lookup row is invisible from Household scope.

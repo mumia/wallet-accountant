@@ -16,6 +16,7 @@ func register() domain.RegisterUser {
 		Subject:      "subject-1",
 		InvitationID: invitationID,
 		Role:         domain.RoleInstanceAdministrator,
+		DisplayName:  "Ana",
 	}
 }
 
@@ -29,7 +30,39 @@ func TestRegisteringAUser(t *testing.T) {
 			Subject:      "subject-1",
 			InvitationID: invitationID,
 			Role:         domain.RoleInstanceAdministrator,
+			DisplayName:  "Ana",
 		})
+}
+
+func TestTheDisplayNameIsTrimmed(t *testing.T) {
+	t.Parallel()
+
+	c := register()
+	c.DisplayName = "  Ana \t"
+
+	want := domain.UserRegistered(register())
+
+	decidertest.Given(t, domain.User).When(c).Then(want)
+}
+
+func TestABlankDisplayNameIsRefused(t *testing.T) {
+	t.Parallel()
+
+	c := register()
+	c.DisplayName = " \t "
+
+	decidertest.Given(t, domain.User).When(c).ThenError(domain.ErrDisplayNameRequired)
+}
+
+func TestAUserRegisteredBeforeDisplayNamesHasNone(t *testing.T) {
+	t.Parallel()
+
+	legacy := domain.UserRegistered(register())
+	legacy.DisplayName = ""
+
+	if name := decidertest.Given(t, domain.User, domain.UserEvent(legacy)).State().DisplayName; name != "" {
+		t.Errorf("display name = %q, want none", name)
+	}
 }
 
 func TestARegisteredUserCannotRegisterAgain(t *testing.T) {

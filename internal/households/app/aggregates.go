@@ -80,7 +80,7 @@ func NewUserAggregate(folds eventstore.FoldStore[domain.UserState]) UserAggregat
 		Decider:           domain.User,
 		Codec:             codec,
 		Folds:             folds,
-		FoldSchemaVersion: 1,
+		FoldSchemaVersion: 2, // 2: display name
 	}
 }
 

@@ -1,0 +1,9 @@
+info:
+  name: Invitations
+  type: folder
+  seq: 3
+request:
+  auth: inherit
+docs:
+  content: Invitations to a Household, which admit their redeemer to it (ADR-0025)
+  type: text/markdown

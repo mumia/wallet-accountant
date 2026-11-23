@@ -23,6 +23,10 @@ security:
 tags:
   - name: Users
     description: The signed-in identity and its registration
+  - name: Members
+    description: Who belongs to a Household, joining it and leaving it (ADR-0003, ADR-0025)
+  - name: Invitations
+    description: Invitations to a Household, which admit their redeemer to it (ADR-0025)
   - name: Currencies
     description: Currencies Wallet Accountant knows, with their decimal places (ADR-0007)
   - name: Households
@@ -68,15 +72,54 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Problem'
+    patch:
+      operationId: changeMe
+      summary: Change your display name
+      description: |
+        Changes the caller's display name, the name other members of their
+        Households see. A User who registered before display names existed
+        has none until they set one here. A name of only spaces gets 422
+        `/problems/invalid-user`, and an empty or too long one 400. Names
+        needn't be unique. The same name again records nothing.
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeChange'
+      responses:
+        '200':
+          description: The User, renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
   /registrations:
     post:
       operationId: createRegistration
       summary: Redeem an Invitation
       description: |
         Redeems an Invitation code, making the signed-in identity a User with
-        the role the Invitation grants (ADR-0017). An unknown, expired,
-        superseded or already used code gets 422 with one generic problem, so
-        codes can't be probed. An identity that is already a User gets 409.
+        the role the Invitation grants and the display name it gives
+        (ADR-0017). An Invitation to a Household also makes the new User a
+        member of that Household, in the same step (ADR-0025). An unknown,
+        expired, superseded, revoked or already used code gets 422 with one
+        generic problem, so codes can't be probed. A display name of only
+        spaces gets 422 `/problems/invalid-user`. An identity that is already
+        a User gets 409 `/problems/already-registered`, and redeems an
+        Invitation to a Household with `createMembership` instead.
+
+        `display_name` is required since `v0.4.0`.
       tags:
         - Users
       parameters:
@@ -96,6 +139,47 @@ paths:
                 $ref: '#/components/schemas/Me'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        default:
+          $ref: '#/components/responses/Problem'
+  /memberships:
+    post:
+      operationId: createMembership
+      summary: Join a Household
+      description: |
+        Redeems an Invitation to a Household as a User, making them a member
+        of that Household (ADR-0025). It answers with the Household joined.
+        An unknown, expired, revoked or already used code, and any code that
+        names no Household, gets 422 `/problems/invalid-invitation`, one
+        generic problem, so codes can't be probed. A User who is already a
+        member of the Household gets 409 `/problems/already-a-member`, and
+        the code stays unused. An unregistered caller gets 403
+        `/problems/registration-required`, and redeems the code with
+        `createRegistration` instead.
+      tags:
+        - Members
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipCreation'
+      responses:
+        '201':
+          description: The Household joined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -200,6 +284,131 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/members:
+    get:
+      operationId: listMembers
+      summary: The Household's members
+      description: |
+        Lists every member of the Household, oldest first, with their
+        display name and when they joined. Every member is equal and sees
+        everything in the Household (ADR-0003).
+      tags:
+        - Members
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The Household's members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/members/{user_id}:
+    delete:
+      operationId: removeMember
+      summary: Remove a member, or leave
+      description: |
+        Removes the member from the Household. With the caller's own User ID
+        the caller leaves. Any member may remove any other (ADR-0025). The
+        removed User loses access at once but stays a User, and can rejoin
+        only through a new Invitation. The Household's only member gets 409
+        `/problems/last-member`. A User who isn't a member gets 404.
+      tags:
+        - Members
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/UserID'
+      responses:
+        '204':
+          description: The member was removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/invitations:
+    post:
+      operationId: createInvitation
+      summary: Invite someone to the Household
+      description: |
+        Issues an Invitation to the Household (ADR-0025). Whoever redeems
+        its code becomes a member: someone unregistered with
+        `createRegistration`, which also makes them a User, and a User with
+        `createMembership`. The code is single-use, expires 24 hours after
+        it is issued, and is returned only in this response, never in a
+        list. A replay with the same Idempotency-Key returns the same code.
+      tags:
+        - Invitations
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: The new Invitation, with its code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedInvitation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listInvitations
+      summary: The Household's open Invitations
+      description: |
+        Lists the Household's open Invitations, oldest first: those not
+        redeemed, not revoked and not expired. It never returns a code.
+      tags:
+        - Invitations
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+      responses:
+        '200':
+          description: The open Invitations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
+  /households/{household_id}/invitations/{invitation_id}:
+    delete:
+      operationId: revokeInvitation
+      summary: Revoke an Invitation
+      description: |
+        Revokes an open Invitation of the Household, whichever member issued
+        it. Its code then gets the same 422 as any invalid code. An
+        Invitation that isn't open (redeemed, revoked or expired) gets 404.
+      tags:
+        - Invitations
+      parameters:
+        - $ref: '#/components/parameters/HouseholdID'
+        - $ref: '#/components/parameters/InvitationID'
+      responses:
+        '204':
+          description: The Invitation was revoked
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1285,7 +1494,9 @@ paths:
         whether the caller has marked it read. Notifications are raised a
         little after what caused them, by a deferred handler (ADR-0013): a
         Statement import with Suspected duplicates raises a
-        `SUSPECTED_DUPLICATES_FOUND` one linking to the import.
+        `SUSPECTED_DUPLICATES_FOUND` one linking to the import, and someone
+        joining, leaving or being removed raises a `MEMBER_JOINED`,
+        `MEMBER_LEFT` or `MEMBER_REMOVED` one naming them.
       tags:
         - Notifications
       parameters:
@@ -1350,6 +1561,22 @@ components:
       in: path
       required: true
       description: The Household's ID
+      schema:
+        type: string
+        format: uuid
+    UserID:
+      name: user_id
+      in: path
+      required: true
+      description: The User's ID
+      schema:
+        type: string
+        format: uuid
+    InvitationID:
+      name: invitation_id
+      in: path
+      required: true
+      description: The Invitation's ID
       schema:
         type: string
         format: uuid
@@ -1550,17 +1777,148 @@ components:
         is_instance_administrator:
           type: boolean
           description: Whether the User controls who is admitted to the instance
+        display_name:
+          $ref: '#/components/schemas/DisplayNameOut'
+    DisplayName:
+      type: string
+      minLength: 1
+      maxLength: 64
+      description: The name other members see, trimmed; not blank, and needn't be unique
+      example: Ana
+    DisplayNameOut:
+      type: string
+      description: The User's display name; absent for a User who registered before display names existed and hasn't set one
+      example: Ana
+    MeChange:
+      type: object
+      description: A new display name for the caller
+      required:
+        - display_name
+      properties:
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
     Registration:
       type: object
-      description: An Invitation code to redeem
+      description: An Invitation code to redeem, and the new User's display name
+      required:
+        - invitation_code
+        - display_name
+      properties:
+        invitation_code:
+          $ref: '#/components/schemas/InvitationCode'
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+    InvitationCode:
+      type: string
+      minLength: 1
+      maxLength: 256
+      description: The Invitation code, exactly as it was handed out
+    MembershipCreation:
+      type: object
+      description: An Invitation code to a Household, redeemed by a User
       required:
         - invitation_code
       properties:
         invitation_code:
+          $ref: '#/components/schemas/InvitationCode'
+    Member:
+      type: object
+      description: A member of a Household
+      required:
+        - user_id
+        - joined_at
+      properties:
+        user_id:
           type: string
-          minLength: 1
-          maxLength: 256
-          description: The Invitation code, exactly as it was handed out
+          format: uuid
+          description: The member's User ID
+        display_name:
+          $ref: '#/components/schemas/DisplayNameOut'
+        joined_at:
+          type: string
+          format: date-time
+          description: When they became a member, by creating the Household or redeeming an Invitation
+          example: '2026-11-23T10:00:00Z'
+    MemberList:
+      type: object
+      description: A Household's members
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The members, oldest first
+          items:
+            $ref: '#/components/schemas/Member'
+    UserRef:
+      type: object
+      description: A User, with their display name, who may no longer be a member
+      required:
+        - user_id
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: The User's ID
+        display_name:
+          $ref: '#/components/schemas/DisplayNameOut'
+    IssuedInvitation:
+      type: object
+      description: A new Invitation to a Household, with the code only this response carries
+      required:
+        - invitation_id
+        - code
+        - expires_at
+      properties:
+        invitation_id:
+          type: string
+          format: uuid
+          description: The Invitation's ID (UUIDv7)
+        code:
+          type: string
+          description: The code to hand to the person invited; shown only here
+          example: 3q2-7wEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        expires_at:
+          type: string
+          format: date-time
+          description: When the code stops working, 24 hours after it was issued
+          example: '2026-11-24T10:00:00Z'
+    Invitation:
+      type: object
+      description: An open Invitation to a Household, without its code
+      required:
+        - invitation_id
+        - issued_by
+        - issued_at
+        - expires_at
+      properties:
+        invitation_id:
+          type: string
+          format: uuid
+          description: The Invitation's ID (UUIDv7)
+        issued_by:
+          $ref: '#/components/schemas/UserRef'
+        issued_at:
+          type: string
+          format: date-time
+          description: When it was issued
+          example: '2026-11-23T10:00:00Z'
+        expires_at:
+          type: string
+          format: date-time
+          description: When its code stops working
+          example: '2026-11-24T10:00:00Z'
+    InvitationList:
+      type: object
+      description: A Household's open Invitations
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: The open Invitations, oldest first
+          items:
+            $ref: '#/components/schemas/Invitation'
     HouseholdCreation:
       type: object
       description: A new Household
@@ -2307,14 +2665,14 @@ components:
       description: |
         A Household-level message every member sees, with read state per
         User. A `SUSPECTED_DUPLICATES_FOUND` one links to the Statement
-        import whose Suspected duplicates wait to be kept or Discarded.
+        import whose Suspected duplicates wait to be kept or Discarded, and
+        carries `statement_import_id`, `connection_id`, `account_id` and
+        `suspected_duplicates`. A `MEMBER_JOINED`, `MEMBER_LEFT` or
+        `MEMBER_REMOVED` one carries `member`, and a `MEMBER_REMOVED` one
+        also `removed_by`. Fields of other kinds are absent.
       required:
         - notification_id
         - kind
-        - statement_import_id
-        - connection_id
-        - account_id
-        - suspected_duplicates
         - created_at
         - read
       properties:
@@ -2327,6 +2685,9 @@ components:
           description: What the Notification is about
           x-extensible-enum:
             - SUSPECTED_DUPLICATES_FOUND
+            - MEMBER_JOINED
+            - MEMBER_LEFT
+            - MEMBER_REMOVED
           example: SUSPECTED_DUPLICATES_FOUND
         statement_import_id:
           type: string
@@ -2345,6 +2706,10 @@ components:
           format: int32
           description: The Suspected duplicates the Statement import brought
           example: 2
+        member:
+          $ref: '#/components/schemas/UserRef'
+        removed_by:
+          $ref: '#/components/schemas/UserRef'
         created_at:
           type: string
           format: date-time

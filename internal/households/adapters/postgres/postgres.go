@@ -110,9 +110,11 @@ var _ eventstore.FoldStore[domain.UserState] = UserFolds{}
 func (UserFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (eventstore.Fold[domain.UserState], bool, error) {
 	var f eventstore.Fold[domain.UserState]
 
-	err := tx.QueryRow(ctx, `SELECT oidc_issuer, oidc_subject, invitation_id, is_instance_administrator, version, schema_version
+	err := tx.QueryRow(ctx, `SELECT oidc_issuer, oidc_subject, invitation_id, is_instance_administrator,
+		COALESCE(display_name, ''), version, schema_version
 		FROM users WHERE id = $1`, id).
-		Scan(&f.State.Issuer, &f.State.Subject, &f.State.InvitationID, &f.State.IsInstanceAdministrator, &f.Version, &f.SchemaVersion)
+		Scan(&f.State.Issuer, &f.State.Subject, &f.State.InvitationID, &f.State.IsInstanceAdministrator,
+			&f.State.DisplayName, &f.Version, &f.SchemaVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return eventstore.Fold[domain.UserState]{}, false, nil
 	}
@@ -132,14 +134,18 @@ func (UserFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (eve
 func (UserFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f eventstore.Fold[domain.UserState], expected int64) error {
 	s := f.State
 
-	args := []any{id, s.Issuer, s.Subject, s.InvitationID, s.IsInstanceAdministrator, f.Version, f.SchemaVersion}
-	q := `INSERT INTO users (id, oidc_issuer, oidc_subject, invitation_id, is_instance_administrator, version, schema_version)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`
+	args := []any{
+		id, s.Issuer, s.Subject, s.InvitationID, s.IsInstanceAdministrator, f.Version, f.SchemaVersion,
+		displayName(s.DisplayName),
+	}
+	q := `INSERT INTO users (id, oidc_issuer, oidc_subject, invitation_id, is_instance_administrator, version, schema_version,
+	      display_name)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
 		args = append(args, expected)
 		q = `UPDATE users SET oidc_issuer = $2, oidc_subject = $3, invitation_id = $4, is_instance_administrator = $5,
-		     version = $6, schema_version = $7 WHERE id = $1 AND version = $8`
+		     version = $6, schema_version = $7, display_name = $8 WHERE id = $1 AND version = $9`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
@@ -167,6 +173,15 @@ func (UserFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f ev
 	return nil
 }
 
+// displayName stores a User without a display name as NULL.
+func displayName(name string) *string {
+	if name == "" {
+		return nil
+	}
+
+	return &name
+}
+
 // Lookups implements app.Lookups.
 type Lookups struct{}
 
@@ -192,10 +207,10 @@ func (Lookups) InvitationByCode(ctx context.Context, tx *eventstore.Tx, hash dom
 func (Lookups) UserByIdentity(ctx context.Context, tx *eventstore.Tx, id authn.Identity) (app.User, bool, error) {
 	var u app.User
 
-	err := tx.QueryRow(ctx, `SELECT u.id, u.is_instance_administrator
+	err := tx.QueryRow(ctx, `SELECT u.id, u.is_instance_administrator, COALESCE(u.display_name, '')
 		FROM user_identities i JOIN users u ON u.id = i.user_id
 		WHERE i.oidc_issuer = $1 AND i.oidc_subject = $2`, id.Issuer, id.Subject).
-		Scan(&u.ID, &u.IsInstanceAdministrator)
+		Scan(&u.ID, &u.IsInstanceAdministrator, &u.DisplayName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return app.User{}, false, nil
 	}

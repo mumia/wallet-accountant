@@ -59,10 +59,10 @@ func notificationResponse(n app.Notification) *oas.Notification {
 	return &oas.Notification{
 		NotificationID:      n.ID,
 		Kind:                strings.ToUpper(string(n.Kind)),
-		StatementImportID:   n.StatementImportID,
-		ConnectionID:        n.ConnectionID,
-		AccountID:           n.AccountID,
-		SuspectedDuplicates: int32(n.SuspectedDuplicates), //nolint:gosec // a file's row count fits
+		StatementImportID:   oas.NewOptUUID(n.StatementImportID),
+		ConnectionID:        oas.NewOptUUID(n.ConnectionID),
+		AccountID:           oas.NewOptUUID(n.AccountID),
+		SuspectedDuplicates: oas.NewOptInt32(int32(n.SuspectedDuplicates)), //nolint:gosec // a file's row count fits
 		CreatedAt:           n.RaisedAt,
 		Read:                n.Read,
 	}

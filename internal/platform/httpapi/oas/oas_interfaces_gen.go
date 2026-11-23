@@ -21,6 +21,10 @@ type ChangeConnectionRes interface {
 	changeConnectionRes()
 }
 
+type ChangeMeRes interface {
+	changeMeRes()
+}
+
 type ChangeTransactionRes interface {
 	changeTransactionRes()
 }
@@ -39,6 +43,14 @@ type CreateConnectionRes interface {
 
 type CreateHouseholdRes interface {
 	createHouseholdRes()
+}
+
+type CreateInvitationRes interface {
+	createInvitationRes()
+}
+
+type CreateMembershipRes interface {
+	createMembershipRes()
 }
 
 type CreateRegistrationRes interface {
@@ -101,6 +113,14 @@ type ListImportedTransactionsRes interface {
 	listImportedTransactionsRes()
 }
 
+type ListInvitationsRes interface {
+	listInvitationsRes()
+}
+
+type ListMembersRes interface {
+	listMembersRes()
+}
+
 type ListNotificationsRes interface {
 	listNotificationsRes()
 }
@@ -117,12 +137,20 @@ type PreviewStatementImportRes interface {
 	previewStatementImportRes()
 }
 
+type RemoveMemberRes interface {
+	removeMemberRes()
+}
+
 type ReopenAccountMonthRes interface {
 	reopenAccountMonthRes()
 }
 
 type ReverseTransactionRes interface {
 	reverseTransactionRes()
+}
+
+type RevokeInvitationRes interface {
+	revokeInvitationRes()
 }
 
 type SaveCsvMappingRes interface {

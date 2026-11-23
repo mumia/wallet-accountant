@@ -1,7 +1,7 @@
 info:
   name: Categories
   type: folder
-  seq: 4
+  seq: 6
 request:
   auth: inherit
 docs:

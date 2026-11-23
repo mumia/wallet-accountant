@@ -1,0 +1,25 @@
+info:
+  name: Remove a member, or leave
+  type: http
+  seq: 3
+http:
+  method: DELETE
+  url: '{{baseUrl}}/households/:household_id/members/:user_id'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: user_id
+      value: '{{user_id}}'
+      type: path
+      description: The User's ID
+  auth: inherit
+docs: |-
+  Removes the member from the Household. With the caller's own User ID
+  the caller leaves. Any member may remove any other (ADR-0025). The
+  removed User loses access at once but stays a User, and can rejoin
+  only through a new Invitation. The Household's only member gets 409
+  `/problems/last-member`. A User who isn't a member gets 404.
+
+  Operation `removeMember`.

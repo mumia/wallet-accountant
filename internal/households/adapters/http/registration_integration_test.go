@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 type me struct {
 	UserID                  string `json:"user_id"`
 	IsInstanceAdministrator bool   `json:"is_instance_administrator"`
+	DisplayName             string `json:"display_name,omitempty"`
 }
 
 func TestRedeemingASeededInvitationRegistersTheCaller(t *testing.T) {
@@ -25,13 +27,13 @@ func TestRedeemingASeededInvitationRegistersTheCaller(t *testing.T) {
 	code := app.SeedInvitation(t)
 	token := app.TokenFor("https://issuer.example", "subject-1")
 
-	res := app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code})
+	res := app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code, "display_name": "Ana"})
 
 	var registered me
 	res.AssertJSON(t, http.StatusCreated, &registered)
 
-	if registered.UserID == "" || registered.IsInstanceAdministrator {
-		t.Errorf("registered = %+v, want a User who is not Instance administrator", registered)
+	if registered.UserID == "" || registered.IsInstanceAdministrator || registered.DisplayName != "Ana" {
+		t.Errorf("registered = %+v, want a User named Ana who is not Instance administrator", registered)
 	}
 
 	var got me
@@ -50,7 +52,7 @@ func TestEveryInvalidCodeGetsTheSameGenericError(t *testing.T) {
 
 	used := app.SeedInvitation(t)
 	app.Post(t, "/api/registrations", app.TokenFor("https://issuer.example", "first"),
-		map[string]string{"invitation_code": used}).AssertJSON(t, http.StatusCreated, &me{})
+		map[string]string{"invitation_code": used, "display_name": "Ana"}).AssertJSON(t, http.StatusCreated, &me{})
 
 	superseded, err := app.RunBootstrap(t)
 	if err != nil {
@@ -71,7 +73,7 @@ func TestEveryInvalidCodeGetsTheSameGenericError(t *testing.T) {
 	} {
 		token := app.TokenFor("https://issuer.example", "caller-with-"+name+"-code")
 
-		p := app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code}).
+		p := app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code, "display_name": "Ana"}).
 			AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-invitation")
 		details = append(details, p)
 
@@ -90,15 +92,59 @@ func TestAnEmptyCodeIsABadRequest(t *testing.T) {
 	app := apitest.Start(t)
 	token := app.TokenFor("https://issuer.example", "subject-1")
 
-	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": ""}).
+	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": "", "display_name": "Ana"}).
 		AssertProblem(t, http.StatusBadRequest, "about:blank")
+}
+
+func TestTheDisplayNameIsTrimmed(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	token := app.TokenFor("https://issuer.example", "subject-1")
+
+	var registered me
+	app.Post(t, "/api/registrations", token,
+		map[string]string{"invitation_code": app.SeedInvitation(t), "display_name": "  Ana Lopes "}).
+		AssertJSON(t, http.StatusCreated, &registered)
+
+	if registered.DisplayName != "Ana Lopes" {
+		t.Errorf("display name = %q, want %q", registered.DisplayName, "Ana Lopes")
+	}
+}
+
+func TestADisplayNameOfOnlySpacesIsRefusedAndTheCodeStaysUnused(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	code := app.SeedInvitation(t)
+	token := app.TokenFor("https://issuer.example", "subject-1")
+
+	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code, "display_name": "   "}).
+		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-user")
+
+	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code, "display_name": "Ana"}).
+		AssertJSON(t, http.StatusCreated, &me{})
+}
+
+func TestAMissingEmptyOrTooLongDisplayNameIsABadRequest(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	token := app.TokenFor("https://issuer.example", "subject-1")
+
+	for name, body := range map[string]map[string]string{
+		"missing":  {"invitation_code": "code"},
+		"empty":    {"invitation_code": "code", "display_name": ""},
+		"too long": {"invitation_code": "code", "display_name": strings.Repeat("a", 65)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			app.Post(t, "/api/registrations", token, body).AssertProblem(t, http.StatusBadRequest, "about:blank")
+		})
+	}
 }
 
 func TestRedeemingWithoutATokenIsUnauthorized(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 
-	app.Post(t, "/api/registrations", "", map[string]string{"invitation_code": app.SeedInvitation(t)}).
+	app.Post(t, "/api/registrations", "", map[string]string{"invitation_code": app.SeedInvitation(t), "display_name": "Ana"}).
 		AssertProblem(t, http.StatusUnauthorized, "about:blank")
 }
 
@@ -111,7 +157,7 @@ func TestARegisteredUserCannotRedeemASecondInvitation(t *testing.T) {
 	app.Get(t, "/api/me", token).AssertJSON(t, http.StatusOK, &before)
 
 	second := app.SeedInvitation(t)
-	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": second}).
+	app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": second, "display_name": "Ana"}).
 		AssertProblem(t, http.StatusConflict, "/problems/already-registered")
 
 	var after me
@@ -123,7 +169,7 @@ func TestARegisteredUserCannotRedeemASecondInvitation(t *testing.T) {
 
 	// The refused redemption left the second code unused.
 	app.Post(t, "/api/registrations", app.TokenFor("https://issuer.example", "subject-2"),
-		map[string]string{"invitation_code": second}).AssertJSON(t, http.StatusCreated, &me{})
+		map[string]string{"invitation_code": second, "display_name": "Ana"}).AssertJSON(t, http.StatusCreated, &me{})
 }
 
 func TestConcurrentRedemptionsOfOneCodeAdmitOneIdentity(t *testing.T) {
@@ -143,7 +189,7 @@ func TestConcurrentRedemptionsOfOneCodeAdmitOneIdentity(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range callers {
 		wg.Go(func() {
-			statuses[i] = app.Post(t, "/api/registrations", tokens[i], map[string]string{"invitation_code": code}).Status
+			statuses[i] = app.Post(t, "/api/registrations", tokens[i], map[string]string{"invitation_code": code, "display_name": "Ana"}).Status
 		})
 	}
 
@@ -179,7 +225,7 @@ func TestConcurrentRedemptionsOfTwoCodesByOneIdentityRegisterItOnce(t *testing.T
 	var wg sync.WaitGroup
 	for i, code := range codes {
 		wg.Go(func() {
-			statuses[i] = app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code}).Status
+			statuses[i] = app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code, "display_name": "Ana"}).Status
 		})
 	}
 

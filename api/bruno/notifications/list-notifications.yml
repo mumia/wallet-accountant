@@ -16,6 +16,8 @@ docs: |-
   whether the caller has marked it read. Notifications are raised a
   little after what caused them, by a deferred handler (ADR-0013): a
   Statement import with Suspected duplicates raises a
-  `SUSPECTED_DUPLICATES_FOUND` one linking to the import.
+  `SUSPECTED_DUPLICATES_FOUND` one linking to the import, and someone
+  joining, leaving or being removed raises a `MEMBER_JOINED`,
+  `MEMBER_LEFT` or `MEMBER_REMOVED` one naming them.
 
   Operation `listNotifications`.

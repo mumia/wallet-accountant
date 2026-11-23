@@ -27,6 +27,9 @@ const (
 	AlreadyRegisteredType = "/problems/already-registered"
 	// InvalidHouseholdType is for a Household the domain refuses to create.
 	InvalidHouseholdType = "/problems/invalid-household"
+	// InvalidUserType is for a display name the domain refuses: one of only
+	// spaces.
+	InvalidUserType = "/problems/invalid-user"
 )
 
 // errNoIdentity means the security handler did not run; it should never happen.
@@ -59,7 +62,7 @@ func (h *Handler) GetMe(ctx context.Context) (oas.GetMeRes, error) {
 		return nil, fmt.Errorf("get me: %w", err)
 	}
 
-	return &oas.Me{UserID: user.ID, IsInstanceAdministrator: user.IsInstanceAdministrator}, nil
+	return meResponse(user), nil
 }
 
 // CreateRegistration implements createRegistration.
@@ -69,7 +72,7 @@ func (h *Handler) CreateRegistration(ctx context.Context, req *oas.Registration,
 		return nil, errNoIdentity
 	}
 
-	user, err := h.users.Register(ctx, id, req.InvitationCode)
+	user, err := h.users.Register(ctx, id, string(req.InvitationCode), string(req.DisplayName))
 
 	switch {
 	case errors.Is(err, app.ErrInvalidInvitation):
@@ -82,11 +85,25 @@ func (h *Handler) CreateRegistration(ctx context.Context, req *oas.Registration,
 			"This identity is already a User.")
 
 		return new(oas.CreateRegistrationConflict(p)), nil
+	case errors.Is(err, domain.ErrDisplayNameRequired):
+		p := httpapi.Problem(http.StatusUnprocessableEntity, InvalidUserType, "Invalid User",
+			"The display name must not be blank.")
+
+		return new(oas.CreateRegistrationUnprocessableEntity(p)), nil
 	case err != nil:
 		return nil, fmt.Errorf("create registration: %w", err)
 	}
 
-	return &oas.Me{UserID: user.ID, IsInstanceAdministrator: user.IsInstanceAdministrator}, nil
+	return meResponse(user), nil
+}
+
+func meResponse(u app.User) *oas.Me {
+	me := &oas.Me{UserID: u.ID, IsInstanceAdministrator: u.IsInstanceAdministrator}
+	if u.DisplayName != "" {
+		me.DisplayName = oas.NewOptDisplayNameOut(oas.DisplayNameOut(u.DisplayName))
+	}
+
+	return me
 }
 
 // CreateHousehold implements createHousehold.
