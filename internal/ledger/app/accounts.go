@@ -25,6 +25,7 @@ const (
 	AccountOpeningBalanceReversedType   = "io.walletaccountant.ledger.account.openingbalancereversed.v1"
 	AccountMonthClosedType              = "io.walletaccountant.ledger.account.monthclosed.v1"
 	AccountMonthReopenedType            = "io.walletaccountant.ledger.account.monthreopened.v1"
+	AccountRenamedType                  = "io.walletaccountant.ledger.account.renamed.v1"
 )
 
 // ErrAccountNotFound is returned for an Account that is not in the Household.
@@ -44,6 +45,7 @@ func NewAccountAggregate(folds eventstore.FoldStore[domain.AccountState]) Accoun
 	eventstore.Register[domain.AccountEvent, domain.OpeningBalanceReversed](codec, AccountOpeningBalanceReversedType)
 	eventstore.Register[domain.AccountEvent, domain.MonthClosed](codec, AccountMonthClosedType)
 	eventstore.Register[domain.AccountEvent, domain.MonthReopened](codec, AccountMonthReopenedType)
+	eventstore.Register[domain.AccountEvent, domain.AccountRenamed](codec, AccountRenamedType)
 
 	return AccountAggregate{
 		StreamType: AccountStreamType,
@@ -153,6 +155,44 @@ func (a *Accounts) Add(ctx context.Context, household uuid.UUID, req NewAccount)
 	}
 
 	return added, nil
+}
+
+// Rename gives the Account a new name; the same name again records nothing.
+// Its kind, Account currency and start date never change.
+func (a *Accounts) Rename(ctx context.Context, household, account uuid.UUID, name string) (Account, error) {
+	var renamed Account
+
+	err := a.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		found, err := a.AccountExists(ctx, tx, account)
+		if err != nil {
+			return err
+		}
+
+		if !found {
+			return ErrAccountNotFound
+		}
+
+		res, err := a.accounts.Execute(ctx, tx, account, domain.RenameAccount{Name: name})
+		if err != nil {
+			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+		}
+
+		renamed = accountOf(account, res.State)
+
+		counts, err := a.ingestion.UnresolvedRows(ctx, tx, &account)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		renamed.withImportedRows(counts[account])
+
+		return nil
+	})
+	if err != nil {
+		return Account{}, fmt.Errorf("rename account %s: %w", account, err)
+	}
+
+	return renamed, nil
 }
 
 // List returns every Account of the Household, with their pending and

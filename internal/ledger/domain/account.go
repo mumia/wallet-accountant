@@ -176,6 +176,12 @@ type (
 		ReversalID    sharedkernel.ID
 		Amount        sharedkernel.Decimal
 	}
+
+	// RenameAccount gives the Account a new name. Its kind, Account
+	// currency and start date never change.
+	RenameAccount struct {
+		Name string
+	}
 )
 
 func (AddAccount) isAccountCommand()              {}
@@ -184,6 +190,7 @@ func (BookTransaction) isAccountCommand()         {}
 func (BookReversal) isAccountCommand()            {}
 func (RecategoriseTransaction) isAccountCommand() {}
 func (ReopenOpeningBalance) isAccountCommand()    {}
+func (RenameAccount) isAccountCommand()           {}
 
 type (
 	// AccountEvent is an Account's event.
@@ -241,6 +248,11 @@ type (
 		ReversalID    sharedkernel.ID      `json:"reversalid"`
 		Amount        sharedkernel.Decimal `json:"amount"`
 	}
+
+	// AccountRenamed is recorded when an Account gets a new name.
+	AccountRenamed struct {
+		Name string `json:"name"`
+	}
 )
 
 func (AccountAdded) isAccountEvent()             {}
@@ -249,6 +261,7 @@ func (TransactionBooked) isAccountEvent()        {}
 func (ReversalBooked) isAccountEvent()           {}
 func (TransactionRecategorised) isAccountEvent() {}
 func (OpeningBalanceReversed) isAccountEvent()   {}
+func (AccountRenamed) isAccountEvent()           {}
 
 // Account is the Account Decider (ADR-0004, ADR-0011).
 var Account = decider.Decider[AccountState, AccountCommand, AccountEvent]{
@@ -274,6 +287,8 @@ func decideAccount(s AccountState, c AccountCommand) ([]AccountEvent, error) {
 		return closeMonth(s, c)
 	case ReopenMonth:
 		return reopenMonth(s, c)
+	case RenameAccount:
+		return renameAccount(s, c)
 	default:
 		return nil, nil
 	}
@@ -311,6 +326,25 @@ func addAccount(s AccountState, c AddAccount) ([]AccountEvent, error) {
 		Currency:  currency.Code(),
 		StartDate: c.StartDate.Format(DateLayout),
 	}}, nil
+}
+
+// renameAccount records the new name, trimmed; the same name again records
+// nothing.
+func renameAccount(s AccountState, c RenameAccount) ([]AccountEvent, error) {
+	if !s.Added {
+		return nil, ErrAccountNotAdded
+	}
+
+	name := strings.TrimSpace(c.Name)
+	if name == "" {
+		return nil, ErrAccountNameRequired
+	}
+
+	if name == s.Name {
+		return nil, nil
+	}
+
+	return []AccountEvent{AccountRenamed{Name: name}}, nil
 }
 
 // recordOpeningBalance accepts the Opening balance once: only the first
@@ -462,6 +496,8 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 		s.StartDate, _ = time.Parse(DateLayout, ev.StartDate)
 		s.AwaitingFirstStatementImport = true
 		s.OpenMonth = s.StartDate.Format(MonthLayout)
+	case AccountRenamed:
+		s.Name = ev.Name
 	case OpeningBalanceRecorded:
 		s.AwaitingFirstStatementImport = false
 		s.OpeningBalanceTransactionID = ev.TransactionID

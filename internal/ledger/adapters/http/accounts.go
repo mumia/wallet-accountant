@@ -15,7 +15,7 @@ import (
 )
 
 // InvalidAccountType is the problem type for an Account the domain refuses
-// to add.
+// to add or rename.
 const InvalidAccountType = "/problems/invalid-account"
 
 // The API's Account kinds and the domain's. CASH is listed so that it gets
@@ -71,7 +71,7 @@ func (h *AccountHandler) AddAccount(ctx context.Context, req *oas.AccountCreatio
 	case errors.Is(err, app.ErrHouseholdNotFound):
 		return new(oas.AddAccountNotFound(httpapi.NotFoundProblem())), nil
 	case errors.Is(err, domain.ErrAccountNameRequired):
-		return invalid("The name must not be blank.")
+		return invalid(accountNameRequiredDetail)
 	case errors.Is(err, domain.ErrCashAccountsNotSupported):
 		return invalid("Cash Accounts are not supported yet.")
 	case errors.Is(err, domain.ErrUnknownAccountKind):
@@ -125,6 +125,28 @@ func (h *AccountHandler) GetAccount(ctx context.Context, params oas.GetAccountPa
 
 	return accountResponse(got)
 }
+
+// ChangeAccount implements changeAccount: it renames the Account.
+func (h *AccountHandler) ChangeAccount(ctx context.Context, req *oas.AccountChange, params oas.ChangeAccountParams,
+) (oas.ChangeAccountRes, error) {
+	renamed, err := h.accounts.Rename(ctx, params.HouseholdID, params.AccountID, req.Name)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrAccountNotFound):
+		return new(oas.ChangeAccountNotFound(httpapi.NotFoundProblem())), nil
+	case errors.Is(err, domain.ErrAccountNameRequired):
+		p := httpapi.Problem(http.StatusUnprocessableEntity, InvalidAccountType, "Invalid Account", accountNameRequiredDetail)
+
+		return new(oas.ChangeAccountUnprocessableEntity(p)), nil
+	case err != nil:
+		return nil, fmt.Errorf("rename account: %w", err)
+	}
+
+	return accountResponse(renamed)
+}
+
+// accountNameRequiredDetail is the copy of a blank Account name.
+const accountNameRequiredDetail = "The name must not be blank."
 
 // accountResponse leaves the balance out while the Account awaits its first
 // Statement import: it has none until its Opening balance is recorded.
