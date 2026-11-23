@@ -89,12 +89,14 @@ var (
 // the amount (one signed column, or debit and credit columns) are required;
 // Transaction date, Value date, payee and bank transaction ID are optional.
 type CSVMapping struct {
-	Delimiter          string `json:"delimiter"`
-	HasHeaderRow       bool   `json:"hasheaderrow"`
-	SkipLeadingLines   int    `json:"skipleadinglines"`
-	DateFormat         string `json:"dateformat"`
-	DecimalSeparator   string `json:"decimalseparator"`
-	ThousandsSeparator string `json:"thousandsseparator"`
+	// Encoding is how the file's bytes are decoded; empty is EncodingUTF8.
+	Encoding           Encoding `json:"encoding,omitempty"`
+	Delimiter          string   `json:"delimiter"`
+	HasHeaderRow       bool     `json:"hasheaderrow"`
+	SkipLeadingLines   int      `json:"skipleadinglines"`
+	DateFormat         string   `json:"dateformat"`
+	DecimalSeparator   string   `json:"decimalseparator"`
+	ThousandsSeparator string   `json:"thousandsseparator"`
 
 	AmountLayout AmountLayout `json:"amountlayout"`
 	// PositiveAmountMeans is what a positive amount in the signed column
@@ -174,6 +176,12 @@ func (v *validation) add(kind error, format string, args ...any) {
 }
 
 func (m CSVMapping) validateFile(v *validation) {
+	switch m.Encoding {
+	case "", EncodingUTF8, EncodingWindows1252:
+	default:
+		v.add(ErrInvalidCSVMapping, "the encoding must be UTF-8 or Windows-1252")
+	}
+
 	if utf8.RuneCountInString(m.Delimiter) != 1 || strings.ContainsAny(m.Delimiter, "\"\r\n") {
 		v.add(ErrInvalidCSVMapping, "the delimiter must be one character other than a quote or a line break")
 	}

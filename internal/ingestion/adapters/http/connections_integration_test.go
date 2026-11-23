@@ -31,6 +31,7 @@ type connectionList struct {
 // signed maps a headed file with one signed amount column.
 func signed() mapping {
 	return mapping{
+		"encoding":              "UTF_8",
 		"delimiter":             ";",
 		"has_header_row":        true,
 		"skip_leading_lines":    0,
@@ -51,6 +52,7 @@ func signed() mapping {
 // position, with every optional field.
 func debitCredit() mapping {
 	return mapping{
+		"encoding":            "UTF_8",
 		"delimiter":           ",",
 		"has_header_row":      false,
 		"skip_leading_lines":  2,

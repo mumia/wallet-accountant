@@ -42,6 +42,15 @@ var (
 		domain.AmountLayoutSigned:      "SIGNED",
 		domain.AmountLayoutDebitCredit: "DEBIT_CREDIT",
 	}
+	encodingsIn = map[string]domain.Encoding{
+		"UTF_8":        domain.EncodingUTF8,
+		"WINDOWS_1252": domain.EncodingWindows1252,
+	}
+	encodingsOut = map[domain.Encoding]string{
+		"":                         "UTF_8",
+		domain.EncodingUTF8:        "UTF_8",
+		domain.EncodingWindows1252: "WINDOWS_1252",
+	}
 	amountSignsIn = map[string]domain.AmountSign{
 		"MONEY_IN":  domain.MoneyIn,
 		"MONEY_OUT": domain.MoneyOut,
@@ -209,6 +218,13 @@ func mappingIn(m oas.CsvMapping) domain.CSVMapping {
 		ThousandsSeparator: m.ThousandsSeparator.Value,
 	}
 
+	if v, ok := m.Encoding.Get(); ok {
+		out.Encoding, ok = encodingsIn[v]
+		if !ok {
+			out.Encoding = domain.Encoding("api:" + v)
+		}
+	}
+
 	if v, ok := m.AmountLayout.Get(); ok {
 		out.AmountLayout, ok = amountLayoutsIn[v]
 		if !ok {
@@ -243,6 +259,7 @@ func columnIn(c oas.OptCsvColumn) domain.Column {
 
 func mappingOut(m domain.CSVMapping) oas.CsvMapping {
 	out := oas.CsvMapping{
+		Encoding:           oas.NewOptString(encodingsOut[m.Encoding]),
 		Delimiter:          oas.NewOptString(m.Delimiter),
 		HasHeaderRow:       oas.NewOptBool(m.HasHeaderRow),
 		SkipLeadingLines:   oas.NewOptInt32(int32(m.SkipLeadingLines)), //nolint:gosec // a mapping skips a handful of lines

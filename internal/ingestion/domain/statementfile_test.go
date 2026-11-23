@@ -263,6 +263,55 @@ func TestParsingWithAnInvalidMapping(t *testing.T) {
 	}
 }
 
+// windows1252File is a statement file as a bank exporting Windows-1252 writes
+// it: "é" is the byte 0xE9, "€" 0x80 and the closing quote 0x94, after a
+// UTF-8 byte order mark that is stripped all the same.
+const windows1252File = "\xef\xbb\xbfDate;Description;Amount\n" +
+	"01/02/2026;Caf\xe9 \x93Le Proc\xe8s\x94;-3,50\n" +
+	"02/02/2026;Transfer 100\x80 \x8d\xa0done;-100,00\n"
+
+func TestParsingAWindows1252File(t *testing.T) {
+	t.Parallel()
+
+	m := signedMapping()
+	m.Encoding = domain.EncodingWindows1252
+
+	// 0x8D is undefined in Windows-1252 and, like every byte outside
+	// 0x80–0x9F, reads as its own code point.
+	assertRows(t, parse(t, m, windows1252File), []row{
+		{Line: 2, BookingDate: "2026-02-01", TransactionDate: "2026-02-01", Description: "Café “Le Procès”", Amount: "-3.5"},
+		{Line: 3, BookingDate: "2026-02-02", TransactionDate: "2026-02-02", Description: "Transfer 100€ \u008d\u00a0done", Amount: "-100"},
+	})
+}
+
+func TestParsingAWindows1252FileAsUTF8GivesMojibake(t *testing.T) {
+	t.Parallel()
+
+	for name, encoding := range map[string]domain.Encoding{"no encoding": "", "UTF-8": domain.EncodingUTF8} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := signedMapping()
+			m.Encoding = encoding
+
+			rows := parse(t, m, windows1252File)
+			if len(rows) != 2 || rows[0].Description != "Caf\xe9 \x93Le Proc\xe8s\x94" {
+				t.Errorf("rows = %+v, want the raw Windows-1252 bytes read as they are", rows)
+			}
+		})
+	}
+}
+
+func TestParsingAUTF8FileKeepsItsCharacters(t *testing.T) {
+	t.Parallel()
+
+	got := parse(t, signedMapping(), "\xef\xbb\xbfDate;Description;Amount\n01/02/2026;Café 5€;-3,50\n")
+
+	assertRows(t, got, []row{
+		{Line: 2, BookingDate: "2026-02-01", TransactionDate: "2026-02-01", Description: "Café 5€", Amount: "-3.5"},
+	})
+}
+
 func TestParsingAFileWithNoRows(t *testing.T) {
 	t.Parallel()
 
