@@ -273,19 +273,29 @@ func (h *StatementImportHandler) ListImportedTransactions(ctx context.Context, p
 
 // upload reads the file and the Export balance of a request.
 func upload(file ht.MultipartFile, balance oas.DecimalText) (app.Upload, *oas.StatementFileProblem) {
-	raw, err := io.ReadAll(io.LimitReader(file.File, MaxStatementFile+1))
-	if err != nil {
-		return app.Upload{}, fileProblem(StatementFileTooLargeType, "Unreadable upload", "The file could not be read.")
-	}
-
-	if len(raw) > MaxStatementFile {
-		return app.Upload{}, fileProblem(StatementFileTooLargeType, "Statement file too large",
-			fmt.Sprintf("A statement file may be at most %d MiB.", MaxStatementFile>>20))
+	raw, problem := statementFile(file)
+	if problem != nil {
+		return app.Upload{}, problem
 	}
 
 	export, problem := exportBalance(balance)
 
 	return app.Upload{File: raw, ExportBalance: export}, problem
+}
+
+// statementFile reads an uploaded statement file, up to MaxStatementFile.
+func statementFile(file ht.MultipartFile) ([]byte, *oas.StatementFileProblem) {
+	raw, err := io.ReadAll(io.LimitReader(file.File, MaxStatementFile+1))
+	if err != nil {
+		return nil, fileProblem(StatementFileTooLargeType, "Unreadable upload", "The file could not be read.")
+	}
+
+	if len(raw) > MaxStatementFile {
+		return nil, fileProblem(StatementFileTooLargeType, "Statement file too large",
+			fmt.Sprintf("A statement file may be at most %d MiB.", MaxStatementFile>>20))
+	}
+
+	return raw, nil
 }
 
 func exportBalance(v oas.DecimalText) (sharedkernel.Decimal, *oas.StatementFileProblem) {

@@ -54,6 +54,13 @@ type Accounts interface {
 	AccountExists(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (bool, error)
 }
 
+// AccountCurrencies is the part of the Ledger port a mapping test reads its
+// Account through.
+type AccountCurrencies interface {
+	// ImportAccount returns the Account, or ErrAccountNotFound.
+	ImportAccount(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (ImportAccount, error)
+}
+
 // ConnectionAggregate is the Connection Decider wired to the runtime.
 type ConnectionAggregate = eventstore.Aggregate[domain.ConnectionState, domain.ConnectionCommand, domain.ConnectionEvent]
 
@@ -102,13 +109,50 @@ type NewConnection struct {
 type Connections struct {
 	scope       HouseholdScope
 	accounts    Accounts
+	currencies  AccountCurrencies
 	connections ConnectionAggregate
 	reader      ConnectionReader
 }
 
 // NewConnections returns the Connections service.
-func NewConnections(scope HouseholdScope, accounts Accounts, connections ConnectionAggregate, reader ConnectionReader) *Connections {
-	return &Connections{scope: scope, accounts: accounts, connections: connections, reader: reader}
+func NewConnections(scope HouseholdScope, accounts Accounts, currencies AccountCurrencies,
+	connections ConnectionAggregate, reader ConnectionReader,
+) *Connections {
+	return &Connections{scope: scope, accounts: accounts, currencies: currencies, connections: connections, reader: reader}
+}
+
+// MappingTest is a sample statement file as an unsaved CSV mapping reads
+// it, with the Account currency its amounts are in.
+type MappingTest struct {
+	domain.Sample
+
+	Currency string
+}
+
+// TestMapping reads a sample statement file with an unsaved CSV mapping,
+// validated exactly as a save validates it, in the Account currency and
+// with no start-date filter (spec: Mapping test). It records nothing and
+// keeps nothing.
+func (c *Connections) TestMapping(ctx context.Context, household, account uuid.UUID, m domain.CSVMapping, file []byte,
+) (MappingTest, error) {
+	var currency sharedkernel.Currency
+
+	err := c.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		a, err := c.currencies.ImportAccount(ctx, tx, account)
+		currency = a.Currency
+
+		return err //nolint:wrapcheck // the port's error
+	})
+	if err != nil {
+		return MappingTest{}, fmt.Errorf("test CSV mapping: %w", err)
+	}
+
+	sample, err := domain.ReadSample(m, file, currency)
+	if err != nil {
+		return MappingTest{}, fmt.Errorf("test CSV mapping: %w", err)
+	}
+
+	return MappingTest{Sample: sample, Currency: currency.Code()}, nil
 }
 
 // Create creates a Connection for the Account, with its CSV mapping if one
