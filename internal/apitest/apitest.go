@@ -343,3 +343,16 @@ func (l *LogRecorder) Records() []sdklog.Record {
 
 	return slices.Clone(l.records)
 }
+
+// EventCount counts every event in the event store, across Households, so
+// a test can check that a request recorded nothing.
+func (a *App) EventCount(t testing.TB) int {
+	t.Helper()
+
+	var n int
+	if err := a.reader.QueryRow(t.Context(), "SELECT count(*) FROM event_store").Scan(&n); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+
+	return n
+}

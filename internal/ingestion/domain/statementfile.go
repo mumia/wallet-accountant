@@ -73,8 +73,25 @@ func ParseStatementFile(m CSVMapping, file []byte) ([]StatementRow, error) {
 // parseStatementFile is ParseStatementFile that also refuses every amount
 // with more than places decimal places; a negative places checks none.
 func parseStatementFile(m CSVMapping, file []byte, places int32) ([]StatementRow, error) {
-	if err := m.Validate(); err != nil {
+	rows, unreadable, err := collectStatementFile(m, file, places)
+	if err != nil {
 		return nil, err
+	}
+
+	if len(unreadable) > 0 {
+		return nil, &RowsError{Rows: unreadable}
+	}
+
+	return rows, nil
+}
+
+// collectStatementFile reads a statement file with the mapping, collecting
+// every readable row and every line it can't read together; an invalid
+// mapping is refused as by Validate. A line that isn't valid CSV ends the
+// reading, since nothing after it can be told apart.
+func collectStatementFile(m CSVMapping, file []byte, places int32) ([]StatementRow, []RowError, error) {
+	if err := m.Validate(); err != nil {
+		return nil, nil, err
 	}
 
 	file, skipped := skipLines(m.Encoding.decode(file), m.SkipLeadingLines)
@@ -125,11 +142,7 @@ func parseStatementFile(m CSVMapping, file []byte, places int32) ([]StatementRow
 		}
 	}
 
-	if len(p.errors) > 0 {
-		return nil, &RowsError{Rows: p.errors}
-	}
-
-	return rows, nil
+	return rows, p.errors, nil
 }
 
 // skipLines drops the first n lines of file, returning the rest and how
@@ -328,4 +341,42 @@ func (p *parser) number(v string) (sharedkernel.Decimal, bool) {
 	d, err := sharedkernel.ParseDecimal(v)
 
 	return d, err == nil
+}
+
+// SampleRows is how many readable rows a mapping test shows.
+const SampleRows = 10
+
+// Sample is a sample statement file as an unsaved CSV mapping reads it
+// (spec: Mapping test).
+type Sample struct {
+	// Rows is the first SampleRows readable rows, in file order.
+	Rows []StatementRow
+	// Readable counts the readable rows of the whole file.
+	Readable int
+	// Unreadable is every line of the whole file that can't be read; empty
+	// when all can.
+	Unreadable []RowError
+}
+
+// ReadSample reads a sample statement file with an unsaved mapping, as an
+// upload to an Account in the currency would, but without refusing the
+// file: readable rows and unreadable lines come back together. Rows before
+// the Account's start date are kept, since it tests the mapping, not an
+// import. An invalid mapping is refused as by Validate, and a file with no
+// rows at all is ErrEmptyStatementFile.
+func ReadSample(m CSVMapping, file []byte, currency sharedkernel.Currency) (Sample, error) {
+	rows, unreadable, err := collectStatementFile(m, file, int32(currency.Decimals())) //nolint:gosec // at most 18 places
+	if err != nil {
+		return Sample{}, err
+	}
+
+	if len(rows) == 0 && len(unreadable) == 0 {
+		return Sample{}, ErrEmptyStatementFile
+	}
+
+	return Sample{
+		Rows:       rows[:min(len(rows), SampleRows)],
+		Readable:   len(rows),
+		Unreadable: append([]RowError{}, unreadable...),
+	}, nil
 }
