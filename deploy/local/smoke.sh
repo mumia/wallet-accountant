@@ -88,10 +88,10 @@ api() { # api <method> <path> [json] -> the HTTP status; the body in $body
 	curl -sS --cacert "$CA" -o "$body" -w '%{http_code}' -X "$1" -H "Authorization: Bearer $token" \
 		-H 'Content-Type: application/json' -H "Idempotency-Key: $(uuidgen | tr 'A-Z' 'a-z')" ${3:+-d "$3"} "$wallet$2"
 }
-status=$(api POST /api/registrations "{\"invitation_code\":\"$code\"}")
+status=$(api POST /api/registrations "{\"invitation_code\":\"$code\",\"display_name\":\"Smoke test\"}")
 [ "$status" = 201 ] || fail "redeeming the code answered $status: $(cat "$body")"
 status=$(api GET /api/me)
-[ "$status" = 200 ] && jq -e '.is_instance_administrator == true' "$body" >/dev/null ||
+[ "$status" = 200 ] && jq -e '.is_instance_administrator == true and .display_name == "Smoke test"' "$body" >/dev/null ||
 	fail "/api/me answered $status: $(cat "$body")"
 rm -f "$body"
 

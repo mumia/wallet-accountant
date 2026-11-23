@@ -375,7 +375,7 @@ api() { # api <base> <method> <path> [json] -> the HTTP status; the body in $api
 		-H 'Content-Type: application/json' -H "Idempotency-Key: $(uuidgen | tr 'A-Z' 'a-z')" ${4:+-d "$4"} "$1$3"
 }
 if [ -n "$token" ] && [ -n "$code" ]; then
-	redeemed=$(api "$wallet" POST /api/registrations "{\"invitation_code\":\"$code\"}") || redeemed=
+	redeemed=$(api "$wallet" POST /api/registrations "{\"invitation_code\":\"$code\",\"display_name\":\"Local check\"}") || redeemed=
 	me=$(api "$wallet" GET /api/me) || me=
 	if { [ "$redeemed" = 201 ] || [ "$redeemed" = 409 ]; } && [ "$me" = 200 ] && jq -e '.is_instance_administrator == true' "$api_out" >/dev/null 2>&1; then
 		pass "a Zitadel identity redeems the bootstrap code and is the Instance administrator on /api/me"
