@@ -7045,18 +7045,28 @@ func (s *Server) handleMarkNotificationReadRequest(args [2]string, argsEscaped b
 //
 // Reads a statement file with the Connection's CSV mapping and shows the Opening balance the Account's
 // first Statement import would record (ADR-0018): the Export balance minus the total of the rows
-// booked on or after the start date. Records nothing. The Export balance is typed twice; entries that
-// differ get 422 `/problems/export-balance-mismatch`. A file with an unreadable row is refused whole
-// with 422 `/problems/unreadable-statement-file`, listing every line and its reason. A file already
-// imported through the Connection gets 409 `/problems/duplicate-statement-import`, naming the earlier
-// import; an Account that already has its Opening balance gets 409
-// `/problems/opening-balance-already-recorded`. Confirm the import by uploading the same file and
-// Export balance with the returned `preview_id`.
+// booked on or after the start date. Records nothing. Without a balance column in the Connection's CSV
+// mapping, the Export balance is typed twice; entries that differ, or a missing
+// `export_balance_confirmation`, get 422 `/problems/export-balance-mismatch`. With a balance column,
+// the file's balance tests the Export balance instead, so the confirmation is ignored (see below). A
+// file with an unreadable row is refused whole with 422 `/problems/unreadable-statement-file`, listing
+// every line and its reason. A file already imported through the Connection gets 409
+// `/problems/duplicate-statement-import`, naming the earlier import; an Account that already has its
+// Opening balance gets 409 `/problems/opening-balance-already-recorded`. Confirm the import by
+// uploading the same file and Export balance with the returned `preview_id`.
 //
 // Every amount is in the Account currency and may have no more decimal places than it has: an Export
 // balance with more gets 422 `/problems/invalid-export-balance`, and a row with more is an unreadable
 // row. A file with no rows at all gets 422 `/problems/empty-statement-file`, and a Connection without
 // a CSV mapping gets 422 `/problems/csv-mapping-required`.
+//
+// Through a CSV mapping with a balance column, the Export balance must be the file's balance: the
+// balance on its newest row, told by the balance column alone and counting every readable row, those
+// before the start date included. One that isn't gets 422
+// `/problems/export-balance-differs-from-file`, giving the `file_balance` and its `line`; a file whose
+// balance column doesn't add up from one end to the other gets 422 `/problems/file-balance-unknown`,
+// giving the reason. Both come after the file is read (unreadable rows first) and before the
+// duplicate-file check.
 //
 // POST /households/{household_id}/connections/{connection_id}/statement-imports/previews
 func (s *Server) handlePreviewStatementImportRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -8605,8 +8615,13 @@ func (s *Server) handleTestCsvMappingRequest(args [2]string, argsEscaped bool, w
 // the rows ignored in closed months are neither certain repeats nor look like an earlier Imported
 // transaction, the problem also gives `rows_in_closed_months_not_in_books`, and its `detail` names the
 // closed months to Reopen before importing again. Amounts, an empty file and a Connection without a
-// mapping are refused as by the preview. Retrying with the same Idempotency-Key and the same file and
-// fields returns the original result, however the form is rebuilt.
+// mapping are refused as by the preview.
+//
+// Through a CSV mapping with a balance column, every import, first or later, checks its Export balance
+// against the file's balance as the preview does (422 `/problems/export-balance-differs-from-file` or
+// `/problems/file-balance-unknown`), after the file is read and before the duplicate-file check, the
+// Opening balance and the Balance check; nothing is recorded. Retrying with the same Idempotency-Key
+// and the same file and fields returns the original result, however the form is rebuilt.
 //
 // POST /households/{household_id}/connections/{connection_id}/statement-imports
 func (s *Server) handleUploadStatementImportRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {

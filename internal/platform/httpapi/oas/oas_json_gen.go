@@ -4474,9 +4474,15 @@ func (s *CsvColumns) encodeFields(e *jx.Encoder) {
 			s.BankTransactionID.Encode(e)
 		}
 	}
+	{
+		if s.Balance.Set {
+			e.FieldStart("balance")
+			s.Balance.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfCsvColumns = [9]string{
+var jsonFieldsNameOfCsvColumns = [10]string{
 	0: "booking_date",
 	1: "description",
 	2: "amount",
@@ -4486,6 +4492,7 @@ var jsonFieldsNameOfCsvColumns = [9]string{
 	6: "value_date",
 	7: "payee",
 	8: "bank_transaction_id",
+	9: "balance",
 }
 
 // Decode decodes CsvColumns from json.
@@ -4585,6 +4592,16 @@ func (s *CsvColumns) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"bank_transaction_id\"")
+			}
+		case "balance":
+			if err := func() error {
+				s.Balance.Reset()
+				if err := s.Balance.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"balance\"")
 			}
 		default:
 			return d.Skip()
@@ -4881,13 +4898,27 @@ func (s *CsvMappingTest) encodeFields(e *jx.Encoder) {
 		}
 		e.ArrEnd()
 	}
+	{
+		if s.FileBalance.Set {
+			e.FieldStart("file_balance")
+			s.FileBalance.Encode(e)
+		}
+	}
+	{
+		if s.FileBalanceProblem.Set {
+			e.FieldStart("file_balance_problem")
+			s.FileBalanceProblem.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfCsvMappingTest = [4]string{
+var jsonFieldsNameOfCsvMappingTest = [6]string{
 	0: "rows",
 	1: "last_rows",
 	2: "readable_row_count",
 	3: "unreadable_rows",
+	4: "file_balance",
+	5: "file_balance_problem",
 }
 
 // Decode decodes CsvMappingTest from json.
@@ -4964,6 +4995,26 @@ func (s *CsvMappingTest) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"unreadable_rows\"")
+			}
+		case "file_balance":
+			if err := func() error {
+				s.FileBalance.Reset()
+				if err := s.FileBalance.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"file_balance\"")
+			}
+		case "file_balance_problem":
+			if err := func() error {
+				s.FileBalanceProblem.Reset()
+				if err := s.FileBalanceProblem.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"file_balance_problem\"")
 			}
 		default:
 			return d.Skip()
@@ -5278,6 +5329,46 @@ func (s *CurrencyList) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes DecimalText as json.
+func (s DecimalText) Encode(e *jx.Encoder) {
+	unwrapped := string(s)
+
+	e.Str(unwrapped)
+}
+
+// Decode decodes DecimalText from json.
+func (s *DecimalText) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode DecimalText to nil")
+	}
+	var unwrapped string
+	if err := func() error {
+		v, err := d.Str()
+		unwrapped = string(v)
+		if err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "alias")
+	}
+	*s = DecimalText(unwrapped)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s DecimalText) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *DecimalText) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes DiscardImportedTransactionNotFound as json.
 func (s *DiscardImportedTransactionNotFound) Encode(e *jx.Encoder) {
 	unwrapped := (*Problem)(s)
@@ -5430,6 +5521,117 @@ func (s DisplayNameOut) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *DisplayNameOut) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *FileBalance) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *FileBalance) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("amount")
+		s.Amount.Encode(e)
+	}
+	{
+		e.FieldStart("line")
+		e.Int32(s.Line)
+	}
+}
+
+var jsonFieldsNameOfFileBalance = [2]string{
+	0: "amount",
+	1: "line",
+}
+
+// Decode decodes FileBalance from json.
+func (s *FileBalance) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode FileBalance to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "amount":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Amount.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"amount\"")
+			}
+		case "line":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int32()
+				s.Line = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"line\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode FileBalance")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfFileBalance) {
+					name = jsonFieldsNameOfFileBalance[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *FileBalance) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *FileBalance) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -10127,6 +10329,39 @@ func (s *OptDateTime) UnmarshalJSON(data []byte) error {
 	return s.Decode(d, json.DecodeDateTime)
 }
 
+// Encode encodes DecimalText as json.
+func (o OptDecimalText) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes DecimalText from json.
+func (o *OptDecimalText) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptDecimalText to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptDecimalText) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptDecimalText) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes DisplayNameOut as json.
 func (o OptDisplayNameOut) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -10156,6 +10391,39 @@ func (s OptDisplayNameOut) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *OptDisplayNameOut) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes FileBalance as json.
+func (o OptFileBalance) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes FileBalance from json.
+func (o *OptFileBalance) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptFileBalance to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptFileBalance) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptFileBalance) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -10495,9 +10763,15 @@ func (s *ParsedStatementRow) encodeFields(e *jx.Encoder) {
 		e.FieldStart("amount")
 		s.Amount.Encode(e)
 	}
+	{
+		if s.Balance.Set {
+			e.FieldStart("balance")
+			s.Balance.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfParsedStatementRow = [8]string{
+var jsonFieldsNameOfParsedStatementRow = [9]string{
 	0: "line",
 	1: "booking_date",
 	2: "transaction_date",
@@ -10506,6 +10780,7 @@ var jsonFieldsNameOfParsedStatementRow = [8]string{
 	5: "payee",
 	6: "bank_transaction_id",
 	7: "amount",
+	8: "balance",
 }
 
 // Decode decodes ParsedStatementRow from json.
@@ -10513,7 +10788,7 @@ func (s *ParsedStatementRow) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode ParsedStatementRow to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -10605,6 +10880,16 @@ func (s *ParsedStatementRow) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"amount\"")
 			}
+		case "balance":
+			if err := func() error {
+				s.Balance.Reset()
+				if err := s.Balance.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"balance\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -10614,8 +10899,9 @@ func (s *ParsedStatementRow) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b10010111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -11912,18 +12198,32 @@ func (s *StatementFileProblem) encodeFields(e *jx.Encoder) {
 			s.Difference.Encode(e)
 		}
 	}
+	{
+		if s.FileBalance.Set {
+			e.FieldStart("file_balance")
+			s.FileBalance.Encode(e)
+		}
+	}
+	{
+		if s.Line.Set {
+			e.FieldStart("line")
+			s.Line.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfStatementFileProblem = [9]string{
-	0: "type",
-	1: "title",
-	2: "status",
-	3: "detail",
-	4: "rows",
-	5: "rows_in_closed_months_not_in_books",
-	6: "expected_balance",
-	7: "export_balance",
-	8: "difference",
+var jsonFieldsNameOfStatementFileProblem = [11]string{
+	0:  "type",
+	1:  "title",
+	2:  "status",
+	3:  "detail",
+	4:  "rows",
+	5:  "rows_in_closed_months_not_in_books",
+	6:  "expected_balance",
+	7:  "export_balance",
+	8:  "difference",
+	9:  "file_balance",
+	10: "line",
 }
 
 // Decode decodes StatementFileProblem from json.
@@ -12037,6 +12337,26 @@ func (s *StatementFileProblem) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"difference\"")
+			}
+		case "file_balance":
+			if err := func() error {
+				s.FileBalance.Reset()
+				if err := s.FileBalance.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"file_balance\"")
+			}
+		case "line":
+			if err := func() error {
+				s.Line.Reset()
+				if err := s.Line.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"line\"")
 			}
 		default:
 			return d.Skip()

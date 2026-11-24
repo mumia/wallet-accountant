@@ -252,6 +252,7 @@ func mappingIn(m oas.CsvMapping) domain.CSVMapping {
 	out.ValueDate = columnIn(c.ValueDate)
 	out.Payee = columnIn(c.Payee)
 	out.BankTransactionID = columnIn(c.BankTransactionID)
+	out.Balance = columnIn(c.Balance)
 
 	return out
 }
@@ -281,6 +282,7 @@ func mappingOut(m domain.CSVMapping) oas.CsvMapping {
 			ValueDate:         columnOut(m.ValueDate),
 			Payee:             columnOut(m.Payee),
 			BankTransactionID: columnOut(m.BankTransactionID),
+			Balance:           columnOut(m.Balance),
 		}),
 	}
 

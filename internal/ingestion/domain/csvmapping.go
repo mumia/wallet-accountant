@@ -87,7 +87,8 @@ var (
 // CSVMapping describes how one bank lays out its statement CSV: how to read
 // the file and which column holds each field. Booking date, description and
 // the amount (one signed column, or debit and credit columns) are required;
-// Transaction date, Value date, payee and bank transaction ID are optional.
+// Transaction date, Value date, payee, bank transaction ID and balance are
+// optional.
 type CSVMapping struct {
 	// Encoding is how the file's bytes are decoded; empty is EncodingUTF8.
 	Encoding         Encoding `json:"encoding,omitempty"`
@@ -118,7 +119,14 @@ type CSVMapping struct {
 	ValueDate         Column `json:"valuedate"`
 	Payee             Column `json:"payee"`
 	BankTransactionID Column `json:"banktransactionid"`
+	// Balance is the balance after each row, as the bank works it out:
+	// with it, every import checks its Export balance against the file's
+	// balance (FileBalanceOf).
+	Balance Column `json:"balance,omitzero"`
 }
+
+// HasBalance reports whether the mapping reads a balance column.
+func (m CSVMapping) HasBalance() bool { return m.Balance.IsSet() }
 
 // MappingProblem is one reason a CSV mapping is invalid. It is
 // ErrInvalidCSVMapping and its own kind of refusal.
@@ -235,6 +243,7 @@ func (m CSVMapping) fields() []field {
 		{"Value date", m.ValueDate, false},
 		{"payee", m.Payee, false},
 		{"bank transaction ID", m.BankTransactionID, false},
+		{"balance", m.Balance, false},
 	}
 }
 

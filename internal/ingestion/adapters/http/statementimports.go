@@ -32,6 +32,8 @@ const (
 	PreviewRequiredType               = "/problems/preview-required"
 	PreviewMismatchType               = "/problems/preview-mismatch"
 	BalanceCheckFailedType            = "/problems/balance-check-failed"
+	ExportBalanceDiffersFromFileType  = "/problems/export-balance-differs-from-file"
+	FileBalanceUnknownType            = "/problems/file-balance-unknown"
 	InvalidCursorType                 = "/problems/invalid-cursor"
 
 	NotTheLatestStatementImportType    = "/problems/not-the-latest-statement-import"
@@ -74,8 +76,11 @@ func (h *StatementImportHandler) PreviewStatementImport(ctx context.Context, req
 	params oas.PreviewStatementImportParams,
 ) (oas.PreviewStatementImportRes, error) {
 	up, refused := upload(req.File, req.ExportBalance)
-	if refused == nil {
-		up.Confirmation, refused = exportBalance(req.ExportBalanceConfirmation)
+	if c, ok := req.ExportBalanceConfirmation.Get(); ok && refused == nil {
+		var confirmation sharedkernel.Decimal
+
+		confirmation, refused = exportBalance(c)
+		up.Confirmation = &confirmation
 	}
 
 	if refused != nil {
@@ -324,6 +329,8 @@ func refusal(err error) (outcome, bool) {
 		duplicate *app.DuplicateImportError
 		rows      *domain.RowsError
 		failed    *domain.BalanceCheckFailedError
+		differs   *domain.ExportBalanceDiffersFromFileError
+		unknown   *domain.FileBalanceUnknownError
 	)
 
 	switch {
@@ -357,6 +364,12 @@ func refusal(err error) (outcome, bool) {
 	case errors.Is(err, app.ErrExportBalanceMismatch):
 		return refused(ExportBalanceMismatchType, "Export balance entries differ",
 			"The Export balance and its confirmation must be the same amount.")
+	case errors.As(err, &differs):
+		return exportBalanceDiffersFromFile(differs)
+	case errors.As(err, &unknown):
+		return refused(FileBalanceUnknownType, "File balance can't be worked out",
+			"The file's balance can't be worked out, so its Export balance can't be checked: "+unknown.Reason+
+				". Check the CSV mapping's balance column.")
 	case errors.Is(err, app.ErrNoCSVMapping):
 		return refused(CSVMappingRequiredType, "CSV mapping required",
 			"The Connection needs a CSV mapping before a statement file can be imported.")
@@ -371,6 +384,30 @@ func refusal(err error) (outcome, bool) {
 	default:
 		return outcome{}, false
 	}
+}
+
+// exportBalanceDiffersFromFile answers an Export balance that isn't the
+// file's balance with the file's balance and its line, each amount written
+// with the currency's decimal places.
+func exportBalanceDiffersFromFile(e *domain.ExportBalanceDiffersFromFileError) (outcome, bool) {
+	export, errExport := amount.Of(e.ExportBalance, e.Currency)
+	file, errFile := amount.Of(e.File.Amount, e.Currency)
+
+	if errExport != nil || errFile != nil {
+		// The Account currency was read from the Ledger, so this can't
+		// happen.
+		return outcome{}, false
+	}
+
+	fileBalance := file.Value.StringFixed(file.Places)
+	p := fileProblem(ExportBalanceDiffersFromFileType, "Export balance differs from the file",
+		fmt.Sprintf("The Export balance, %s %s, isn't the file's balance, %s %s (line %d). "+
+			"Check it is the bank's booked balance.",
+			export.Value.StringFixed(export.Places), e.Currency, fileBalance, e.Currency, e.File.Line))
+	p.FileBalance = oas.NewOptDecimalText(oas.DecimalText(fileBalance))
+	p.Line = oas.NewOptInt32(int32(e.File.Line)) //nolint:gosec // a statement file is far smaller
+
+	return outcome{refused: p}, true
 }
 
 // balanceCheckFailed answers a later import refused by its Balance check
