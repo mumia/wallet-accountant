@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Migration: `household_members.joined_at`, backfilled from each member's `household.memberadded` event time. The fold store writes it from the event's time from now on
 - [ ] Read the member IDs and `joined_at` in Household scope, then switch to instance scope (`inInstanceScope`) to read display names. Nothing is copied into Household scope

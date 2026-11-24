@@ -4,7 +4,7 @@
 
 **Blocked by:** —
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] New ADR `docs/adr/0025-invitations-to-a-household.md`, amending ADR-0017. It records:
   - any member may issue an Invitation to their Household, and it also admits a new person to the instance, which delegates admission to the Household's members;
