@@ -1259,7 +1259,11 @@ func (s *CsvColumns) SetBankTransactionID(val OptCsvColumn) {
 // Ref: #/components/schemas/CsvMapping
 type CsvMapping struct {
 	// How the file's bytes are decoded into text, before it is parsed; absent means `UTF_8`. A UTF-8 byte
-	// order mark is stripped.
+	// order mark is stripped from a `UTF_8` or `WINDOWS_1252` file.
+	//
+	// A `UTF_16` file takes its byte order from its byte order mark (`FF FE` little-endian, `FE FF`
+	// big-endian), which is stripped; a file with no byte order mark is read as little-endian, which is
+	// what Windows writes. A `UTF_16` file with an odd number of bytes is unreadable.
 	Encoding OptString `json:"encoding"`
 	// The one character between columns.
 	Delimiter OptString `json:"delimiter"`

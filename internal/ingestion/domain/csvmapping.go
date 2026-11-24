@@ -177,9 +177,9 @@ func (v *validation) add(kind error, format string, args ...any) {
 
 func (m CSVMapping) validateFile(v *validation) {
 	switch m.Encoding {
-	case "", EncodingUTF8, EncodingWindows1252:
+	case "", EncodingUTF8, EncodingWindows1252, EncodingUTF16:
 	default:
-		v.add(ErrInvalidCSVMapping, "the encoding must be UTF-8 or Windows-1252")
+		v.add(ErrInvalidCSVMapping, "the encoding must be UTF-8, Windows-1252 or UTF-16")
 	}
 
 	if utf8.RuneCountInString(m.Delimiter) != 1 || strings.ContainsAny(m.Delimiter, "\"\r\n") {
