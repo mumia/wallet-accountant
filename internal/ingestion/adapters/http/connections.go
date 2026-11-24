@@ -45,11 +45,13 @@ var (
 	encodingsIn = map[string]domain.Encoding{
 		"UTF_8":        domain.EncodingUTF8,
 		"WINDOWS_1252": domain.EncodingWindows1252,
+		"UTF_16":       domain.EncodingUTF16,
 	}
 	encodingsOut = map[domain.Encoding]string{
 		"":                         "UTF_8",
 		domain.EncodingUTF8:        "UTF_8",
 		domain.EncodingWindows1252: "WINDOWS_1252",
+		domain.EncodingUTF16:       "UTF_16",
 	}
 	amountSignsIn = map[string]domain.AmountSign{
 		"MONEY_IN":  domain.MoneyIn,
