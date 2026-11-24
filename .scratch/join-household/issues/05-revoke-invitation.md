@@ -4,7 +4,7 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `RevokeInvitation` → `invitation.revoked`, registered on the codec:
   - refused once the Invitation is redeemed or already revoked;

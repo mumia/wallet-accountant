@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Migration:
   - a Household-scoped Invitation fold table with `household_id`, `FORCE ROW LEVEL SECURITY` and the usual policy, holding issued by, issued at, expires at, redeemed and revoked;
