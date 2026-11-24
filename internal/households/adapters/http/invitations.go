@@ -60,6 +60,21 @@ func (h *InvitationHandler) ListInvitations(ctx context.Context, params oas.List
 	return &oas.InvitationList{Items: items}, nil
 }
 
+// RevokeInvitation implements revokeInvitation. An Invitation that isn't
+// open, or a caller who isn't a member, gets 404.
+func (h *InvitationHandler) RevokeInvitation(ctx context.Context, params oas.RevokeInvitationParams) (oas.RevokeInvitationRes, error) {
+	err := h.invitations.Revoke(ctx, params.HouseholdID, params.InvitationID)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrInvitationNotFound):
+		return new(oas.RevokeInvitationNotFound(httpapi.NotFoundProblem())), nil
+	case err != nil:
+		return nil, fmt.Errorf("revoke invitation: %w", err)
+	}
+
+	return &oas.RevokeInvitationNoContent{}, nil
+}
+
 // userRefResponse leaves display_name out for a User who has none.
 func userRefResponse(u app.UserRef) oas.UserRef {
 	ref := oas.UserRef{UserID: u.ID}

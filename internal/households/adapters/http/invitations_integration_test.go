@@ -221,3 +221,100 @@ func TestInvitationsSurviveARebuild(t *testing.T) {
 		t.Errorf("after rebuild = %+v, want %+v", after.Items, before.Items)
 	}
 }
+
+func invitationPath(household, invitation string) string {
+	return invitationsPath(household) + "/" + invitation
+}
+
+func revokeInvitation(t *testing.T, app *apitest.App, token, household, invitation string) {
+	t.Helper()
+
+	res := app.Do(t, http.MethodDelete, invitationPath(household, invitation), token, nil)
+	if res.Status != http.StatusNoContent {
+		t.Fatalf("revoke %s: status %d, want 204; body: %s", invitation, res.Status, res.Body)
+	}
+}
+
+func TestRevokingAnInvitationDropsItFromTheList(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	alice := app.Register(t, "https://issuer.example", "alice")
+	home := createHousehold(t, app, alice, "Home")
+
+	revoked := issueInvitation(t, app, alice, home.HouseholdID)
+	kept := issueInvitation(t, app, alice, home.HouseholdID)
+
+	revokeInvitation(t, app, alice, home.HouseholdID, revoked.InvitationID)
+
+	if list := listInvitations(t, app, alice, home.HouseholdID); len(list.Items) != 1 || list.Items[0].InvitationID != kept.InvitationID {
+		t.Errorf("after revoking %s: %+v, want only %s", revoked.InvitationID, list.Items, kept.InvitationID)
+	}
+
+	app.Do(t, http.MethodDelete, invitationPath(home.HouseholdID, revoked.InvitationID), alice, nil).
+		AssertProblem(t, http.StatusNotFound, "about:blank")
+
+	app.Rebuild(t)
+
+	if list := listInvitations(t, app, alice, home.HouseholdID); len(list.Items) != 1 || list.Items[0].InvitationID != kept.InvitationID {
+		t.Errorf("after a rebuild: %+v, want only %s", list.Items, kept.InvitationID)
+	}
+}
+
+func TestAMemberCanRevokeAnotherMembersInvitation(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	alice := app.Register(t, "https://issuer.example", "alice")
+	bob := app.Register(t, "https://issuer.example", "bob")
+	home := createHousehold(t, app, alice, "Home")
+	app.SeedMember(t, home.HouseholdID, bob)
+
+	issued := issueInvitation(t, app, alice, home.HouseholdID)
+
+	revokeInvitation(t, app, bob, home.HouseholdID, issued.InvitationID)
+
+	if list := listInvitations(t, app, alice, home.HouseholdID); len(list.Items) != 0 {
+		t.Errorf("after bob revoked alice's Invitation: %+v, want none", list.Items)
+	}
+}
+
+func TestRevokingAnotherHouseholdsInvitationIsNotFound(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	alice := app.Register(t, "https://issuer.example", "alice")
+	bob := app.Register(t, "https://issuer.example", "bob")
+	home := createHousehold(t, app, alice, "Home")
+	bobs := createHousehold(t, app, bob, "Bob's")
+
+	issued := issueInvitation(t, app, alice, home.HouseholdID)
+
+	// bob isn't a member of alice's Household.
+	app.Do(t, http.MethodDelete, invitationPath(home.HouseholdID, issued.InvitationID), bob, nil).
+		AssertProblem(t, http.StatusNotFound, "about:blank")
+	// bob is a member of his own, which alice's Invitation isn't of.
+	app.Do(t, http.MethodDelete, invitationPath(bobs.HouseholdID, issued.InvitationID), bob, nil).
+		AssertProblem(t, http.StatusNotFound, "about:blank")
+
+	if list := listInvitations(t, app, alice, home.HouseholdID); len(list.Items) != 1 {
+		t.Errorf("after bob tried to revoke it: %+v, want alice's Invitation still open", list.Items)
+	}
+}
+
+func TestRevokingAnInvitationThatIsNotOpenIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)
+	clock := newSettableClock(start)
+	app := apitest.Start(t, apitest.WithClock(clock.Now))
+	alice := app.Register(t, "https://issuer.example", "alice")
+	home := createHousehold(t, app, alice, "Home")
+
+	issued := issueInvitation(t, app, alice, home.HouseholdID)
+
+	app.Do(t, http.MethodDelete, invitationPath(home.HouseholdID, "019a8b2c-0000-7000-8000-0000000000ff"), alice, nil).
+		AssertProblem(t, http.StatusNotFound, "about:blank")
+
+	// The contract counts an expired Invitation as not open.
+	clock.set(start.Add(24 * time.Hour))
+	app.Do(t, http.MethodDelete, invitationPath(home.HouseholdID, issued.InvitationID), alice, nil).
+		AssertProblem(t, http.StatusNotFound, "about:blank")
+}

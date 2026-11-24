@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,11 @@ import (
 	"github.com/mumia/wallet-accountant/internal/households/domain"
 	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
 )
+
+// ErrInvitationNotFound is returned for revoking an Invitation that isn't an
+// open Invitation of the Household: unknown, another Household's, redeemed,
+// revoked or expired.
+var ErrInvitationNotFound = errors.New("invitation not found")
 
 // IssuedInvitation is an Invitation to a Household as its issuer sees it,
 // once: with its code.
@@ -42,9 +48,12 @@ type InvitationReader interface {
 	// expiring after at. Each names its issuer with their display name,
 	// read in instance scope.
 	OpenInvitations(ctx context.Context, tx *eventstore.Tx, at time.Time) ([]OpenInvitation, error)
+	// IsOpen reports whether id is an open Invitation of the Household the
+	// transaction is set to, by the same rule as OpenInvitations.
+	IsOpen(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, at time.Time) (bool, error)
 }
 
-// Invitations issues and lists Invitations to a Household, which any of its
+// Invitations issues, lists and revokes Invitations to a Household, which any of its
 // members may do (.scratch/join-household).
 type Invitations struct {
 	households  *Households
@@ -106,4 +115,35 @@ func (i *Invitations) ListOpen(ctx context.Context, household uuid.UUID) ([]Open
 	}
 
 	return list, nil
+}
+
+// Revoke revokes the Household's open Invitation as the caller of ctx, who
+// must be a member but needn't be its issuer. Its code then gets the same
+// error as any invalid one. An Invitation that isn't open gets
+// ErrInvitationNotFound: the contract counts an expired one as not open,
+// although the Invitation Decider would revoke it.
+func (i *Invitations) Revoke(ctx context.Context, household, invitation uuid.UUID) error {
+	err := i.households.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		open, err := i.reader.IsOpen(ctx, tx, invitation, tx.Now())
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !open {
+			return ErrInvitationNotFound
+		}
+
+		_, err = i.invitations.Execute(ctx, tx, invitation, domain.RevokeInvitation{})
+		if errors.Is(err, domain.ErrInvitationAlreadyRedeemed) || errors.Is(err, domain.ErrInvitationRevoked) {
+			// Redeemed or revoked since IsOpen read it.
+			return ErrInvitationNotFound
+		}
+
+		return err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return fmt.Errorf("revoke invitation: %w", err)
+	}
+
+	return nil
 }

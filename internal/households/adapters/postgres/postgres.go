@@ -127,13 +127,14 @@ func loadHouseholdInvitation(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 		f          eventstore.Fold[domain.InvitationState]
 		redeemedBy *uuid.UUID
 		redeemedAt *time.Time
+		revokedAt  *time.Time
 	)
 
-	err := tx.QueryRow(ctx, `SELECT code_hash, issued_by, issued_at, expires_at, redeemed_by, redeemed_at,
+	err := tx.QueryRow(ctx, `SELECT code_hash, issued_by, issued_at, expires_at, redeemed_by, redeemed_at, revoked_at,
 		version, schema_version
 		FROM household_invitations WHERE household_id = $1 AND id = $2`, tx.HouseholdID(), id).
 		Scan(&f.State.CodeHash, &f.State.IssuedBy, &f.State.IssuedAt, &f.State.ExpiresAt, &redeemedBy, &redeemedAt,
-			&f.Version, &f.SchemaVersion)
+			&revokedAt, &f.Version, &f.SchemaVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return eventstore.Fold[domain.InvitationState]{}, false, nil
 	}
@@ -150,6 +151,10 @@ func loadHouseholdInvitation(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 
 	if redeemedAt != nil {
 		f.State.RedeemedAt = *redeemedAt
+	}
+
+	if revokedAt != nil {
+		f.State.RevokedAt = *revokedAt
 	}
 
 	return f, true, nil
@@ -177,19 +182,24 @@ func saveHouseholdInvitation(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 		redeemedAt = &s.RedeemedAt
 	}
 
+	var revokedAt *time.Time
+	if s.Revoked() {
+		revokedAt = &s.RevokedAt
+	}
+
 	args := []any{
 		household, id, s.CodeHash, s.IssuedBy, s.IssuedAt, s.ExpiresAt, redeemedBy, redeemedAt,
-		f.Version, f.SchemaVersion,
+		f.Version, f.SchemaVersion, revokedAt,
 	}
 	q := `INSERT INTO household_invitations (household_id, id, code_hash, issued_by, issued_at, expires_at,
-	      redeemed_by, redeemed_at, version, schema_version)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING`
+	      redeemed_by, redeemed_at, version, schema_version, revoked_at)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
 		args = append(args, expected)
 		q = `UPDATE household_invitations SET code_hash = $3, issued_by = $4, issued_at = $5, expires_at = $6,
-		     redeemed_by = $7, redeemed_at = $8, version = $9, schema_version = $10
-		     WHERE household_id = $1 AND id = $2 AND version = $11`
+		     redeemed_by = $7, redeemed_at = $8, version = $9, schema_version = $10, revoked_at = $11
+		     WHERE household_id = $1 AND id = $2 AND version = $12`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
