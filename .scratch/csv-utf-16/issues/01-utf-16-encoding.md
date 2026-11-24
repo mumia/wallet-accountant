@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** claimed
+**Status:** resolved
 
 ## Why
 
@@ -40,3 +40,10 @@ Today the only workaround is to convert the file to UTF-8 by hand.
 ## Then
 
 The UI moves to the release with `make contract-update` and offers the encoding. Its ticket is `../wallet-accountant-ui/.scratch/csv-utf-16/issues/01-offer-utf-16.md`.
+
+## Comments
+
+- Implemented in `baa1934` (merged into `csv-utf-16`). `make lint`, `make test` and `make test-integration` pass.
+- An odd-length UTF-16 file is refused as unreadable rows, with line 1 and the reason "the file has an odd number of bytes, so it is not UTF-16". On import that is the unreadable-rows problem; on the mapping test it is `unreadable_rows`.
+- A lone surrogate becomes U+FFFD through `utf16.Decode`. No test covers it, since the ticket's test list doesn't ask for one.
+- The OpenAPI description also says that an odd-length `UTF_16` file is unreadable, and that the UTF-8 BOM is stripped only from `UTF_8` and `WINDOWS_1252` files.
