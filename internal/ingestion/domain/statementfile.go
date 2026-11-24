@@ -94,9 +94,9 @@ func collectStatementFile(m CSVMapping, file []byte, places int32) ([]StatementR
 		return nil, nil, err
 	}
 
-	text, ok := m.Encoding.decode(file)
-	if !ok {
-		return nil, []RowError{{Line: 1, Reason: "the file has an odd number of bytes, so it is not UTF-16"}}, nil
+	text, err := m.Encoding.decode(file)
+	if err != nil {
+		return nil, []RowError{{Line: 1, Reason: err.Error()}}, nil
 	}
 
 	file, skipped := skipLines(text, m.SkipLeadingLines)

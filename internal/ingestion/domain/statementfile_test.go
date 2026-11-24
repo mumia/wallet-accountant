@@ -363,7 +363,45 @@ func TestParsingRefusesAUTF16FileWithAnOddNumberOfBytes(t *testing.T) {
 
 	_, err := domain.ParseStatementFile(m, []byte(encodeUTF16(utf16File, binary.LittleEndian, true)+"\n"))
 
-	assertRowErrors(t, err, []int{1})
+	assertUnreadableFile(t, err, "the file has an odd number of bytes, so it is not UTF-16")
+}
+
+func TestParsingRefusesAFileStartingWithAUTF16ByteOrderMarkUnlessTheEncodingIsUTF16(t *testing.T) {
+	t.Parallel()
+
+	for _, encoding := range []domain.Encoding{domain.EncodingUTF8, domain.EncodingWindows1252} {
+		for name, order := range map[string]binary.AppendByteOrder{
+			"little-endian": binary.LittleEndian,
+			"big-endian":    binary.BigEndian,
+		} {
+			t.Run(string(encoding)+" "+name, func(t *testing.T) {
+				t.Parallel()
+
+				m := signedMapping()
+				m.Encoding = encoding
+
+				_, err := domain.ParseStatementFile(m, []byte(encodeUTF16(utf16File, order, true)))
+
+				assertUnreadableFile(t, err, "the file starts with a UTF-16 byte order mark; set the mapping's encoding to UTF-16")
+			})
+		}
+	}
+}
+
+// assertUnreadableFile asserts the whole file was refused as one unreadable
+// row at line 1, for the reason.
+func assertUnreadableFile(t *testing.T, err error, reason string) {
+	t.Helper()
+
+	var rowsErr *domain.RowsError
+	if !errors.As(err, &rowsErr) || !errors.Is(err, domain.ErrUnreadableRows) {
+		t.Fatalf("err = %v, want a %T", err, rowsErr)
+	}
+
+	want := []domain.RowError{{Line: 1, Reason: reason}}
+	if !reflect.DeepEqual(rowsErr.Rows, want) {
+		t.Errorf("refused rows = %v, want %v", rowsErr.Rows, want)
+	}
 }
 
 func TestParsingAFileWithNoRows(t *testing.T) {

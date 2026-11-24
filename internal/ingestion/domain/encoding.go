@@ -3,6 +3,7 @@ package domain
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"unicode/utf16"
 	"unicode/utf8"
 )
@@ -41,19 +42,34 @@ var windows1252 = map[byte]rune{
 	0x9E: 'ž', 0x9F: 'Ÿ',
 }
 
-// decode turns a statement file's bytes into UTF-8 text. It reports false
-// for a file the encoding can't read: a UTF-16 file with an odd number of
-// bytes. A UTF-8 file is passed through as it is, after a leading UTF-8
-// byte order mark is stripped, as it is from a Windows-1252 file.
-func (e Encoding) decode(file []byte) ([]byte, bool) {
-	switch e {
-	case EncodingUTF16:
+// The reasons a file is refused before it is parsed, as the error's text.
+var (
+	errOddUTF16 = errors.New("the file has an odd number of bytes, so it is not UTF-16")
+	errUTF16BOM = errors.New("the file starts with a UTF-16 byte order mark; set the mapping's encoding to UTF-16")
+)
+
+// decode turns a statement file's bytes into UTF-8 text. It refuses a file
+// the encoding can't read, with the reason as the error's text: a UTF-16
+// file with an odd number of bytes, or a file under another encoding that
+// starts with a UTF-16 byte order mark. A UTF-8 file is passed through as
+// it is, after a leading UTF-8 byte order mark is stripped, as it is from a
+// Windows-1252 file.
+func (e Encoding) decode(file []byte) ([]byte, error) {
+	if e == EncodingUTF16 {
 		return decodeUTF16(file)
-	case EncodingWindows1252:
-		return decodeWindows1252(bytes.TrimPrefix(file, utf8BOM)), true
-	default:
-		return bytes.TrimPrefix(file, utf8BOM), true
 	}
+
+	if bytes.HasPrefix(file, utf16LEBOM) || bytes.HasPrefix(file, utf16BEBOM) {
+		return nil, errUTF16BOM
+	}
+
+	file = bytes.TrimPrefix(file, utf8BOM)
+
+	if e == EncodingWindows1252 {
+		return decodeWindows1252(file), nil
+	}
+
+	return file, nil
 }
 
 func decodeWindows1252(file []byte) []byte {
@@ -79,9 +95,9 @@ func decodeWindows1252(file []byte) []byte {
 
 // decodeUTF16 decodes UTF-16 in the byte order its byte order mark gives,
 // little-endian when it has none; a lone surrogate becomes U+FFFD.
-func decodeUTF16(file []byte) ([]byte, bool) {
+func decodeUTF16(file []byte) ([]byte, error) {
 	if len(file)%2 != 0 {
-		return nil, false
+		return nil, errOddUTF16
 	}
 
 	var order binary.ByteOrder = binary.LittleEndian
@@ -103,5 +119,5 @@ func decodeUTF16(file []byte) ([]byte, bool) {
 		out = utf8.AppendRune(out, r)
 	}
 
-	return out, true
+	return out, nil
 }
