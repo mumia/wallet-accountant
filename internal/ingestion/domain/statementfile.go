@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
@@ -100,6 +101,7 @@ func collectStatementFile(m CSVMapping, file []byte, places int32) ([]StatementR
 	}
 
 	file, skipped := skipLines(text, m.SkipLeadingLines)
+	file = skipTrailingLines(file, m.SkipTrailingLines)
 
 	r := csv.NewReader(bytes.NewReader(file))
 	r.Comma, _ = utf8.DecodeRuneInString(m.Delimiter)
@@ -165,6 +167,31 @@ func skipLines(file []byte, n int) ([]byte, int) {
 	}
 
 	return file, skipped
+}
+
+// skipTrailingLines drops the final line break of file and any lines at
+// its very end that are empty or only whitespace, then its last n lines,
+// leaving no line break (or carriage return) at the end.
+func skipTrailingLines(file []byte, n int) []byte {
+	last := bytes.LastIndexFunc(file, func(r rune) bool { return !unicode.IsSpace(r) })
+	if last < 0 {
+		return nil
+	}
+
+	if i := bytes.IndexByte(file[last:], '\n'); i >= 0 {
+		file = file[:last+i]
+	}
+
+	for ; n > 0; n-- {
+		i := bytes.LastIndexByte(file, '\n')
+		if i < 0 {
+			return nil
+		}
+
+		file = file[:i]
+	}
+
+	return bytes.TrimSuffix(file, []byte("\r"))
 }
 
 type parser struct {
@@ -356,6 +383,9 @@ const SampleRows = 10
 type Sample struct {
 	// Rows is the first SampleRows readable rows, in file order.
 	Rows []StatementRow
+	// LastRows is the last SampleRows readable rows that aren't already in
+	// Rows, in file order: empty when the file has no more than SampleRows.
+	LastRows []StatementRow
 	// Readable counts the readable rows of the whole file.
 	Readable int
 	// Unreadable is every line of the whole file that can't be read; empty
@@ -379,8 +409,11 @@ func ReadSample(m CSVMapping, file []byte, currency sharedkernel.Currency) (Samp
 		return Sample{}, ErrEmptyStatementFile
 	}
 
+	shown := min(len(rows), SampleRows)
+
 	return Sample{
-		Rows:       rows[:min(len(rows), SampleRows)],
+		Rows:       rows[:shown],
+		LastRows:   rows[max(len(rows)-SampleRows, shown):],
 		Readable:   len(rows),
 		Unreadable: append([]RowError{}, unreadable...),
 	}, nil

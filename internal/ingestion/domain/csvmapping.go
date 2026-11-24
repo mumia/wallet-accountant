@@ -90,13 +90,17 @@ var (
 // Transaction date, Value date, payee and bank transaction ID are optional.
 type CSVMapping struct {
 	// Encoding is how the file's bytes are decoded; empty is EncodingUTF8.
-	Encoding           Encoding `json:"encoding,omitempty"`
-	Delimiter          string   `json:"delimiter"`
-	HasHeaderRow       bool     `json:"hasheaderrow"`
-	SkipLeadingLines   int      `json:"skipleadinglines"`
-	DateFormat         string   `json:"dateformat"`
-	DecimalSeparator   string   `json:"decimalseparator"`
-	ThousandsSeparator string   `json:"thousandsseparator"`
+	Encoding         Encoding `json:"encoding,omitempty"`
+	Delimiter        string   `json:"delimiter"`
+	HasHeaderRow     bool     `json:"hasheaderrow"`
+	SkipLeadingLines int      `json:"skipleadinglines"`
+	// SkipTrailingLines is how many lines at the end of the file to skip,
+	// such as totals or a closing balance; blank lines at the very end
+	// aren't counted.
+	SkipTrailingLines  int    `json:"skiptrailinglines,omitempty"`
+	DateFormat         string `json:"dateformat"`
+	DecimalSeparator   string `json:"decimalseparator"`
+	ThousandsSeparator string `json:"thousandsseparator"`
 
 	AmountLayout AmountLayout `json:"amountlayout"`
 	// PositiveAmountMeans is what a positive amount in the signed column
@@ -188,6 +192,10 @@ func (m CSVMapping) validateFile(v *validation) {
 
 	if m.SkipLeadingLines < 0 {
 		v.add(ErrInvalidCSVMapping, "the number of leading lines to skip must not be negative")
+	}
+
+	if m.SkipTrailingLines < 0 {
+		v.add(ErrInvalidCSVMapping, "the number of trailing lines to skip must not be negative")
 	}
 
 	if _, ok := dateFormats[m.DateFormat]; !ok {

@@ -215,6 +215,7 @@ func mappingIn(m oas.CsvMapping) domain.CSVMapping {
 		Delimiter:          m.Delimiter.Value,
 		HasHeaderRow:       m.HasHeaderRow.Value,
 		SkipLeadingLines:   int(m.SkipLeadingLines.Value),
+		SkipTrailingLines:  int(m.SkipTrailingLines.Value),
 		DateFormat:         m.DateFormat.Value,
 		DecimalSeparator:   m.DecimalSeparator.Value,
 		ThousandsSeparator: m.ThousandsSeparator.Value,
@@ -264,7 +265,8 @@ func mappingOut(m domain.CSVMapping) oas.CsvMapping {
 		Encoding:           oas.NewOptString(encodingsOut[m.Encoding]),
 		Delimiter:          oas.NewOptString(m.Delimiter),
 		HasHeaderRow:       oas.NewOptBool(m.HasHeaderRow),
-		SkipLeadingLines:   oas.NewOptInt32(int32(m.SkipLeadingLines)), //nolint:gosec // a mapping skips a handful of lines
+		SkipLeadingLines:   oas.NewOptInt32(int32(m.SkipLeadingLines)),  //nolint:gosec // a mapping skips a handful of lines
+		SkipTrailingLines:  oas.NewOptInt32(int32(m.SkipTrailingLines)), //nolint:gosec // a mapping skips a handful of lines
 		DateFormat:         oas.NewOptString(m.DateFormat),
 		DecimalSeparator:   oas.NewOptString(m.DecimalSeparator),
 		ThousandsSeparator: oas.NewOptString(m.ThousandsSeparator),
