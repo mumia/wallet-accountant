@@ -22,3 +22,9 @@
   - **User** has a display name;
   - **Household** always has at least one Member
 - [ ] `CONTEXT-MAP.md` checked, and its Households line updated if needed
+
+## Comments
+
+- ADR-0025 written; ADR-0017's "Invitations" section ends with an *Amended by ADR-0025* note, following the style of ADR-0018's amendments.
+- `CONTEXT.md`: User now belongs to "any number of Households" rather than "one or more", since a removed User can end up with none (spec story 18).
+- `CONTEXT-MAP.md` checked: its Households line ("Users, their admission through Invitations, Households and membership") still fits, so it is unchanged.
