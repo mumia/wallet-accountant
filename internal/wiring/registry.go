@@ -47,6 +47,8 @@ type Contexts struct {
 	// transactions and Balance checks through Ingestion.
 	Months        *ledgerapp.Months
 	Notifications *householdsapp.Notifications
+	// Invitations issues and lists Invitations to a Household.
+	Invitations *householdsapp.Invitations
 }
 
 // NewContexts builds every bounded context's application services on pool,
@@ -101,6 +103,8 @@ func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
 		Months:               months,
 		Notifications: householdsapp.NewNotifications(households,
 			householdsapp.NewNotificationAggregate(householdspg.NotificationFolds{}), householdspg.NotificationReader{}),
+		Invitations: householdsapp.NewInvitations(households,
+			householdsapp.NewInvitationAggregate(householdspg.InvitationFolds{}), householdspg.InvitationReader{}),
 	}
 }
 

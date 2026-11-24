@@ -15,16 +15,6 @@ func (h *Handler) ChangeMe(context.Context, *oas.MeChange) (oas.ChangeMeRes, err
 	return nil, httpapi.ErrNotImplemented
 }
 
-// CreateInvitation implements createInvitation (ticket 04).
-func (h *Handler) CreateInvitation(context.Context, oas.CreateInvitationParams) (oas.CreateInvitationRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}
-
-// ListInvitations implements listInvitations (ticket 04).
-func (h *Handler) ListInvitations(context.Context, oas.ListInvitationsParams) (oas.ListInvitationsRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}
-
 // RevokeInvitation implements revokeInvitation (ticket 05).
 func (h *Handler) RevokeInvitation(context.Context, oas.RevokeInvitationParams) (oas.RevokeInvitationRes, error) {
 	return nil, httpapi.ErrNotImplemented
