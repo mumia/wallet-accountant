@@ -65,6 +65,27 @@ func (h *Handler) GetMe(ctx context.Context) (oas.GetMeRes, error) {
 	return meResponse(user), nil
 }
 
+// ChangeMe implements changeMe.
+func (h *Handler) ChangeMe(ctx context.Context, req *oas.MeChange) (oas.ChangeMeRes, error) {
+	id, ok := authn.IdentityFrom(ctx)
+	if !ok {
+		return nil, errNoIdentity
+	}
+
+	user, err := h.users.Rename(ctx, id, string(req.DisplayName))
+
+	switch {
+	case errors.Is(err, app.ErrRegistrationRequired):
+		return new(oas.ChangeMeForbidden(registrationRequired())), nil
+	case errors.Is(err, domain.ErrDisplayNameRequired):
+		return new(oas.ChangeMeUnprocessableEntity(blankDisplayName())), nil
+	case err != nil:
+		return nil, fmt.Errorf("change me: %w", err)
+	}
+
+	return meResponse(user), nil
+}
+
 // CreateRegistration implements createRegistration.
 func (h *Handler) CreateRegistration(ctx context.Context, req *oas.Registration, _ oas.CreateRegistrationParams) (oas.CreateRegistrationRes, error) {
 	id, ok := authn.IdentityFrom(ctx)
@@ -86,10 +107,7 @@ func (h *Handler) CreateRegistration(ctx context.Context, req *oas.Registration,
 
 		return new(oas.CreateRegistrationConflict(p)), nil
 	case errors.Is(err, domain.ErrDisplayNameRequired):
-		p := httpapi.Problem(http.StatusUnprocessableEntity, InvalidUserType, "Invalid User",
-			"The display name must not be blank.")
-
-		return new(oas.CreateRegistrationUnprocessableEntity(p)), nil
+		return new(oas.CreateRegistrationUnprocessableEntity(blankDisplayName())), nil
 	case err != nil:
 		return nil, fmt.Errorf("create registration: %w", err)
 	}
@@ -179,6 +197,11 @@ func (h *Handler) GetHousehold(ctx context.Context, params oas.GetHouseholdParam
 
 func householdResponse(h app.Household) *oas.Household {
 	return &oas.Household{HouseholdID: h.ID, Name: h.Name, BaseCurrency: oas.CurrencyCode(h.BaseCurrency)}
+}
+
+func blankDisplayName() oas.Problem {
+	return httpapi.Problem(http.StatusUnprocessableEntity, InvalidUserType, "Invalid User",
+		"The display name must not be blank.")
 }
 
 func registrationRequired() oas.Problem {

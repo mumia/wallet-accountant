@@ -2,12 +2,16 @@ package apitest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
+	householdsapp "github.com/mumia/wallet-accountant/internal/households/app"
 	"github.com/mumia/wallet-accountant/internal/households/domain"
 	"github.com/mumia/wallet-accountant/internal/wiring"
 )
@@ -44,6 +48,35 @@ func (a *App) Register(t testing.TB, issuer, subject string) string {
 
 	if res.Status != http.StatusCreated {
 		t.Fatalf("register %s %s: status %d; body: %s", issuer, subject, res.Status, res.Body)
+	}
+
+	return token
+}
+
+// RegisterWithoutDisplayName makes the OIDC identity a User as one registered
+// before display names existed: its user.registered event has no
+// displayname and its User has no name. It returns a bearer token for it.
+func (a *App) RegisterWithoutDisplayName(t testing.TB, issuer, subject string) string {
+	t.Helper()
+
+	token := a.Register(t, issuer, subject)
+
+	conn, err := pgx.Connect(t.Context(), a.ownerURL)
+	if err != nil {
+		t.Fatalf("connect as owner: %v", err)
+	}
+	defer conn.Close(context.WithoutCancel(t.Context()))
+
+	// Only the owner may change an event.
+	_, err = conn.Exec(t.Context(), `WITH u AS (
+		    UPDATE users SET display_name = NULL
+		    WHERE id = (SELECT user_id FROM user_identities WHERE oidc_issuer = $1 AND oidc_subject = $2)
+		    RETURNING id)
+		UPDATE event_store SET data = data - 'displayname'
+		WHERE subject = (SELECT id FROM u) AND type = $3`,
+		issuer, subject, householdsapp.UserRegisteredType)
+	if err != nil {
+		t.Fatalf("forget display name: %v", err)
 	}
 
 	return token
