@@ -71,6 +71,10 @@ http:
               "bank_transaction_id": {
                 "header": "Amount",
                 "position": 3
+              },
+              "balance": {
+                "header": "Amount",
+                "position": 3
               }
             }
           }

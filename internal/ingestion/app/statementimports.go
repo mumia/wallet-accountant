@@ -296,12 +296,14 @@ type ImportedSoFar struct {
 }
 
 // Upload is a statement file with its Export balance. Confirmation is the
-// second entry of the Export balance (preview only); PreviewID ties a first
-// import to its preview.
+// second entry of the Export balance (preview only), nil when it wasn't
+// given: a mapping with a balance column ignores it, since the file's
+// balance tests the Export balance instead. PreviewID ties a first import
+// to its preview.
 type Upload struct {
 	File          []byte
 	ExportBalance sharedkernel.Decimal
-	Confirmation  sharedkernel.Decimal
+	Confirmation  *sharedkernel.Decimal
 	PreviewID     string
 }
 
@@ -360,7 +362,10 @@ func (s *StatementImports) Preview(ctx context.Context, household, connection uu
 			return ErrOpeningBalanceAlreadyRecorded
 		}
 
-		if !up.ExportBalance.Equal(up.Confirmation) {
+		// The file's balance, when the mapping has a balance column, has
+		// already tested the Export balance, so it is asked only once
+		// (ADR-0018).
+		if !r.statement.HasFileBalance() && (up.Confirmation == nil || !up.ExportBalance.Equal(*up.Confirmation)) {
 			return ErrExportBalanceMismatch
 		}
 
@@ -661,8 +666,10 @@ func (s *StatementImports) List(ctx context.Context, household, connection uuid.
 func monthOfDate(d time.Time) string { return d.Format(domain.MonthLayout) }
 
 // read reads the statement file through the Connection for its Account,
-// refusing a file the Connection already imported. With lock, the
-// Account's Statement imports are locked before the Account is read.
+// refusing a file the Connection already imported. Through a mapping with
+// a balance column, it first refuses an unreadable file and an Export
+// balance that isn't the file's balance. With lock, the Account's
+// Statement imports are locked before the Account is read.
 func (s *StatementImports) read(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID, up Upload, lock bool,
 ) (read, error) {
 	fold, found, err := s.connections.Folds.Load(ctx, tx, connection)
@@ -690,26 +697,52 @@ func (s *StatementImports) read(ctx context.Context, tx *eventstore.Tx, connecti
 	}
 
 	hash := domain.FileHash(up.File)
+	mapping := *fold.State.CSVMapping
 
-	earlier, found, err := s.reader.ImportOfFile(ctx, tx, connection, hash)
-	if err != nil {
-		return read{}, err //nolint:wrapcheck // the adapter's error
-	}
-
-	if found {
-		return read{}, &DuplicateImportError{Earlier: earlier}
+	// Through a mapping with a balance column, the file is read and its
+	// balance checked before the duplicate-file check; without one, the
+	// duplicate-file check comes first, as it always has.
+	if !mapping.HasBalance() {
+		if err := s.refuseImportedFile(ctx, tx, connection, hash); err != nil {
+			return read{}, err
+		}
 	}
 
 	if err := domain.CheckExportBalance(up.ExportBalance, account.Currency); err != nil {
 		return read{}, err //nolint:wrapcheck // the domain's refusal
 	}
 
-	statement, err := domain.ReadStatement(*fold.State.CSVMapping, up.File, account.Currency, account.StartDate)
+	statement, err := domain.ReadStatement(mapping, up.File, account.Currency, account.StartDate)
 	if err != nil {
 		return read{}, err //nolint:wrapcheck // the domain's refusal
 	}
 
+	if mapping.HasBalance() {
+		if err := statement.CheckExportBalanceAgainstFile(up.ExportBalance); err != nil {
+			return read{}, err //nolint:wrapcheck // the domain's refusal
+		}
+
+		if err := s.refuseImportedFile(ctx, tx, connection, hash); err != nil {
+			return read{}, err
+		}
+	}
+
 	return read{connection: fold.State, account: account, fileHash: hash, statement: statement}, nil
+}
+
+// refuseImportedFile refuses a file, by its hash, that the Connection
+// already imported.
+func (s *StatementImports) refuseImportedFile(ctx context.Context, tx *eventstore.Tx, connection uuid.UUID, hash string) error {
+	earlier, found, err := s.reader.ImportOfFile(ctx, tx, connection, hash)
+	if err != nil {
+		return err //nolint:wrapcheck // the adapter's error
+	}
+
+	if found {
+		return &DuplicateImportError{Earlier: earlier}
+	}
+
+	return nil
 }
 
 // ids hands out UUIDv7s by position, the same ones on every attempt of a

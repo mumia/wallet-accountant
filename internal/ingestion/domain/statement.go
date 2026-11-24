@@ -39,6 +39,52 @@ type Statement struct {
 	// Suspected counts the rows WithSuspectedDuplicates marked.
 	Suspected int
 	Total     sharedkernel.Decimal
+
+	// The file's balance, worked out from every readable row before any is
+	// ignored, when the mapping has a balance column: hasFileBalance, then
+	// fileBalance or why it can't be worked out. currency is the Account
+	// currency's code.
+	hasFileBalance bool
+	fileBalance    FileBalance
+	fileBalanceErr error
+	currency       string
+}
+
+// HasFileBalance reports whether the file was read with a balance column,
+// so its Export balance is checked against the file's balance.
+func (s Statement) HasFileBalance() bool { return s.hasFileBalance }
+
+// FileBalance is the file's balance (FileBalanceOf), counting every
+// readable row, those the import ignores included: the check is about the
+// file. It is a *FileBalanceUnknownError when it can't be worked out or the
+// mapping has no balance column.
+func (s Statement) FileBalance() (FileBalance, error) {
+	if !s.hasFileBalance {
+		return FileBalance{}, &FileBalanceUnknownError{Reason: "the CSV mapping has no balance column"}
+	}
+
+	return s.fileBalance, s.fileBalanceErr
+}
+
+// CheckExportBalanceAgainstFile refuses, for a file read with a balance
+// column, an Export balance that isn't the file's balance (an
+// *ExportBalanceDiffersFromFileError) and a file whose balance can't be
+// worked out (a *FileBalanceUnknownError). Without a balance column it
+// checks nothing.
+func (s Statement) CheckExportBalanceAgainstFile(exportBalance sharedkernel.Decimal) error {
+	if !s.hasFileBalance {
+		return nil
+	}
+
+	if s.fileBalanceErr != nil {
+		return s.fileBalanceErr
+	}
+
+	if !exportBalance.Equal(s.fileBalance.Amount) {
+		return &ExportBalanceDiffersFromFileError{ExportBalance: exportBalance, File: s.fileBalance, Currency: s.currency}
+	}
+
+	return nil
 }
 
 // WithoutClosedMonths splits off every row booked in a month before the
@@ -262,8 +308,9 @@ func (s Statement) WithoutCertainRepeats(earlier []ImportedKey) Statement {
 // the currency whose history starts on startDate. Every row must be
 // readable, with no more decimal places than the currency has; otherwise
 // the whole file is refused with a *RowsError listing every bad line. Rows
-// booked before the start date are ignored and counted (spec story 41). A
-// file with no rows at all is ErrEmptyStatementFile.
+// booked before the start date are ignored and counted (spec story 41), but
+// still count for the file's balance when the mapping has a balance column.
+// A file with no rows at all is ErrEmptyStatementFile.
 func ReadStatement(m CSVMapping, file []byte, currency sharedkernel.Currency, startDate time.Time) (Statement, error) {
 	rows, err := parseStatementFile(m, file, int32(currency.Decimals())) //nolint:gosec // at most 18 places
 	if err != nil {
@@ -274,7 +321,12 @@ func ReadStatement(m CSVMapping, file []byte, currency sharedkernel.Currency, st
 		return Statement{}, ErrEmptyStatementFile
 	}
 
-	s := Statement{Rows: []StatementRow{}}
+	s := Statement{Rows: []StatementRow{}, currency: currency.Code()}
+
+	if m.HasBalance() {
+		s.hasFileBalance = true
+		s.fileBalance, s.fileBalanceErr = FileBalanceOf(rows)
+	}
 
 	for _, r := range rows {
 		if r.BookingDate.Before(startDate) {

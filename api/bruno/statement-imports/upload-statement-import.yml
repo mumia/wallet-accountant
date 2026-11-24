@@ -80,7 +80,14 @@ docs: |-
   `rows_in_closed_months_not_in_books`, and its `detail` names the
   closed months to Reopen before importing again. Amounts, an empty
   file and a Connection without a mapping are refused as by the
-  preview. Retrying with the same Idempotency-Key and the same file and
+  preview.
+
+  Through a CSV mapping with a balance column, every import, first or
+  later, checks its Export balance against the file's balance as the
+  preview does (422 `/problems/export-balance-differs-from-file` or
+  `/problems/file-balance-unknown`), after the file is read and before
+  the duplicate-file check, the Opening balance and the Balance check;
+  nothing is recorded. Retrying with the same Idempotency-Key and the same file and
   fields returns the original result, however the form is rebuilt.
 
   Operation `uploadStatementImport`.

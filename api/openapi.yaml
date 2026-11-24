@@ -1298,9 +1298,13 @@ paths:
         Reads a statement file with the Connection's CSV mapping and shows
         the Opening balance the Account's first Statement import would
         record (ADR-0018): the Export balance minus the total of the rows
-        booked on or after the start date. Records nothing. The Export
-        balance is typed twice; entries that differ get 422
-        `/problems/export-balance-mismatch`. A file with an unreadable row is
+        booked on or after the start date. Records nothing. Without a balance
+        column in the Connection's CSV mapping, the Export balance is typed
+        twice; entries that differ, or a missing
+        `export_balance_confirmation`, get 422
+        `/problems/export-balance-mismatch`. With a balance column, the
+        file's balance tests the Export balance instead, so the confirmation
+        is ignored (see below). A file with an unreadable row is
         refused whole with 422 `/problems/unreadable-statement-file`, listing
         every line and its reason. A file already imported through the
         Connection gets 409 `/problems/duplicate-statement-import`, naming
@@ -1315,6 +1319,17 @@ paths:
         unreadable row. A file with no rows at all gets 422
         `/problems/empty-statement-file`, and a Connection without a CSV
         mapping gets 422 `/problems/csv-mapping-required`.
+
+        Through a CSV mapping with a balance column, the Export balance must
+        be the file's balance: the balance on its newest row, told by the
+        balance column alone and counting every readable row, those before
+        the start date included. One that isn't gets 422
+        `/problems/export-balance-differs-from-file`, giving the
+        `file_balance` and its `line`; a file whose balance column doesn't
+        add up from one end to the other gets 422
+        `/problems/file-balance-unknown`, giving the reason. Both come after
+        the file is read (unreadable rows first) and before the
+        duplicate-file check.
       tags:
         - Statement imports
       parameters:
@@ -1386,7 +1401,14 @@ paths:
         `rows_in_closed_months_not_in_books`, and its `detail` names the
         closed months to Reopen before importing again. Amounts, an empty
         file and a Connection without a mapping are refused as by the
-        preview. Retrying with the same Idempotency-Key and the same file and
+        preview.
+
+        Through a CSV mapping with a balance column, every import, first or
+        later, checks its Export balance against the file's balance as the
+        preview does (422 `/problems/export-balance-differs-from-file` or
+        `/problems/file-balance-unknown`), after the file is read and before
+        the duplicate-file check, the Opening balance and the Balance check;
+        nothing is recorded. Retrying with the same Idempotency-Key and the same file and
         fields returns the original result, however the form is rebuilt.
       tags:
         - Statement imports
@@ -2359,7 +2381,13 @@ components:
           $ref: '#/components/schemas/CsvColumns'
     CsvColumns:
       type: object
-      description: Which column holds each field
+      description: |
+        Which column holds each field. `balance` is optional: the balance
+        after each row, as the bank works it out; it lets every import check
+        its Export balance against the file. It is read with the mapping's
+        decimal and thousands separators, within the Account currency's
+        decimal places, and a row whose balance isn't a number is an
+        unreadable row
       properties:
         booking_date:
           $ref: '#/components/schemas/CsvColumn'
@@ -2378,6 +2406,8 @@ components:
         payee:
           $ref: '#/components/schemas/CsvColumn'
         bank_transaction_id:
+          $ref: '#/components/schemas/CsvColumn'
+        balance:
           $ref: '#/components/schemas/CsvColumn'
     CsvColumn:
       type: object
@@ -2442,9 +2472,41 @@ components:
           description: Every line of the whole file that can't be read, with the reason; empty when all can
           items:
             $ref: '#/components/schemas/RowError'
+        file_balance:
+          $ref: '#/components/schemas/FileBalance'
+        file_balance_problem:
+          type: string
+          description: |
+            Why the file's balance can't be worked out, as an import would
+            refuse it. Either this or `file_balance` when the mapping has a
+            balance column, neither otherwise
+          example: the balance column doesn't add up from one end of the file to the other
+    FileBalance:
+      type: object
+      description: |
+        A statement file's balance: the balance on its newest row. The newest
+        row is told by the balance column alone: the rows are oldest first
+        when the last row's balance is the first row's plus every later
+        row's amount, and newest first when the first row's balance is the
+        last row's plus every earlier row's amount. Every readable row
+        counts, those an import ignores included
+      required:
+        - amount
+        - line
+      properties:
+        amount:
+          $ref: '#/components/schemas/Money'
+        line:
+          type: integer
+          format: int32
+          description: The newest row's line in the file, counted from 1, including skipped lines and the header row
+          example: 14
     ParsedStatementRow:
       type: object
-      description: One statement file row as a CSV mapping reads it
+      description: |
+        One statement file row as a CSV mapping reads it; `balance`, the
+        balance after the row, is present when the mapping has a balance
+        column
       required:
         - line
         - booking_date
@@ -2484,6 +2546,8 @@ components:
           description: The bank's own ID for the row, when the file has one
         amount:
           $ref: '#/components/schemas/Money'
+        balance:
+          $ref: '#/components/schemas/Money'
     DecimalText:
       type: string
       description: An exact decimal written with `.` as the decimal separator and no thousands separator
@@ -2491,11 +2555,15 @@ components:
       example: '1234.56'
     StatementImportPreviewUpload:
       type: object
-      description: A first statement file to preview, with its Export balance typed twice
+      description: |
+        A first statement file to preview, with its Export balance.
+        `export_balance_confirmation`, the Export balance typed a second
+        time, is required when the Connection's CSV mapping has no balance
+        column, and ignored when it has one, since the file's balance then
+        tests the Export balance
       required:
         - file
         - export_balance
-        - export_balance_confirmation
       properties:
         file:
           type: string
@@ -2794,7 +2862,9 @@ components:
         `expected_balance` (the Opening balance plus every non-Discarded
         Imported transaction, the file's new rows included), the
         `export_balance`, and the `difference` (Export balance minus
-        expected balance)
+        expected balance); an Export balance that isn't the file's balance
+        gives the `file_balance` (the balance on its newest row) and that
+        row's `line`
       required:
         - type
         - title
@@ -2839,6 +2909,13 @@ components:
           $ref: '#/components/schemas/Money'
         difference:
           $ref: '#/components/schemas/Money'
+        file_balance:
+          $ref: '#/components/schemas/DecimalText'
+        line:
+          type: integer
+          format: int32
+          description: For an Export balance that differs from the file, the newest row's line
+          example: 14
     RowError:
       type: object
       description: Why one line of a statement file can't be read

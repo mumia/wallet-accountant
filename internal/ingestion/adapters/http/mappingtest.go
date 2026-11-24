@@ -41,12 +41,14 @@ func (h *ConnectionHandler) TestCsvMapping(ctx context.Context, req *oas.CsvMapp
 		return nil, fmt.Errorf("test CSV mapping: %w", err)
 	}
 
-	rows, err := parsedRowsOut(sample.Rows, sample.Currency)
+	hasBalance := mappingIn(req.CsvMapping).HasBalance()
+
+	rows, err := parsedRowsOut(sample.Rows, sample.Currency, hasBalance)
 	if err != nil {
 		return nil, err
 	}
 
-	lastRows, err := parsedRowsOut(sample.LastRows, sample.Currency)
+	lastRows, err := parsedRowsOut(sample.LastRows, sample.Currency, hasBalance)
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +64,25 @@ func (h *ConnectionHandler) TestCsvMapping(ctx context.Context, req *oas.CsvMapp
 		out.UnreadableRows = append(out.UnreadableRows, oas.RowError{Line: int32(r.Line), Reason: r.Reason}) //nolint:gosec // a statement file is far smaller
 	}
 
+	if b := sample.FileBalance; b != nil {
+		amount, err := money(b.Amount, sample.Currency)
+		if err != nil {
+			return nil, err
+		}
+
+		out.FileBalance = oas.NewOptFileBalance(oas.FileBalance{Amount: amount, Line: int32(b.Line)}) //nolint:gosec // a statement file is far smaller
+	}
+
+	if sample.FileBalanceProblem != "" {
+		out.FileBalanceProblem = oas.NewOptString(sample.FileBalanceProblem)
+	}
+
 	return out, nil
 }
 
-// parsedRowsOut writes statement rows as the mapping test shows them.
-func parsedRowsOut(rows []domain.StatementRow, currency string) ([]oas.ParsedStatementRow, error) {
+// parsedRowsOut writes statement rows as the mapping test shows them, each
+// with its balance when the mapping has a balance column.
+func parsedRowsOut(rows []domain.StatementRow, currency string, hasBalance bool) ([]oas.ParsedStatementRow, error) {
 	out := make([]oas.ParsedStatementRow, 0, len(rows))
 
 	for _, r := range rows {
@@ -93,6 +109,15 @@ func parsedRowsOut(rows []domain.StatementRow, currency string) ([]oas.ParsedSta
 
 		if r.BankTransactionID != "" {
 			row.BankTransactionID = oas.NewOptString(r.BankTransactionID)
+		}
+
+		if hasBalance {
+			balance, err := money(r.Balance, currency)
+			if err != nil {
+				return nil, err
+			}
+
+			row.Balance = oas.NewOptMoney(balance)
 		}
 
 		out = append(out, row)

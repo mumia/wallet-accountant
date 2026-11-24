@@ -1148,7 +1148,10 @@ func (s *CsvColumn) SetPosition(val OptInt32) {
 	s.Position = val
 }
 
-// Which column holds each field.
+// Which column holds each field. `balance` is optional: the balance after each row, as the bank works
+// it out; it lets every import check its Export balance against the file. It is read with the
+// mapping's decimal and thousands separators, within the Account currency's decimal places, and a row
+// whose balance isn't a number is an unreadable row.
 // Ref: #/components/schemas/CsvColumns
 type CsvColumns struct {
 	BookingDate       OptCsvColumn `json:"booking_date"`
@@ -1160,6 +1163,7 @@ type CsvColumns struct {
 	ValueDate         OptCsvColumn `json:"value_date"`
 	Payee             OptCsvColumn `json:"payee"`
 	BankTransactionID OptCsvColumn `json:"bank_transaction_id"`
+	Balance           OptCsvColumn `json:"balance"`
 }
 
 // GetBookingDate returns the value of BookingDate.
@@ -1207,6 +1211,11 @@ func (s *CsvColumns) GetBankTransactionID() OptCsvColumn {
 	return s.BankTransactionID
 }
 
+// GetBalance returns the value of Balance.
+func (s *CsvColumns) GetBalance() OptCsvColumn {
+	return s.Balance
+}
+
 // SetBookingDate sets the value of BookingDate.
 func (s *CsvColumns) SetBookingDate(val OptCsvColumn) {
 	s.BookingDate = val
@@ -1250,6 +1259,11 @@ func (s *CsvColumns) SetPayee(val OptCsvColumn) {
 // SetBankTransactionID sets the value of BankTransactionID.
 func (s *CsvColumns) SetBankTransactionID(val OptCsvColumn) {
 	s.BankTransactionID = val
+}
+
+// SetBalance sets the value of Balance.
+func (s *CsvColumns) SetBalance(val OptCsvColumn) {
+	s.Balance = val
 }
 
 // How a bank lays out its statement CSV. Booking date, description and the amount (one signed column,
@@ -1409,7 +1423,11 @@ type CsvMappingTest struct {
 	// How many rows of the whole file are readable.
 	ReadableRowCount int32 `json:"readable_row_count"`
 	// Every line of the whole file that can't be read, with the reason; empty when all can.
-	UnreadableRows []RowError `json:"unreadable_rows"`
+	UnreadableRows []RowError     `json:"unreadable_rows"`
+	FileBalance    OptFileBalance `json:"file_balance"`
+	// Why the file's balance can't be worked out, as an import would refuse it. Either this or
+	// `file_balance` when the mapping has a balance column, neither otherwise.
+	FileBalanceProblem OptString `json:"file_balance_problem"`
 }
 
 // GetRows returns the value of Rows.
@@ -1432,6 +1450,16 @@ func (s *CsvMappingTest) GetUnreadableRows() []RowError {
 	return s.UnreadableRows
 }
 
+// GetFileBalance returns the value of FileBalance.
+func (s *CsvMappingTest) GetFileBalance() OptFileBalance {
+	return s.FileBalance
+}
+
+// GetFileBalanceProblem returns the value of FileBalanceProblem.
+func (s *CsvMappingTest) GetFileBalanceProblem() OptString {
+	return s.FileBalanceProblem
+}
+
 // SetRows sets the value of Rows.
 func (s *CsvMappingTest) SetRows(val []ParsedStatementRow) {
 	s.Rows = val
@@ -1450,6 +1478,16 @@ func (s *CsvMappingTest) SetReadableRowCount(val int32) {
 // SetUnreadableRows sets the value of UnreadableRows.
 func (s *CsvMappingTest) SetUnreadableRows(val []RowError) {
 	s.UnreadableRows = val
+}
+
+// SetFileBalance sets the value of FileBalance.
+func (s *CsvMappingTest) SetFileBalance(val OptFileBalance) {
+	s.FileBalance = val
+}
+
+// SetFileBalanceProblem sets the value of FileBalanceProblem.
+func (s *CsvMappingTest) SetFileBalanceProblem(val OptString) {
+	s.FileBalanceProblem = val
 }
 
 func (*CsvMappingTest) testCsvMappingRes() {}
@@ -1545,6 +1583,37 @@ func (*DiscardImportedTransactionUnauthorized) discardImportedTransactionRes() {
 type DisplayName string
 
 type DisplayNameOut string
+
+// A statement file's balance: the balance on its newest row. The newest row is told by the balance
+// column alone: the rows are oldest first when the last row's balance is the first row's plus every
+// later row's amount, and newest first when the first row's balance is the last row's plus every
+// earlier row's amount. Every readable row counts, those an import ignores included.
+// Ref: #/components/schemas/FileBalance
+type FileBalance struct {
+	Amount Money `json:"amount"`
+	// The newest row's line in the file, counted from 1, including skipped lines and the header row.
+	Line int32 `json:"line"`
+}
+
+// GetAmount returns the value of Amount.
+func (s *FileBalance) GetAmount() Money {
+	return s.Amount
+}
+
+// GetLine returns the value of Line.
+func (s *FileBalance) GetLine() int32 {
+	return s.Line
+}
+
+// SetAmount sets the value of Amount.
+func (s *FileBalance) SetAmount(val Money) {
+	s.Amount = val
+}
+
+// SetLine sets the value of Line.
+func (s *FileBalance) SetLine(val int32) {
+	s.Line = val
+}
 
 type GetAccountMonthBadRequest Problem
 
@@ -3060,6 +3129,52 @@ func (o OptDateTime) Or(d time.Time) time.Time {
 	return d
 }
 
+// NewOptDecimalText returns new OptDecimalText with value set to v.
+func NewOptDecimalText(v DecimalText) OptDecimalText {
+	return OptDecimalText{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDecimalText is optional DecimalText.
+type OptDecimalText struct {
+	Value DecimalText
+	Set   bool
+}
+
+// IsSet returns true if OptDecimalText was set.
+func (o OptDecimalText) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDecimalText) Reset() {
+	var v DecimalText
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDecimalText) SetTo(v DecimalText) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDecimalText) Get() (v DecimalText, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDecimalText) Or(d DecimalText) DecimalText {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptDisplayNameOut returns new OptDisplayNameOut with value set to v.
 func NewOptDisplayNameOut(v DisplayNameOut) OptDisplayNameOut {
 	return OptDisplayNameOut{
@@ -3100,6 +3215,52 @@ func (o OptDisplayNameOut) Get() (v DisplayNameOut, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptDisplayNameOut) Or(d DisplayNameOut) DisplayNameOut {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptFileBalance returns new OptFileBalance with value set to v.
+func NewOptFileBalance(v FileBalance) OptFileBalance {
+	return OptFileBalance{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptFileBalance is optional FileBalance.
+type OptFileBalance struct {
+	Value FileBalance
+	Set   bool
+}
+
+// IsSet returns true if OptFileBalance was set.
+func (o OptFileBalance) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptFileBalance) Reset() {
+	var v FileBalance
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptFileBalance) SetTo(v FileBalance) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptFileBalance) Get() (v FileBalance, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptFileBalance) Or(d FileBalance) FileBalance {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -3496,7 +3657,8 @@ func (o OptUserRef) Or(d UserRef) UserRef {
 	return d
 }
 
-// One statement file row as a CSV mapping reads it.
+// One statement file row as a CSV mapping reads it; `balance`, the balance after the row, is present
+// when the mapping has a balance column.
 // Ref: #/components/schemas/ParsedStatementRow
 type ParsedStatementRow struct {
 	// The line in the file, counted from 1, including skipped lines and the header row.
@@ -3514,6 +3676,7 @@ type ParsedStatementRow struct {
 	// The bank's own ID for the row, when the file has one.
 	BankTransactionID OptString `json:"bank_transaction_id"`
 	Amount            Money     `json:"amount"`
+	Balance           OptMoney  `json:"balance"`
 }
 
 // GetLine returns the value of Line.
@@ -3556,6 +3719,11 @@ func (s *ParsedStatementRow) GetAmount() Money {
 	return s.Amount
 }
 
+// GetBalance returns the value of Balance.
+func (s *ParsedStatementRow) GetBalance() OptMoney {
+	return s.Balance
+}
+
 // SetLine sets the value of Line.
 func (s *ParsedStatementRow) SetLine(val int32) {
 	s.Line = val
@@ -3594,6 +3762,11 @@ func (s *ParsedStatementRow) SetBankTransactionID(val OptString) {
 // SetAmount sets the value of Amount.
 func (s *ParsedStatementRow) SetAmount(val Money) {
 	s.Amount = val
+}
+
+// SetBalance sets the value of Balance.
+func (s *ParsedStatementRow) SetBalance(val OptMoney) {
+	s.Balance = val
 }
 
 type PreviewStatementImportNotFound Problem
@@ -3911,7 +4084,8 @@ func (*SaveCsvMappingUnprocessableEntity) saveCsvMappingRes() {}
 // Problem details (RFC 9457) of a refused statement file. An unreadable file lists its bad `rows`; a
 // failed Balance check gives the `expected_balance` (the Opening balance plus every non-Discarded
 // Imported transaction, the file's new rows included), the `export_balance`, and the `difference`
-// (Export balance minus expected balance).
+// (Export balance minus expected balance); an Export balance that isn't the file's balance gives the
+// `file_balance` (the balance on its newest row) and that row's `line`.
 // Ref: #/components/schemas/StatementFileProblem
 type StatementFileProblem struct {
 	// Identifies the problem type.
@@ -3927,10 +4101,13 @@ type StatementFileProblem struct {
 	// For a failed Balance check: the file's rows booked in a closed month, and so ignored, that are
 	// neither certain repeats nor look like an earlier Imported transaction. The books likely miss them:
 	// Reopen back to their month and import again (ADR-0024).
-	RowsInClosedMonthsNotInBooks OptInt32 `json:"rows_in_closed_months_not_in_books"`
-	ExpectedBalance              OptMoney `json:"expected_balance"`
-	ExportBalance                OptMoney `json:"export_balance"`
-	Difference                   OptMoney `json:"difference"`
+	RowsInClosedMonthsNotInBooks OptInt32       `json:"rows_in_closed_months_not_in_books"`
+	ExpectedBalance              OptMoney       `json:"expected_balance"`
+	ExportBalance                OptMoney       `json:"export_balance"`
+	Difference                   OptMoney       `json:"difference"`
+	FileBalance                  OptDecimalText `json:"file_balance"`
+	// For an Export balance that differs from the file, the newest row's line.
+	Line OptInt32 `json:"line"`
 }
 
 // GetType returns the value of Type.
@@ -3978,6 +4155,16 @@ func (s *StatementFileProblem) GetDifference() OptMoney {
 	return s.Difference
 }
 
+// GetFileBalance returns the value of FileBalance.
+func (s *StatementFileProblem) GetFileBalance() OptDecimalText {
+	return s.FileBalance
+}
+
+// GetLine returns the value of Line.
+func (s *StatementFileProblem) GetLine() OptInt32 {
+	return s.Line
+}
+
 // SetType sets the value of Type.
 func (s *StatementFileProblem) SetType(val string) {
 	s.Type = val
@@ -4021,6 +4208,16 @@ func (s *StatementFileProblem) SetExportBalance(val OptMoney) {
 // SetDifference sets the value of Difference.
 func (s *StatementFileProblem) SetDifference(val OptMoney) {
 	s.Difference = val
+}
+
+// SetFileBalance sets the value of FileBalance.
+func (s *StatementFileProblem) SetFileBalance(val OptDecimalText) {
+	s.FileBalance = val
+}
+
+// SetLine sets the value of Line.
+func (s *StatementFileProblem) SetLine(val OptInt32) {
+	s.Line = val
 }
 
 func (*StatementFileProblem) previewStatementImportRes() {}
@@ -4407,13 +4604,15 @@ func (s *StatementImportPreview) SetRowsTotal(val Money) {
 
 func (*StatementImportPreview) previewStatementImportRes() {}
 
-// A first statement file to preview, with its Export balance typed twice.
+// A first statement file to preview, with its Export balance. `export_balance_confirmation`, the
+// Export balance typed a second time, is required when the Connection's CSV mapping has no balance
+// column, and ignored when it has one, since the file's balance then tests the Export balance.
 // Ref: #/components/schemas/StatementImportPreviewUpload
 type StatementImportPreviewUploadMultipart struct {
 	// The statement file, as the bank exported it.
 	File                      ht.MultipartFile `json:"file"`
 	ExportBalance             DecimalText      `json:"export_balance"`
-	ExportBalanceConfirmation DecimalText      `json:"export_balance_confirmation"`
+	ExportBalanceConfirmation OptDecimalText   `json:"export_balance_confirmation"`
 }
 
 // GetFile returns the value of File.
@@ -4427,7 +4626,7 @@ func (s *StatementImportPreviewUploadMultipart) GetExportBalance() DecimalText {
 }
 
 // GetExportBalanceConfirmation returns the value of ExportBalanceConfirmation.
-func (s *StatementImportPreviewUploadMultipart) GetExportBalanceConfirmation() DecimalText {
+func (s *StatementImportPreviewUploadMultipart) GetExportBalanceConfirmation() OptDecimalText {
 	return s.ExportBalanceConfirmation
 }
 
@@ -4442,7 +4641,7 @@ func (s *StatementImportPreviewUploadMultipart) SetExportBalance(val DecimalText
 }
 
 // SetExportBalanceConfirmation sets the value of ExportBalanceConfirmation.
-func (s *StatementImportPreviewUploadMultipart) SetExportBalanceConfirmation(val DecimalText) {
+func (s *StatementImportPreviewUploadMultipart) SetExportBalanceConfirmation(val OptDecimalText) {
 	s.ExportBalanceConfirmation = val
 }
 

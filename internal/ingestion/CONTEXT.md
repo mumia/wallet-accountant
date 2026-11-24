@@ -13,12 +13,16 @@ One upload of a bank statement file through a Connection, which produces Importe
 _Avoid_: Upload, file sync
 
 **Export balance**:
-The bank's booked balance, excluding card authorisations not yet booked, when a statement file was exported. Every Statement import carries one. The first import works out the Account's Opening balance from it, and every later import is checked against it (ADR-0018).
+The bank's booked balance, excluding card authorisations not yet booked, when a statement file was exported. Every Statement import carries one. The first import works out the Account's Opening balance from it, and every later import is checked against it (ADR-0018). When the Connection's mapping reads a balance column, every Export balance must also equal the file's balance.
 _Avoid_: Current balance, available balance, closing balance
 
 **Balance check**:
 The test that an Account's Opening balance plus all its non-Discarded Imported transactions equals a Statement import's Export balance. A failed check refuses the import. When the import produced Suspected duplicates, the check waits until they are decided. A file's rows booked in a closed month are ignored, so a row missing from a closed month shows up as a failed check (ADR-0024).
 _Avoid_: Reconciliation, validation
+
+**File's balance**:
+The balance on a statement file's newest row, read from its mapping's balance column. The newest row is told by the balances alone: the rows are oldest first when the last row's balance is the first row's plus every later row's amount, and newest first the other way round. Every readable row counts, including rows the import ignores. Through such a mapping, an Export balance that isn't the file's balance, or a file whose balance can't be worked out, refuses the import.
+_Avoid_: Closing balance, statement balance
 
 **Void**:
 Withdrawing the latest Statement import of an Account, while none of its rows are Accepted and none fall in a closed month, so a corrected file can be uploaded. Its Imported transactions become Discarded.

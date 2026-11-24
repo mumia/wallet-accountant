@@ -34,6 +34,9 @@ type StatementRow struct {
 	BankTransactionID string
 	// Amount is signed: positive is money in, negative money out.
 	Amount sharedkernel.Decimal
+	// Balance is the balance after the row, as the bank works it out; zero
+	// when the mapping has no balance column.
+	Balance sharedkernel.Decimal
 	// Resembles is the earlier Imported transaction this row only looks
 	// like, which makes it a Suspected duplicate; the zero ID otherwise.
 	Resembles sharedkernel.ID
@@ -303,6 +306,13 @@ func (p *parser) readRow(line int, record []string) (StatementRow, bool) {
 
 	row.Amount = amount
 
+	if p.m.HasBalance() {
+		row.Balance, problem = p.balance(text("balance", p.m.Balance))
+		if problem != "" {
+			problems = append(problems, problem)
+		}
+	}
+
 	if len(problems) > 0 {
 		p.refuse(line, strings.Join(problems, "; "))
 
@@ -310,6 +320,25 @@ func (p *parser) readRow(line int, record []string) (StatementRow, bool) {
 	}
 
 	return row, true
+}
+
+// balance reads the row's balance cell, or why it can't, within the
+// Account currency's decimal places as for amounts.
+func (p *parser) balance(v string) (sharedkernel.Decimal, string) {
+	if v == "" {
+		return sharedkernel.Decimal{}, "the balance is blank"
+	}
+
+	d, ok := p.number(v)
+	if !ok {
+		return sharedkernel.Decimal{}, fmt.Sprintf("the balance %q is not a number", v)
+	}
+
+	if p.places >= 0 && !d.Equal(d.Round(p.places)) {
+		return sharedkernel.Decimal{}, fmt.Sprintf("the balance %s has more than the %d decimal places of the Account currency", d, p.places)
+	}
+
+	return d, ""
 }
 
 // amount reads the row's signed amount, or why it can't.
@@ -391,12 +420,18 @@ type Sample struct {
 	// Unreadable is every line of the whole file that can't be read; empty
 	// when all can.
 	Unreadable []RowError
+	// FileBalance is the file's balance (FileBalanceOf), or
+	// FileBalanceProblem why it can't be worked out; one of the two when
+	// the mapping has a balance column, neither otherwise.
+	FileBalance        *FileBalance
+	FileBalanceProblem string
 }
 
 // ReadSample reads a sample statement file with an unsaved mapping, as an
 // upload to an Account in the currency would, but without refusing the
-// file: readable rows and unreadable lines come back together. Rows before
-// the Account's start date are kept, since it tests the mapping, not an
+// file: readable rows and unreadable lines come back together, with the
+// file's balance when the mapping has a balance column. Rows before the
+// Account's start date are kept, since it tests the mapping, not an
 // import. An invalid mapping is refused as by Validate, and a file with no
 // rows at all is ErrEmptyStatementFile.
 func ReadSample(m CSVMapping, file []byte, currency sharedkernel.Currency) (Sample, error) {
@@ -410,11 +445,29 @@ func ReadSample(m CSVMapping, file []byte, currency sharedkernel.Currency) (Samp
 	}
 
 	shown := min(len(rows), SampleRows)
-
-	return Sample{
+	sample := Sample{
 		Rows:       rows[:shown],
 		LastRows:   rows[max(len(rows)-SampleRows, shown):],
 		Readable:   len(rows),
 		Unreadable: append([]RowError{}, unreadable...),
-	}, nil
+	}
+
+	if m.HasBalance() {
+		// An import refuses unreadable rows before it works out the
+		// file's balance; the readable rows alone would mislead.
+		if len(unreadable) > 0 {
+			sample.FileBalanceProblem = "the file has rows that can't be read"
+
+			return sample, nil
+		}
+
+		balance, err := FileBalanceOf(rows)
+		if err != nil {
+			sample.FileBalanceProblem = err.Error()
+		} else {
+			sample.FileBalance = &balance
+		}
+	}
+
+	return sample, nil
 }

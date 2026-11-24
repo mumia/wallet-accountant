@@ -1127,38 +1127,50 @@ func (s *Server) decodePreviewStatementImportRequest(r *http.Request) (
 			}
 			if err := q.HasParam(cfg); err == nil {
 				if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
-					var requestDotExportBalanceConfirmationVal string
+					var requestDotExportBalanceConfirmationVal DecimalText
 					if err := func() error {
-						val, err := d.DecodeValue()
-						if err != nil {
+						var requestDotExportBalanceConfirmationValVal string
+						if err := func() error {
+							val, err := d.DecodeValue()
+							if err != nil {
+								return err
+							}
+
+							c, err := conv.ToString(val)
+							if err != nil {
+								return err
+							}
+
+							requestDotExportBalanceConfirmationValVal = c
+							return nil
+						}(); err != nil {
 							return err
 						}
-
-						c, err := conv.ToString(val)
-						if err != nil {
-							return err
-						}
-
-						requestDotExportBalanceConfirmationVal = c
+						requestDotExportBalanceConfirmationVal = DecimalText(requestDotExportBalanceConfirmationValVal)
 						return nil
 					}(); err != nil {
 						return err
 					}
-					request.ExportBalanceConfirmation = DecimalText(requestDotExportBalanceConfirmationVal)
+					request.ExportBalanceConfirmation.SetTo(requestDotExportBalanceConfirmationVal)
 					return nil
 				}); err != nil {
 					return req, rawBody, close, errors.Wrap(err, "decode \"export_balance_confirmation\"")
 				}
 				if err := func() error {
-					if err := request.ExportBalanceConfirmation.Validate(); err != nil {
-						return err
+					if value, ok := request.ExportBalanceConfirmation.Get(); ok {
+						if err := func() error {
+							if err := value.Validate(); err != nil {
+								return err
+							}
+							return nil
+						}(); err != nil {
+							return err
+						}
 					}
 					return nil
 				}(); err != nil {
 					return req, rawBody, close, errors.Wrap(err, "validate")
 				}
-			} else {
-				return req, rawBody, close, errors.Wrap(err, "query")
 			}
 		}
 		{
