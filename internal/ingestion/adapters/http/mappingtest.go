@@ -41,14 +41,36 @@ func (h *ConnectionHandler) TestCsvMapping(ctx context.Context, req *oas.CsvMapp
 		return nil, fmt.Errorf("test CSV mapping: %w", err)
 	}
 
+	rows, err := parsedRowsOut(sample.Rows, sample.Currency)
+	if err != nil {
+		return nil, err
+	}
+
+	lastRows, err := parsedRowsOut(sample.LastRows, sample.Currency)
+	if err != nil {
+		return nil, err
+	}
+
 	out := &oas.CsvMappingTest{
-		Rows:             make([]oas.ParsedStatementRow, 0, len(sample.Rows)),
+		Rows:             rows,
+		LastRows:         lastRows,
 		ReadableRowCount: int32(sample.Readable), //nolint:gosec // a statement file is far smaller
 		UnreadableRows:   make([]oas.RowError, 0, len(sample.Unreadable)),
 	}
 
-	for _, r := range sample.Rows {
-		amount, err := money(r.Amount, sample.Currency)
+	for _, r := range sample.Unreadable {
+		out.UnreadableRows = append(out.UnreadableRows, oas.RowError{Line: int32(r.Line), Reason: r.Reason}) //nolint:gosec // a statement file is far smaller
+	}
+
+	return out, nil
+}
+
+// parsedRowsOut writes statement rows as the mapping test shows them.
+func parsedRowsOut(rows []domain.StatementRow, currency string) ([]oas.ParsedStatementRow, error) {
+	out := make([]oas.ParsedStatementRow, 0, len(rows))
+
+	for _, r := range rows {
+		amount, err := money(r.Amount, currency)
 		if err != nil {
 			return nil, err
 		}
@@ -73,11 +95,7 @@ func (h *ConnectionHandler) TestCsvMapping(ctx context.Context, req *oas.CsvMapp
 			row.BankTransactionID = oas.NewOptString(r.BankTransactionID)
 		}
 
-		out.Rows = append(out.Rows, row)
-	}
-
-	for _, r := range sample.Unreadable {
-		out.UnreadableRows = append(out.UnreadableRows, oas.RowError{Line: int32(r.Line), Reason: r.Reason}) //nolint:gosec // a statement file is far smaller
+		out = append(out, row)
 	}
 
 	return out, nil

@@ -12,18 +12,21 @@ import (
 	"github.com/mumia/wallet-accountant/internal/apitest"
 )
 
+type parsedRow struct {
+	Line              int     `json:"line"`
+	BookingDate       string  `json:"booking_date"`
+	TransactionDate   string  `json:"transaction_date"`
+	ValueDate         *string `json:"value_date"`
+	Description       string  `json:"description"`
+	Payee             *string `json:"payee"`
+	BankTransactionID *string `json:"bank_transaction_id"`
+	Amount            money   `json:"amount"`
+}
+
 type mappingTest struct {
-	Rows []struct {
-		Line              int     `json:"line"`
-		BookingDate       string  `json:"booking_date"`
-		TransactionDate   string  `json:"transaction_date"`
-		ValueDate         *string `json:"value_date"`
-		Description       string  `json:"description"`
-		Payee             *string `json:"payee"`
-		BankTransactionID *string `json:"bank_transaction_id"`
-		Amount            money   `json:"amount"`
-	} `json:"rows"`
-	ReadableRowCount int `json:"readable_row_count"`
+	Rows             []parsedRow `json:"rows"`
+	LastRows         []parsedRow `json:"last_rows"`
+	ReadableRowCount int         `json:"readable_row_count"`
 	UnreadableRows   []struct {
 		Line   int    `json:"line"`
 		Reason string `json:"reason"`

@@ -1272,6 +1272,9 @@ type CsvMapping struct {
 	HasHeaderRow OptBool `json:"has_header_row"`
 	// How many lines to skip before the header row or the first row.
 	SkipLeadingLines OptInt32 `json:"skip_leading_lines"`
+	// How many lines to skip at the end of the file, after the last row, such as totals or a closing
+	// balance; blank lines at the very end aren't counted.
+	SkipTrailingLines OptInt32 `json:"skip_trailing_lines"`
 	// How dates are written.
 	DateFormat OptString `json:"date_format"`
 	// The decimal separator.
@@ -1303,6 +1306,11 @@ func (s *CsvMapping) GetHasHeaderRow() OptBool {
 // GetSkipLeadingLines returns the value of SkipLeadingLines.
 func (s *CsvMapping) GetSkipLeadingLines() OptInt32 {
 	return s.SkipLeadingLines
+}
+
+// GetSkipTrailingLines returns the value of SkipTrailingLines.
+func (s *CsvMapping) GetSkipTrailingLines() OptInt32 {
+	return s.SkipTrailingLines
 }
 
 // GetDateFormat returns the value of DateFormat.
@@ -1355,6 +1363,11 @@ func (s *CsvMapping) SetSkipLeadingLines(val OptInt32) {
 	s.SkipLeadingLines = val
 }
 
+// SetSkipTrailingLines sets the value of SkipTrailingLines.
+func (s *CsvMapping) SetSkipTrailingLines(val OptInt32) {
+	s.SkipTrailingLines = val
+}
+
 // SetDateFormat sets the value of DateFormat.
 func (s *CsvMapping) SetDateFormat(val OptString) {
 	s.DateFormat = val
@@ -1390,6 +1403,9 @@ func (s *CsvMapping) SetColumns(val OptCsvColumns) {
 type CsvMappingTest struct {
 	// The first 10 readable rows, in file order.
 	Rows []ParsedStatementRow `json:"rows"`
+	// The last 10 readable rows that aren't already in `rows`, in file order, to check how the end of the
+	// file reads; empty when the file has 10 readable rows or fewer.
+	LastRows []ParsedStatementRow `json:"last_rows"`
 	// How many rows of the whole file are readable.
 	ReadableRowCount int32 `json:"readable_row_count"`
 	// Every line of the whole file that can't be read, with the reason; empty when all can.
@@ -1399,6 +1415,11 @@ type CsvMappingTest struct {
 // GetRows returns the value of Rows.
 func (s *CsvMappingTest) GetRows() []ParsedStatementRow {
 	return s.Rows
+}
+
+// GetLastRows returns the value of LastRows.
+func (s *CsvMappingTest) GetLastRows() []ParsedStatementRow {
+	return s.LastRows
 }
 
 // GetReadableRowCount returns the value of ReadableRowCount.
@@ -1414,6 +1435,11 @@ func (s *CsvMappingTest) GetUnreadableRows() []RowError {
 // SetRows sets the value of Rows.
 func (s *CsvMappingTest) SetRows(val []ParsedStatementRow) {
 	s.Rows = val
+}
+
+// SetLastRows sets the value of LastRows.
+func (s *CsvMappingTest) SetLastRows(val []ParsedStatementRow) {
+	s.LastRows = val
 }
 
 // SetReadableRowCount sets the value of ReadableRowCount.

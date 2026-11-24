@@ -26,6 +26,7 @@ http:
         "delimiter": ";",
         "has_header_row": false,
         "skip_leading_lines": 0,
+        "skip_trailing_lines": 0,
         "date_format": "DD/MM/YYYY",
         "decimal_separator": ",",
         "thousands_separator": ".",

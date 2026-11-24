@@ -125,6 +125,90 @@ func TestParsingSkipsLeadingLines(t *testing.T) {
 	})
 }
 
+func TestParsingSkipsTrailingLines(t *testing.T) {
+	t.Parallel()
+
+	m := signedMapping()
+	m.SkipTrailingLines = 2
+
+	got := parse(t, m, "Date;Description;Amount\n01/02/2026;Coffee;-1,00\n02/02/2026;Salary;2.000,00\n"+
+		"Total;;1.999,00\nGenerated on 24/11/2026\n")
+
+	assertRows(t, got, []row{
+		{Line: 2, BookingDate: "2026-02-01", TransactionDate: "2026-02-01", Description: "Coffee", Amount: "-1"},
+		{Line: 3, BookingDate: "2026-02-02", TransactionDate: "2026-02-02", Description: "Salary", Amount: "2000"},
+	})
+}
+
+func TestParsingReportsAFooterThatIsNotSkipped(t *testing.T) {
+	t.Parallel()
+
+	_, err := domain.ParseStatementFile(signedMapping(), []byte("Date;Description;Amount\n01/02/2026;Coffee;-1,00\n"+
+		"Total;;-1,00\nGenerated on 24/11/2026\n"))
+
+	assertRowErrors(t, err, []int{3, 4})
+}
+
+func TestParsingDoesNotCountBlankLinesAtTheEndAsTrailingLines(t *testing.T) {
+	t.Parallel()
+
+	m := signedMapping()
+	m.SkipTrailingLines = 1
+
+	want := []row{{Line: 2, BookingDate: "2026-02-01", TransactionDate: "2026-02-01", Description: "Coffee", Amount: "-1"}}
+
+	for name, file := range map[string]string{
+		"a final line break":           "Date;Description;Amount\n01/02/2026;Coffee;-1,00\nTotal;;-1,00\n",
+		"no final line break":          "Date;Description;Amount\n01/02/2026;Coffee;-1,00\nTotal;;-1,00",
+		"blank lines at the end":       "Date;Description;Amount\n01/02/2026;Coffee;-1,00\nTotal;;-1,00\n\n\n",
+		"whitespace lines at the end":  "Date;Description;Amount\n01/02/2026;Coffee;-1,00\nTotal;;-1,00\n  \n\t\n ",
+		"Windows line breaks":          "Date;Description;Amount\r\n01/02/2026;Coffee;-1,00\r\nTotal;;-1,00\r\n\r\n",
+		"a final line with whitespace": "Date;Description;Amount\n01/02/2026;Coffee;-1,00\nTotal;;-1,00  \n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assertRows(t, parse(t, m, file), want)
+		})
+	}
+}
+
+func TestParsingSkipsLeadingAndTrailingLinesTogether(t *testing.T) {
+	t.Parallel()
+
+	m := signedMapping()
+	m.SkipLeadingLines = 2
+	m.SkipTrailingLines = 1
+
+	got := parse(t, m, "Bank export\nAccount 123\nDate;Description;Amount\n01/02/2026;Coffee;-1,00\n"+
+		"02/02/2026;Tea;-2,00\nClosing balance;;97,00\n")
+
+	assertRows(t, got, []row{
+		{Line: 4, BookingDate: "2026-02-01", TransactionDate: "2026-02-01", Description: "Coffee", Amount: "-1"},
+		{Line: 5, BookingDate: "2026-02-02", TransactionDate: "2026-02-02", Description: "Tea", Amount: "-2"},
+	})
+}
+
+func TestParsingSkipsThatCoverTheWholeFileGiveNoRows(t *testing.T) {
+	t.Parallel()
+
+	for name, skip := range map[string][2]int{
+		"trailing only":        {0, 4},
+		"more than the file":   {0, 10},
+		"leading and trailing": {2, 2},
+		"overlapping":          {3, 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := signedMapping()
+			m.SkipLeadingLines, m.SkipTrailingLines = skip[0], skip[1]
+
+			assertRows(t, parse(t, m, "Bank export\nDate;Description;Amount\n01/02/2026;Coffee;-1,00\nTotal;;-1,00\n\n"), []row{})
+		})
+	}
+}
+
 func TestParsingEveryOptionalField(t *testing.T) {
 	t.Parallel()
 

@@ -4644,6 +4644,12 @@ func (s *CsvMapping) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.SkipTrailingLines.Set {
+			e.FieldStart("skip_trailing_lines")
+			s.SkipTrailingLines.Encode(e)
+		}
+	}
+	{
 		if s.DateFormat.Set {
 			e.FieldStart("date_format")
 			s.DateFormat.Encode(e)
@@ -4681,17 +4687,18 @@ func (s *CsvMapping) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfCsvMapping = [10]string{
-	0: "encoding",
-	1: "delimiter",
-	2: "has_header_row",
-	3: "skip_leading_lines",
-	4: "date_format",
-	5: "decimal_separator",
-	6: "thousands_separator",
-	7: "amount_layout",
-	8: "positive_amount_means",
-	9: "columns",
+var jsonFieldsNameOfCsvMapping = [11]string{
+	0:  "encoding",
+	1:  "delimiter",
+	2:  "has_header_row",
+	3:  "skip_leading_lines",
+	4:  "skip_trailing_lines",
+	5:  "date_format",
+	6:  "decimal_separator",
+	7:  "thousands_separator",
+	8:  "amount_layout",
+	9:  "positive_amount_means",
+	10: "columns",
 }
 
 // Decode decodes CsvMapping from json.
@@ -4742,6 +4749,16 @@ func (s *CsvMapping) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"skip_leading_lines\"")
+			}
+		case "skip_trailing_lines":
+			if err := func() error {
+				s.SkipTrailingLines.Reset()
+				if err := s.SkipTrailingLines.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"skip_trailing_lines\"")
 			}
 		case "date_format":
 			if err := func() error {
@@ -4845,6 +4862,14 @@ func (s *CsvMappingTest) encodeFields(e *jx.Encoder) {
 		e.ArrEnd()
 	}
 	{
+		e.FieldStart("last_rows")
+		e.ArrStart()
+		for _, elem := range s.LastRows {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
 		e.FieldStart("readable_row_count")
 		e.Int32(s.ReadableRowCount)
 	}
@@ -4858,10 +4883,11 @@ func (s *CsvMappingTest) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfCsvMappingTest = [3]string{
+var jsonFieldsNameOfCsvMappingTest = [4]string{
 	0: "rows",
-	1: "readable_row_count",
-	2: "unreadable_rows",
+	1: "last_rows",
+	2: "readable_row_count",
+	3: "unreadable_rows",
 }
 
 // Decode decodes CsvMappingTest from json.
@@ -4891,8 +4917,26 @@ func (s *CsvMappingTest) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"rows\"")
 			}
-		case "readable_row_count":
+		case "last_rows":
 			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				s.LastRows = make([]ParsedStatementRow, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem ParsedStatementRow
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.LastRows = append(s.LastRows, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_rows\"")
+			}
+		case "readable_row_count":
+			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
 				v, err := d.Int32()
 				s.ReadableRowCount = int32(v)
@@ -4904,7 +4948,7 @@ func (s *CsvMappingTest) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"readable_row_count\"")
 			}
 		case "unreadable_rows":
-			requiredBitSet[0] |= 1 << 2
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				s.UnreadableRows = make([]RowError, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -4931,7 +4975,7 @@ func (s *CsvMappingTest) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000111,
+		0b00001111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

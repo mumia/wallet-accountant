@@ -41,6 +41,53 @@ func TestASampleShowsTheFirstTenRowsAndCountsThemAll(t *testing.T) {
 	}
 }
 
+func TestASampleShowsTheLastReadableRowsNotAlreadyShown(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		rows      int
+		wantLines []int
+	}{
+		{rows: 5, wantLines: []int{}},
+		{rows: 10, wantLines: []int{}},
+		{rows: 15, wantLines: []int{12, 13, 14, 15, 16}},
+		{rows: 30, wantLines: []int{22, 23, 24, 25, 26, 27, 28, 29, 30, 31}},
+	} {
+		t.Run(fmt.Sprintf("%d rows", tc.rows), func(t *testing.T) {
+			t.Parallel()
+
+			var file strings.Builder
+
+			file.WriteString("Date;Description;Amount\n")
+
+			for i := 1; i <= tc.rows; i++ {
+				fmt.Fprintf(&file, "01/12/2025;Row %d;-%d,00\n", i, i)
+			}
+
+			// An unreadable line among the last rows isn't one of them.
+			file.WriteString("Total;;-1,00\n")
+
+			s, err := domain.ReadSample(signedMapping(), []byte(file.String()), currency(t, "EUR"))
+			if err != nil {
+				t.Fatalf("ReadSample: %v", err)
+			}
+
+			lines := make([]int, 0, len(s.LastRows))
+			for _, r := range s.LastRows {
+				lines = append(lines, r.Line)
+			}
+
+			if !reflect.DeepEqual(lines, tc.wantLines) {
+				t.Errorf("last rows are lines %v, want %v", lines, tc.wantLines)
+			}
+
+			if s.Readable != tc.rows || len(s.Rows) != min(tc.rows, domain.SampleRows) || len(s.Unreadable) != 1 {
+				t.Errorf("sample = %d rows of %d readable, %v unreadable", len(s.Rows), s.Readable, s.Unreadable)
+			}
+		})
+	}
+}
+
 func TestASampleCollectsReadableRowsAndUnreadableLinesTogether(t *testing.T) {
 	t.Parallel()
 

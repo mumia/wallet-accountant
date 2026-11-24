@@ -2303,6 +2303,11 @@ components:
           format: int32
           description: How many lines to skip before the header row or the first row
           default: 0
+        skip_trailing_lines:
+          type: integer
+          format: int32
+          description: How many lines to skip at the end of the file, after the last row, such as totals or a closing balance; blank lines at the very end aren't counted
+          default: 0
         date_format:
           type: string
           description: How dates are written
@@ -2408,12 +2413,22 @@ components:
       description: A sample statement file as an unsaved CSV mapping reads it; nothing is recorded
       required:
         - rows
+        - last_rows
         - readable_row_count
         - unreadable_rows
       properties:
         rows:
           type: array
           description: The first 10 readable rows, in file order
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/ParsedStatementRow'
+        last_rows:
+          type: array
+          description: |
+            The last 10 readable rows that aren't already in `rows`, in file
+            order, to check how the end of the file reads; empty when the
+            file has 10 readable rows or fewer
           maxItems: 10
           items:
             $ref: '#/components/schemas/ParsedStatementRow'

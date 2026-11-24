@@ -17,6 +17,10 @@ func (s *CsvMapping) setDefaults() {
 		s.SkipLeadingLines.SetTo(val)
 	}
 	{
+		val := int32(0)
+		s.SkipTrailingLines.SetTo(val)
+	}
+	{
 		val := string("")
 		s.ThousandsSeparator.SetTo(val)
 	}
