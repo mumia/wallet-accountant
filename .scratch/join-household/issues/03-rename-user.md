@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `RenameUser` → `user.renamed { displayname }`, registered on the codec. The name is trimmed; a blank one gets 422; the same name records nothing
 - [ ] It runs in instance scope on the caller's own User. Delete the `changeMe` stub
