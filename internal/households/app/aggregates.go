@@ -14,6 +14,7 @@ const (
 	InvitationIssuedType   = "io.walletaccountant.households.invitation.issued.v1"
 	InvitationReissuedType = "io.walletaccountant.households.invitation.reissued.v1"
 	InvitationRedeemedType = "io.walletaccountant.households.invitation.redeemed.v1"
+	InvitationRevokedType  = "io.walletaccountant.households.invitation.revoked.v1"
 
 	UserStreamType     = "households.user"
 	UserRegisteredType = "io.walletaccountant.households.user.registered.v1"
@@ -61,6 +62,7 @@ func NewInvitationAggregate(folds eventstore.FoldStore[domain.InvitationState]) 
 	eventstore.Register[domain.InvitationEvent, domain.InvitationIssued](codec, InvitationIssuedType)
 	eventstore.Register[domain.InvitationEvent, domain.InvitationReissued](codec, InvitationReissuedType)
 	eventstore.Register[domain.InvitationEvent, domain.InvitationRedeemed](codec, InvitationRedeemedType)
+	eventstore.Register[domain.InvitationEvent, domain.InvitationRevoked](codec, InvitationRevokedType)
 
 	return InvitationAggregate{
 		StreamType:        InvitationStreamType,

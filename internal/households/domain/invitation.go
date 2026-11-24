@@ -52,6 +52,10 @@ var (
 	// Household on a stream that already has one: each issue is a new
 	// stream, never a reissue.
 	ErrInvitationAlreadyIssued = errors.New("invitation already issued")
+	// ErrInvitationRevoked is returned for revoking an Invitation that was
+	// already revoked. Redeeming a revoked one gets ErrWrongInvitationCode,
+	// so a revoked code can't be told from a wrong one.
+	ErrInvitationRevoked = errors.New("invitation revoked")
 )
 
 // CodeHash is the SHA-256 hash of an Invitation code, hex-encoded. Only the
@@ -82,6 +86,7 @@ type InvitationState struct {
 	ExpiresAt  time.Time
 	RedeemedBy sharedkernel.ID
 	RedeemedAt time.Time
+	RevokedAt  time.Time
 
 	// HouseholdID is the Household an Invitation to a Household admits to,
 	// from its issue's envelope; sharedkernel.NilID for an instance-level
@@ -96,6 +101,9 @@ type InvitationState struct {
 
 // Redeemed reports whether the Invitation was redeemed.
 func (s InvitationState) Redeemed() bool { return s.RedeemedBy != sharedkernel.NilID }
+
+// Revoked reports whether the Invitation was revoked.
+func (s InvitationState) Revoked() bool { return !s.RevokedAt.IsZero() }
 
 type (
 	// InvitationCommand is a command to an Invitation.
@@ -127,9 +135,15 @@ type RedeemInvitation struct {
 	At       time.Time
 }
 
+// RevokeInvitation revokes the Invitation while it is unredeemed, whichever
+// member issued it. It judges no expiry: revoking an expired code does no
+// harm.
+type RevokeInvitation struct{}
+
 func (IssueInvitation) isInvitationCommand()          {}
 func (IssueHouseholdInvitation) isInvitationCommand() {}
 func (RedeemInvitation) isInvitationCommand()         {}
+func (RevokeInvitation) isInvitationCommand()         {}
 
 type (
 	// InvitationEvent is an Invitation's event.
@@ -155,11 +169,16 @@ type (
 	InvitationRedeemed struct {
 		UserID sharedkernel.ID `json:"userid"`
 	}
+
+	// InvitationRevoked is recorded when a member revokes the Invitation.
+	// The member is the envelope's actor and the time its time.
+	InvitationRevoked struct{}
 )
 
 func (InvitationIssued) isInvitationEvent()   {}
 func (InvitationReissued) isInvitationEvent() {}
 func (InvitationRedeemed) isInvitationEvent() {}
+func (InvitationRevoked) isInvitationEvent()  {}
 
 // Invitation is the Invitation Decider: the bootstrap Invitation in instance
 // scope (ADR-0017), and Invitations to a Household in that Household's scope.
@@ -192,6 +211,8 @@ func decideInvitation(s InvitationState, c InvitationCommand) ([]InvitationEvent
 			return nil, ErrInvitationNotIssued
 		case subtle.ConstantTimeCompare([]byte(s.CodeHash), []byte(c.CodeHash)) != 1:
 			return nil, ErrWrongInvitationCode
+		case s.Revoked():
+			return nil, ErrWrongInvitationCode
 		case s.Redeemed():
 			return nil, ErrInvitationAlreadyRedeemed
 		case !c.At.Before(s.ExpiresAt):
@@ -199,6 +220,17 @@ func decideInvitation(s InvitationState, c InvitationCommand) ([]InvitationEvent
 		}
 
 		return []InvitationEvent{InvitationRedeemed{UserID: c.UserID}}, nil
+	case RevokeInvitation:
+		switch {
+		case !s.Issued:
+			return nil, ErrInvitationNotIssued
+		case s.Redeemed():
+			return nil, ErrInvitationAlreadyRedeemed
+		case s.Revoked():
+			return nil, ErrInvitationRevoked
+		}
+
+		return []InvitationEvent{InvitationRevoked{}}, nil
 	default:
 		return nil, nil
 	}
@@ -215,6 +247,8 @@ func evolveInvitation(s InvitationState, e decider.Envelope[InvitationEvent]) In
 		s.CodeHash, s.ExpiresAt = ev.CodeHash, ev.ExpiresAt
 	case InvitationRedeemed:
 		s.RedeemedBy, s.RedeemedAt = ev.UserID, e.Time
+	case InvitationRevoked:
+		s.RevokedAt = e.Time
 	}
 
 	return s

@@ -68,6 +68,20 @@ func (InvitationReader) OpenInvitations(ctx context.Context, tx *eventstore.Tx, 
 	return list, nil
 }
 
+// IsOpen implements app.InvitationReader.
+func (InvitationReader) IsOpen(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, at time.Time) (bool, error) {
+	var open bool
+
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM household_invitations
+		WHERE household_id = $1 AND id = $2 AND redeemed_by IS NULL AND revoked_at IS NULL AND expires_at > $3)`,
+		tx.HouseholdID(), id, at).Scan(&open)
+	if err != nil {
+		return false, fmt.Errorf("check open invitation: %w", err)
+	}
+
+	return open, nil
+}
+
 // displayNames returns the display names of the Users who have one. The
 // transaction must be in instance scope.
 func displayNames(ctx context.Context, tx *eventstore.Tx, users []uuid.UUID) (map[uuid.UUID]string, error) {
