@@ -90,6 +90,40 @@ func (u *Users) Me(ctx context.Context, id authn.Identity) (User, error) {
 	return user, nil
 }
 
+// Rename changes the display name of the User the identity belongs to. It
+// runs in instance scope, on the caller's own User only.
+func (u *Users) Rename(ctx context.Context, id authn.Identity, displayName string) (User, error) {
+	var user User
+
+	err := u.store.InTx(ctx, eventstore.Scope{}, func(ctx context.Context, tx *eventstore.Tx) error {
+		found, ok, err := u.lookups.UserByIdentity(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !ok {
+			return ErrRegistrationRequired
+		}
+
+		tx.SetActor(found.ID)
+
+		renamed, err := u.users.Execute(ctx, tx, found.ID, domain.RenameUser{DisplayName: displayName})
+		if err != nil {
+			return err //nolint:wrapcheck // the domain's or the runtime's error
+		}
+
+		user = found
+		user.DisplayName = renamed.State.DisplayName
+
+		return nil
+	})
+	if err != nil {
+		return User{}, fmt.Errorf("rename user: %w", err)
+	}
+
+	return user, nil
+}
+
 // Register redeems the Invitation code for the identity and registers it as
 // a User with the Invitation's role and the display name it chose. The Invitation and the User are decided
 // in one database transaction, each under its own version check, so two

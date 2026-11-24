@@ -17,6 +17,7 @@ const (
 
 	UserStreamType     = "households.user"
 	UserRegisteredType = "io.walletaccountant.households.user.registered.v1"
+	UserRenamedType    = "io.walletaccountant.households.user.renamed.v1"
 
 	HouseholdStreamType      = "households.household"
 	HouseholdCreatedType     = "io.walletaccountant.households.household.created.v1"
@@ -74,6 +75,7 @@ func NewInvitationAggregate(folds eventstore.FoldStore[domain.InvitationState]) 
 func NewUserAggregate(folds eventstore.FoldStore[domain.UserState]) UserAggregate {
 	codec := eventstore.NewCodec[domain.UserEvent](Source)
 	eventstore.Register[domain.UserEvent, domain.UserRegistered](codec, UserRegisteredType)
+	eventstore.Register[domain.UserEvent, domain.UserRenamed](codec, UserRenamedType)
 
 	return UserAggregate{
 		StreamType:        UserStreamType,

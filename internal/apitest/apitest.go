@@ -43,6 +43,9 @@ type App struct {
 	users   *householdsapp.Users
 	cfg     config.Config
 	tel     *telemetry.Telemetry
+	// ownerURL connects as wa_owner, for the few tests that must write what
+	// the application can't, such as events from before a change.
+	ownerURL string
 
 	// Logs holds every JSON log record written to stdout.
 	Logs *Buffer
@@ -105,7 +108,7 @@ func Start(t testing.TB, opts ...Option) *App {
 		ShutdownTimeout:   5 * time.Second,
 	}
 
-	app.cfg, app.tel = cfg, tel
+	app.cfg, app.tel, app.ownerURL = cfg, tel, urls.Owner
 
 	app.reader, err = pgxpool.New(ctx, urls.Reader)
 	if err != nil {

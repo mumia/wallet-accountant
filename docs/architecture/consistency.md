@@ -8,6 +8,7 @@ Every spec that adds or changes a command adds or updates its row here. Code rev
 |---|---|---|---|
 | Issue bootstrap Invitation | Households | Bootstrap Invitation issued, or reissued with a new code if still unredeemed; its code lookup row updated | — |
 | Redeem Invitation | Households | Invitation redeemed; User registered with the Invitation's role and its identity lookup row saved | — |
+| Rename User | Households | The caller's own User found by their identity (instance scope); `user.renamed` recorded with the trimmed display name (refused when blank; nothing recorded for the same name); the User's row and its display name saved | — |
 | Create Household | Households → Ledger | Household created; creator added as member, with the User's membership index row; the three Internal Categories (Opening balance, Household transfer, Uncategorised) created | — |
 | Create Category | Ledger | Household's Category tree locked; parent and sibling names read and checked; Category created | — |
 | Add Account | Ledger | Account created, awaiting its first Statement import | — |

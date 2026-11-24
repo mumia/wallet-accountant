@@ -88,3 +88,60 @@ func TestTheInstanceAdministratorRoleMakesTheUserInstanceAdministrator(t *testin
 		t.Error("a User registered with the user role is Instance administrator")
 	}
 }
+
+func TestRenamingAUserRecordsTheTrimmedName(t *testing.T) {
+	t.Parallel()
+
+	past := []domain.UserEvent{domain.UserRegistered(register())}
+
+	decidertest.Given(t, domain.User, past...).
+		When(domain.RenameUser{DisplayName: "  Ana Lopes "}).
+		Then(domain.UserRenamed{DisplayName: "Ana Lopes"})
+}
+
+func TestRenamingChangesTheDisplayName(t *testing.T) {
+	t.Parallel()
+
+	past := []domain.UserEvent{domain.UserRegistered(register()), domain.UserRenamed{DisplayName: "Ana Lopes"}}
+
+	if name := decidertest.Given(t, domain.User, past...).State().DisplayName; name != "Ana Lopes" {
+		t.Errorf("display name = %q, want %q", name, "Ana Lopes")
+	}
+}
+
+func TestAUserRegisteredBeforeDisplayNamesCanSetOne(t *testing.T) {
+	t.Parallel()
+
+	legacy := domain.UserRegistered(register())
+	legacy.DisplayName = ""
+
+	decidertest.Given(t, domain.User, domain.UserEvent(legacy)).
+		When(domain.RenameUser{DisplayName: "Ana"}).
+		Then(domain.UserRenamed{DisplayName: "Ana"})
+}
+
+func TestRenamingToTheSameNameRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	past := []domain.UserEvent{domain.UserRegistered(register())}
+
+	decidertest.Given(t, domain.User, past...).When(domain.RenameUser{DisplayName: " Ana "}).Then()
+}
+
+func TestRenamingToABlankNameIsRefused(t *testing.T) {
+	t.Parallel()
+
+	past := []domain.UserEvent{domain.UserRegistered(register())}
+
+	decidertest.Given(t, domain.User, past...).
+		When(domain.RenameUser{DisplayName: " \t "}).
+		ThenError(domain.ErrDisplayNameRequired)
+}
+
+func TestRenamingAnUnregisteredUserIsRefused(t *testing.T) {
+	t.Parallel()
+
+	decidertest.Given(t, domain.User).
+		When(domain.RenameUser{DisplayName: "Ana"}).
+		ThenError(domain.ErrUserNotRegistered)
+}
