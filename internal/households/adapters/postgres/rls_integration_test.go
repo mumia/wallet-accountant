@@ -40,7 +40,7 @@ func TestHouseholdMembersAreIsolatedByRowLevelSecurity(t *testing.T) {
 		Name:  "household_members",
 		Setup: insertHousehold,
 		Insert: func(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
-			_, err := tx.Exec(ctx, `INSERT INTO household_members (household_id, user_id) VALUES ($1, $2)`,
+			_, err := tx.Exec(ctx, `INSERT INTO household_members (household_id, user_id, joined_at) VALUES ($1, $2, now())`,
 				household, uuid.New())
 
 			return err

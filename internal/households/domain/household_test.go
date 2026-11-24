@@ -2,9 +2,11 @@ package domain_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/mumia/wallet-accountant/internal/households/domain"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
+	"github.com/mumia/wallet-accountant/internal/sharedkernel/decider"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel/decider/decidertest"
 )
 
@@ -50,6 +52,20 @@ func TestTheFoldHoldsTheHouseholdAndItsMembers(t *testing.T) {
 
 	if s.IsMember(sharedkernel.MustParseID("019a8b2c-0000-7000-8000-0000000000c2")) {
 		t.Error("someone who never joined is a member")
+	}
+}
+
+func TestAMemberJoinedWhenTheirMemberAddedEventOccurred(t *testing.T) {
+	t.Parallel()
+
+	created := time.Date(2026, time.March, 10, 9, 0, 0, 0, time.UTC)
+	s := domain.Household.Evolve(domain.HouseholdState{},
+		decider.Envelope[domain.HouseholdEvent]{Time: created, Event: domain.HouseholdCreated{Name: "Home", BaseCurrency: "EUR"}})
+	s = domain.Household.Evolve(s,
+		decider.Envelope[domain.HouseholdEvent]{Time: created, Event: domain.HouseholdMemberAdded{UserID: creator}})
+
+	if got := s.JoinedAt[creator]; !got.Equal(created) {
+		t.Errorf("creator joined at %v, want %v", got, created)
 	}
 }
 

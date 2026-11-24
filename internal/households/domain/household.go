@@ -2,8 +2,10 @@ package domain
 
 import (
 	"errors"
+	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 	"github.com/mumia/wallet-accountant/internal/sharedkernel/decider"
@@ -22,6 +24,9 @@ type HouseholdState struct {
 	Name         string
 	BaseCurrency string
 	Members      []sharedkernel.ID
+	// JoinedAt is when each member joined: the time of their memberadded
+	// event.
+	JoinedAt map[sharedkernel.ID]time.Time
 }
 
 // IsMember reports whether the User belongs to the Household.
@@ -103,6 +108,13 @@ func evolveHousehold(s HouseholdState, e decider.Envelope[HouseholdEvent]) House
 	case HouseholdMemberAdded:
 		if !s.IsMember(ev.UserID) {
 			s.Members = append(slices.Clone(s.Members), ev.UserID)
+			s.JoinedAt = maps.Clone(s.JoinedAt)
+
+			if s.JoinedAt == nil {
+				s.JoinedAt = map[sharedkernel.ID]time.Time{}
+			}
+
+			s.JoinedAt[ev.UserID] = e.Time
 		}
 	}
 
