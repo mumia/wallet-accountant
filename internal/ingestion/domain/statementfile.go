@@ -101,7 +101,7 @@ func collectStatementFile(m CSVMapping, file []byte, places int32) ([]StatementR
 	}
 
 	file, skipped := skipLines(text, m.SkipLeadingLines)
-	file = dropTrailingLines(file, m.SkipTrailingLines)
+	file = skipTrailingLines(file, m.SkipTrailingLines)
 
 	r := csv.NewReader(bytes.NewReader(file))
 	r.Comma, _ = utf8.DecodeRuneInString(m.Delimiter)
@@ -169,9 +169,10 @@ func skipLines(file []byte, n int) ([]byte, int) {
 	return file, skipped
 }
 
-// dropTrailingLines drops the final line break of file and any lines at
-// its very end that are empty or only whitespace, then its last n lines.
-func dropTrailingLines(file []byte, n int) []byte {
+// skipTrailingLines drops the final line break of file and any lines at
+// its very end that are empty or only whitespace, then its last n lines,
+// leaving no line break (or carriage return) at the end.
+func skipTrailingLines(file []byte, n int) []byte {
 	last := bytes.LastIndexFunc(file, func(r rune) bool { return !unicode.IsSpace(r) })
 	if last < 0 {
 		return nil
@@ -408,9 +409,11 @@ func ReadSample(m CSVMapping, file []byte, currency sharedkernel.Currency) (Samp
 		return Sample{}, ErrEmptyStatementFile
 	}
 
+	shown := min(len(rows), SampleRows)
+
 	return Sample{
-		Rows:       rows[:min(len(rows), SampleRows)],
-		LastRows:   rows[max(len(rows)-SampleRows, min(len(rows), SampleRows)):],
+		Rows:       rows[:shown],
+		LastRows:   rows[max(len(rows)-SampleRows, shown):],
 		Readable:   len(rows),
 		Unreadable: append([]RowError{}, unreadable...),
 	}, nil
