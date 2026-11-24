@@ -3,9 +3,11 @@
 package http_test
 
 import (
+	"encoding/binary"
 	"net/http"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/mumia/wallet-accountant/internal/apitest"
 )
@@ -61,6 +63,75 @@ func TestImportingAWindows1252File(t *testing.T) {
 		AssertJSON(t, http.StatusOK, &connection{})
 
 	si := f.confirm(t, windows1252Statement, "896.50")
+	if si.RowsImported != 2 {
+		t.Errorf("statement import = %+v, want 2 rows imported", si)
+	}
+
+	got := map[string]string{}
+	for _, it := range f.imported(t, "").Items {
+		got[it.Description] = string(it.Amount.Amount)
+	}
+
+	want := map[string]string{"Café Procès": "-3.50", "Transfer 100€": "-100.00"}
+	if len(got) != len(want) || got["Café Procès"] != want["Café Procès"] || got["Transfer 100€"] != want["Transfer 100€"] {
+		t.Errorf("Imported transactions = %v, want %v", got, want)
+	}
+}
+
+// utf16Statement is windows1252Statement's rows as Excel's "Unicode Text"
+// export writes them: UTF-16, little-endian, after the byte order mark.
+var utf16Statement = encodeUTF16LE("\ufeffDate;Description;Amount\n" +
+	"01/02/2026;Café Procès;-3,50\n" +
+	"02/02/2026;Transfer 100€;-100,00\n")
+
+func encodeUTF16LE(text string) string {
+	var out []byte
+	for _, u := range utf16.Encode([]rune(text)) {
+		out = binary.LittleEndian.AppendUint16(out, u)
+	}
+
+	return string(out)
+}
+
+func TestAMappingSavesTheUTF16Encoding(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, apitest.Start(t), "alice")
+	c := f.create(t, map[string]any{"name": "Statement file", "kind": "STATEMENT_FILE_IMPORT"})
+
+	var saved connection
+	f.app.Put(t, f.mappingOf(c), f.token, with(signed(), mapping{"encoding": "UTF_16"})).AssertJSON(t, http.StatusOK, &saved)
+
+	if saved.CSVMapping["encoding"] != "UTF_16" {
+		t.Errorf("saved encoding = %v, want UTF_16", saved.CSVMapping["encoding"])
+	}
+
+	if got := f.list(t); len(got) != 1 || got[0].CSVMapping["encoding"] != "UTF_16" {
+		t.Errorf("GET connections = %+v, want encoding UTF_16", got)
+	}
+}
+
+func TestTestingAMappingOnAUTF16Sample(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, apitest.Start(t), "alice")
+
+	var got mappingTest
+	f.testMapping(t, with(signed(), mapping{"encoding": "UTF_16"}), utf16Statement).AssertJSON(t, http.StatusOK, &got)
+
+	if len(got.Rows) != 2 || len(got.UnreadableRows) != 0 ||
+		got.Rows[0].Description != "Café Procès" || got.Rows[1].Description != "Transfer 100€" ||
+		got.Rows[1].Amount.Amount != "-100.00" {
+		t.Errorf("mapping test = %+v, want both rows read", got)
+	}
+}
+
+func TestImportingAUTF16File(t *testing.T) {
+	t.Parallel()
+	f := newImportFixture(t, apitest.Start(t), "alice")
+
+	f.app.Put(t, f.connections()+"/"+f.connection+"/csv-mapping", f.token, with(signed(), mapping{"encoding": "UTF_16"})).
+		AssertJSON(t, http.StatusOK, &connection{})
+
+	si := f.confirm(t, utf16Statement, "896.50")
 	if si.RowsImported != 2 {
 		t.Errorf("statement import = %+v, want 2 rows imported", si)
 	}

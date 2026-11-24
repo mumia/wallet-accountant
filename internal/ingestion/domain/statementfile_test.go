@@ -1,9 +1,11 @@
 package domain_test
 
 import (
+	"encoding/binary"
 	"errors"
 	"reflect"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/mumia/wallet-accountant/internal/ingestion/domain"
 )
@@ -310,6 +312,96 @@ func TestParsingAUTF8FileKeepsItsCharacters(t *testing.T) {
 	assertRows(t, got, []row{
 		{Line: 2, BookingDate: "2026-02-01", TransactionDate: "2026-02-01", Description: "Café 5€", Amount: "-3.5"},
 	})
+}
+
+// utf16File is a statement file with "é", "€" and a ";" delimiter, before
+// it is written as UTF-16, as Excel's "Unicode Text" export writes it.
+const utf16File = "Date;Description;Amount\n01/02/2026;Café 5€;-3,50\n"
+
+// encodeUTF16 writes text as UTF-16 code units in the byte order, after
+// the byte order mark when bom is set.
+func encodeUTF16(text string, order binary.AppendByteOrder, bom bool) string {
+	var out []byte
+
+	if bom {
+		out = order.AppendUint16(out, 0xFEFF)
+	}
+
+	for _, u := range utf16.Encode([]rune(text)) {
+		out = order.AppendUint16(out, u)
+	}
+
+	return string(out)
+}
+
+func TestParsingAUTF16File(t *testing.T) {
+	t.Parallel()
+
+	for name, file := range map[string]string{
+		"little-endian with a byte order mark":  encodeUTF16(utf16File, binary.LittleEndian, true),
+		"big-endian with a byte order mark":     encodeUTF16(utf16File, binary.BigEndian, true),
+		"little-endian with no byte order mark": encodeUTF16(utf16File, binary.LittleEndian, false),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := signedMapping()
+			m.Encoding = domain.EncodingUTF16
+
+			assertRows(t, parse(t, m, file), []row{
+				{Line: 2, BookingDate: "2026-02-01", TransactionDate: "2026-02-01", Description: "Café 5€", Amount: "-3.5"},
+			})
+		})
+	}
+}
+
+func TestParsingRefusesAUTF16FileWithAnOddNumberOfBytes(t *testing.T) {
+	t.Parallel()
+
+	m := signedMapping()
+	m.Encoding = domain.EncodingUTF16
+
+	_, err := domain.ParseStatementFile(m, []byte(encodeUTF16(utf16File, binary.LittleEndian, true)+"\n"))
+
+	assertUnreadableFile(t, err, "the file has an odd number of bytes, so it is not UTF-16")
+}
+
+func TestParsingRefusesAFileStartingWithAUTF16ByteOrderMarkUnlessTheEncodingIsUTF16(t *testing.T) {
+	t.Parallel()
+
+	for _, encoding := range []domain.Encoding{domain.EncodingUTF8, domain.EncodingWindows1252} {
+		for name, order := range map[string]binary.AppendByteOrder{
+			"little-endian": binary.LittleEndian,
+			"big-endian":    binary.BigEndian,
+		} {
+			t.Run(string(encoding)+" "+name, func(t *testing.T) {
+				t.Parallel()
+
+				m := signedMapping()
+				m.Encoding = encoding
+
+				_, err := domain.ParseStatementFile(m, []byte(encodeUTF16(utf16File, order, true)))
+
+				assertUnreadableFile(t, err, "the file starts with a UTF-16 byte order mark; set the mapping's encoding to UTF-16")
+			})
+		}
+	}
+}
+
+// assertUnreadableFile asserts the whole file was refused as one unreadable
+// row at line 1, for the reason.
+func assertUnreadableFile(t *testing.T, err error, reason string) {
+	t.Helper()
+
+	var rowsErr *domain.RowsError
+	if !errors.As(err, &rowsErr) || !errors.Is(err, domain.ErrUnreadableRows) {
+		t.Fatalf("err = %v, want a %T", err, rowsErr)
+	}
+
+	want := []domain.RowError{{Line: 1, Reason: reason}}
+	if !reflect.DeepEqual(rowsErr.Rows, want) {
+		t.Errorf("refused rows = %v, want %v", rowsErr.Rows, want)
+	}
 }
 
 func TestParsingAFileWithNoRows(t *testing.T) {

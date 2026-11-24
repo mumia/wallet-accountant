@@ -94,7 +94,12 @@ func collectStatementFile(m CSVMapping, file []byte, places int32) ([]StatementR
 		return nil, nil, err
 	}
 
-	file, skipped := skipLines(m.Encoding.decode(file), m.SkipLeadingLines)
+	text, err := m.Encoding.decode(file)
+	if err != nil {
+		return nil, []RowError{{Line: 1, Reason: err.Error()}}, nil
+	}
+
+	file, skipped := skipLines(text, m.SkipLeadingLines)
 
 	r := csv.NewReader(bytes.NewReader(file))
 	r.Comma, _ = utf8.DecodeRuneInString(m.Delimiter)
