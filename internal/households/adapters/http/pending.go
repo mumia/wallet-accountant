@@ -36,11 +36,6 @@ func (h *Handler) CreateMembership(context.Context, *oas.MembershipCreation, oas
 	return nil, httpapi.ErrNotImplemented
 }
 
-// ListMembers implements listMembers (ticket 08).
-func (h *Handler) ListMembers(context.Context, oas.ListMembersParams) (oas.ListMembersRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}
-
 // RemoveMember implements removeMember (ticket 09).
 func (h *Handler) RemoveMember(context.Context, oas.RemoveMemberParams) (oas.RemoveMemberRes, error) {
 	return nil, httpapi.ErrNotImplemented

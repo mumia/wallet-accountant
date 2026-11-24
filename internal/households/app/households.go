@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -42,6 +43,21 @@ type HouseholdLookups interface {
 	// IsMember reports whether the User is a member of the Household the
 	// transaction is set to.
 	IsMember(ctx context.Context, tx *eventstore.Tx, user uuid.UUID) (bool, error)
+	// Members returns the members of the Household the transaction is set
+	// to, oldest first, with their display names, which it reads in
+	// instance scope before setting the transaction back to the Household.
+	Members(ctx context.Context, tx *eventstore.Tx) ([]Member, error)
+}
+
+// Member is a User who belongs to a Household, as the members list shows
+// them.
+type Member struct {
+	UserID uuid.UUID
+	// DisplayName is empty for a User who registered before display names
+	// existed and hasn't set one.
+	DisplayName string
+	// JoinedAt is when they became a member.
+	JoinedAt time.Time
 }
 
 // InternalCategories is the Ledger's port that seeds a new Household's
@@ -209,6 +225,21 @@ func (h *Households) Get(ctx context.Context, household uuid.UUID) (Household, e
 	})
 
 	return got, err
+}
+
+// Members returns the members of a Household the caller of ctx is a member
+// of, oldest first.
+func (h *Households) Members(ctx context.Context, household uuid.UUID) ([]Member, error) {
+	var members []Member
+
+	err := h.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		var err error
+		members, err = h.lookups.Members(ctx, tx)
+
+		return err //nolint:wrapcheck // the adapter's error
+	})
+
+	return members, err
 }
 
 func (h *Households) resolve(ctx context.Context, tx *eventstore.Tx, id authn.Identity) (User, error) {

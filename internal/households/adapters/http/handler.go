@@ -177,6 +177,30 @@ func (h *Handler) GetHousehold(ctx context.Context, params oas.GetHouseholdParam
 	return householdResponse(got), nil
 }
 
+// ListMembers implements listMembers.
+func (h *Handler) ListMembers(ctx context.Context, params oas.ListMembersParams) (oas.ListMembersRes, error) {
+	members, err := h.households.Members(ctx, params.HouseholdID)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound):
+		return new(oas.ListMembersNotFound(httpapi.NotFoundProblem())), nil
+	case err != nil:
+		return nil, fmt.Errorf("list members: %w", err)
+	}
+
+	items := make([]oas.Member, 0, len(members))
+	for _, m := range members {
+		item := oas.Member{UserID: m.UserID, JoinedAt: m.JoinedAt}
+		if m.DisplayName != "" {
+			item.DisplayName = oas.NewOptDisplayNameOut(oas.DisplayNameOut(m.DisplayName))
+		}
+
+		items = append(items, item)
+	}
+
+	return &oas.MemberList{Items: items}, nil
+}
+
 func householdResponse(h app.Household) *oas.Household {
 	return &oas.Household{HouseholdID: h.ID, Name: h.Name, BaseCurrency: oas.CurrencyCode(h.BaseCurrency)}
 }
