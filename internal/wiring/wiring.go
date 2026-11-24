@@ -278,7 +278,7 @@ func runBootstrap(ctx context.Context, cfg config.Config, tel *telemetry.Telemet
 	}
 	defer pool.Close()
 
-	code, expiresAt, err := NewUsers(pool).IssueBootstrapInvitation(ctx)
+	code, expiresAt, err := NewUsers(pool, time.Now).IssueBootstrapInvitation(ctx)
 	if err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
 	}

@@ -91,3 +91,59 @@ func TestCreateHouseholdRefusals(t *testing.T) {
 		})
 	}
 }
+
+var (
+	joiner     = sharedkernel.MustParseID("019a8b2c-0000-7000-8000-0000000000c2")
+	invitation = sharedkernel.MustParseID("019a8b2c-0000-7000-8000-0000000000e1")
+)
+
+func created() []domain.HouseholdEvent {
+	return []domain.HouseholdEvent{
+		domain.HouseholdCreated{Name: "Home", BaseCurrency: "EUR"},
+		domain.HouseholdMemberAdded{UserID: creator},
+	}
+}
+
+func TestAddingAMemberByInvitation(t *testing.T) {
+	t.Parallel()
+
+	decidertest.Given(t, domain.Household, created()...).
+		When(domain.AddMember{UserID: joiner, InvitationID: invitation}).
+		Then(domain.HouseholdMemberAdded{UserID: joiner, InvitationID: invitation})
+
+	s := decidertest.Given(t, domain.Household,
+		append(created(), domain.HouseholdMemberAdded{UserID: joiner, InvitationID: invitation})...).State()
+
+	if !s.IsMember(joiner) || !s.IsMember(creator) {
+		t.Errorf("members = %v, want %v and %v", s.Members, creator, joiner)
+	}
+}
+
+func TestAddMemberRefusals(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		past []domain.HouseholdEvent
+		cmd  domain.AddMember
+		want error
+	}{
+		{
+			name: "an existing member",
+			past: created(),
+			cmd:  domain.AddMember{UserID: creator, InvitationID: invitation},
+			want: domain.ErrAlreadyAMember,
+		},
+		{
+			name: "a Household never created",
+			cmd:  domain.AddMember{UserID: joiner, InvitationID: invitation},
+			want: domain.ErrHouseholdNotCreated,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			decidertest.Given(t, domain.Household, tc.past...).When(tc.cmd).ThenError(tc.want)
+		})
+	}
+}

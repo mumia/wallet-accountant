@@ -97,10 +97,7 @@ func (h *Handler) CreateRegistration(ctx context.Context, req *oas.Registration,
 
 	switch {
 	case errors.Is(err, app.ErrInvalidInvitation):
-		p := httpapi.Problem(http.StatusUnprocessableEntity, InvalidInvitationType, "Invalid Invitation code",
-			"The Invitation code is unknown, expired, superseded or already used.")
-
-		return new(oas.CreateRegistrationUnprocessableEntity(p)), nil
+		return new(oas.CreateRegistrationUnprocessableEntity(invalidInvitation())), nil
 	case errors.Is(err, app.ErrAlreadyRegistered):
 		p := httpapi.Problem(http.StatusConflict, AlreadyRegisteredType, "Already registered",
 			"This identity is already a User.")
@@ -202,6 +199,13 @@ func householdResponse(h app.Household) *oas.Household {
 func blankDisplayName() oas.Problem {
 	return httpapi.Problem(http.StatusUnprocessableEntity, InvalidUserType, "Invalid User",
 		"The display name must not be blank.")
+}
+
+// invalidInvitation is the one problem for every code that can't be
+// redeemed, so codes can't be probed.
+func invalidInvitation() oas.Problem {
+	return httpapi.Problem(http.StatusUnprocessableEntity, InvalidInvitationType, "Invalid Invitation code",
+		"The Invitation code is unknown, expired, revoked, superseded or already used.")
 }
 
 func registrationRequired() oas.Problem {

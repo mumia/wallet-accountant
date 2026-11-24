@@ -15,12 +15,6 @@ func (h *Handler) RevokeInvitation(context.Context, oas.RevokeInvitationParams) 
 	return nil, httpapi.ErrNotImplemented
 }
 
-// CreateMembership implements createMembership (ticket 06).
-func (h *Handler) CreateMembership(context.Context, *oas.MembershipCreation, oas.CreateMembershipParams,
-) (oas.CreateMembershipRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}
-
 // ListMembers implements listMembers (ticket 08).
 func (h *Handler) ListMembers(context.Context, oas.ListMembersParams) (oas.ListMembersRes, error) {
 	return nil, httpapi.ErrNotImplemented

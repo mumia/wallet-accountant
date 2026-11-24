@@ -120,7 +120,7 @@ func Start(t testing.TB, opts ...Option) *App {
 		t.Fatalf("app pool: %v", err)
 	}
 
-	app.users = wiring.NewUsers(appPool)
+	app.users = wiring.NewUsers(appPool, time.Now)
 
 	done := make(chan error, 1)
 

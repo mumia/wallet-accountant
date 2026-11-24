@@ -293,19 +293,28 @@ type Lookups struct{}
 var _ app.Lookups = Lookups{}
 
 // InvitationByCode implements app.Lookups.
-func (Lookups) InvitationByCode(ctx context.Context, tx *eventstore.Tx, hash domain.CodeHash) (uuid.UUID, bool, error) {
-	var id uuid.UUID
+// The transaction must be in instance scope.
+func (Lookups) InvitationByCode(ctx context.Context, tx *eventstore.Tx, hash domain.CodeHash) (app.InvitationCode, bool, error) {
+	var (
+		found     app.InvitationCode
+		household *uuid.UUID
+	)
 
-	err := tx.QueryRow(ctx, `SELECT invitation_id FROM invitation_codes WHERE code_hash = $1`, hash).Scan(&id)
+	err := tx.QueryRow(ctx, `SELECT invitation_id, household_id FROM invitation_codes WHERE code_hash = $1`, hash).
+		Scan(&found.InvitationID, &household)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, false, nil
+		return app.InvitationCode{}, false, nil
 	}
 
 	if err != nil {
-		return uuid.Nil, false, fmt.Errorf("find invitation by code: %w", err)
+		return app.InvitationCode{}, false, fmt.Errorf("find invitation by code: %w", err)
 	}
 
-	return id, true, nil
+	if household != nil {
+		found.HouseholdID = *household
+	}
+
+	return found, true, nil
 }
 
 // UserByIdentity implements app.Lookups.

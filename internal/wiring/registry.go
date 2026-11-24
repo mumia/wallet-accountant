@@ -16,13 +16,15 @@ import (
 )
 
 // NewUsers builds the Households Users service on pool, which connects as
-// wa_app.
-func NewUsers(pool *pgxpool.Pool) *householdsapp.Users {
-	return householdsapp.NewUsers(eventstore.NewStore(pool),
+// wa_app. now is the clock its transactions read and that judges Invitation
+// expiry, time.Now outside tests.
+func NewUsers(pool *pgxpool.Pool, now func() time.Time) *householdsapp.Users {
+	return householdsapp.NewUsers(eventstore.NewStore(pool, eventstore.WithClock(now)),
 		householdsapp.NewInvitationAggregate(householdspg.InvitationFolds{}),
 		householdsapp.NewUserAggregate(householdspg.UserFolds{}),
+		householdsapp.NewHouseholdAggregate(householdspg.HouseholdFolds{}),
 		householdspg.Lookups{},
-		time.Now,
+		now,
 	)
 }
 
@@ -91,7 +93,7 @@ func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
 		ingestionpg.ImportedTransactionReader{}, statementImports, ingestionpg.StatementImportReader{})
 
 	return Contexts{
-		Users:        NewUsers(pool),
+		Users:        NewUsers(pool, now),
 		Households:   households,
 		Categories:   categories,
 		Accounts:     accounts,

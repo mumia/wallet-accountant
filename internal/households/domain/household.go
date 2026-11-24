@@ -14,6 +14,12 @@ var (
 	ErrHouseholdAlreadyCreated = errors.New("household already created")
 	// ErrHouseholdNameRequired is returned for a blank Household name.
 	ErrHouseholdNameRequired = errors.New("household name required")
+	// ErrHouseholdNotCreated is returned for adding a member to a Household
+	// that was never created.
+	ErrHouseholdNotCreated = errors.New("household not created")
+	// ErrAlreadyAMember is returned for adding a User who already belongs to
+	// the Household.
+	ErrAlreadyAMember = errors.New("already a member")
 )
 
 // HouseholdState is a Household's fold. Membership is part of it.
@@ -42,7 +48,15 @@ type (
 	}
 )
 
+// AddMember makes a User a member of the Household by redeeming an
+// Invitation to it.
+type AddMember struct {
+	UserID       sharedkernel.ID
+	InvitationID sharedkernel.ID
+}
+
 func (CreateHousehold) isHouseholdCommand() {}
+func (AddMember) isHouseholdCommand()       {}
 
 type (
 	// HouseholdEvent is a Household's event.
@@ -55,8 +69,11 @@ type (
 	}
 
 	// HouseholdMemberAdded is recorded when a User becomes a member.
+	// InvitationID is the Invitation they redeemed, absent for the
+	// Household's creator.
 	HouseholdMemberAdded struct {
-		UserID sharedkernel.ID `json:"userid"`
+		UserID       sharedkernel.ID `json:"userid"`
+		InvitationID sharedkernel.ID `json:"invitationid,omitzero"`
 	}
 )
 
@@ -90,6 +107,15 @@ func decideHousehold(s HouseholdState, c HouseholdCommand) ([]HouseholdEvent, er
 			HouseholdCreated{Name: name, BaseCurrency: currency.Code()},
 			HouseholdMemberAdded{UserID: c.CreatedBy},
 		}, nil
+	case AddMember:
+		switch {
+		case !s.Created:
+			return nil, ErrHouseholdNotCreated
+		case s.IsMember(c.UserID):
+			return nil, ErrAlreadyAMember
+		}
+
+		return []HouseholdEvent{HouseholdMemberAdded(c)}, nil
 	default:
 		return nil, nil
 	}
