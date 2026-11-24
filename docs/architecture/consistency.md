@@ -7,6 +7,7 @@ Every spec that adds or changes a command adds or updates its row here. Code rev
 | Command | Context | Immediate (same transaction) | Deferred (via events) |
 |---|---|---|---|
 | Issue bootstrap Invitation | Households | Bootstrap Invitation issued, or reissued with a new code if still unredeemed; its code lookup row updated | — |
+| Issue Invitation to a Household | Households | Caller's membership checked (404 otherwise); Invitation issued in Household scope as a new stream, never a reissue, with role `user`, the issuing member as actor and an expiry 24 hours after it is issued; its code lookup row (instance scope, naming the Household) saved with it | — |
 | Redeem Invitation | Households | Invitation redeemed; User registered with the Invitation's role and its identity lookup row saved | — |
 | Rename User | Households | The caller's own User found by their identity (instance scope); `user.renamed` recorded with the trimmed display name (refused when blank; nothing recorded for the same name); the User's row and its display name saved | — |
 | Create Household | Households → Ledger | Household created; creator added as member, with the User's membership index row; the three Internal Categories (Opening balance, Household transfer, Uncategorised) created | — |

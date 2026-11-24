@@ -10,16 +10,6 @@ import (
 // The operations below are in the contract but not implemented yet: each
 // answers 501 until its ticket in .scratch/join-household lands.
 
-// CreateInvitation implements createInvitation (ticket 04).
-func (h *Handler) CreateInvitation(context.Context, oas.CreateInvitationParams) (oas.CreateInvitationRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}
-
-// ListInvitations implements listInvitations (ticket 04).
-func (h *Handler) ListInvitations(context.Context, oas.ListInvitationsParams) (oas.ListInvitationsRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}
-
 // RevokeInvitation implements revokeInvitation (ticket 05).
 func (h *Handler) RevokeInvitation(context.Context, oas.RevokeInvitationParams) (oas.RevokeInvitationRes, error) {
 	return nil, httpapi.ErrNotImplemented

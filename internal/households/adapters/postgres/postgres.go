@@ -1,7 +1,8 @@
 // Package postgres is the Households PostgreSQL adapter: the fold stores of
-// the Invitation and User aggregates, with their lookup rows, and the
-// lookups the application reads them by. Every table is in instance scope
-// (ADR-0017).
+// the Invitation, User, Household and Notification aggregates, with their
+// lookup rows, and the lookups the application reads them by. Users, the
+// bootstrap Invitation and every code lookup row are in instance scope
+// (ADR-0017); an Invitation to a Household is in that Household's scope.
 package postgres
 
 import (
@@ -19,13 +20,21 @@ import (
 	"github.com/mumia/wallet-accountant/internal/platform/eventstore"
 )
 
-// InvitationFolds stores Invitation folds and their code lookup rows.
+// InvitationFolds stores Invitation folds and their code lookup rows. The
+// transaction's scope says which: in instance scope, the bootstrap (or an
+// operator's) Invitation in invitations; set to a Household, an Invitation
+// to that Household in household_invitations. Either way its code lookup row
+// is in instance scope.
 type InvitationFolds struct{}
 
 var _ eventstore.FoldStore[domain.InvitationState] = InvitationFolds{}
 
 // Load implements eventstore.FoldStore.
 func (InvitationFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (eventstore.Fold[domain.InvitationState], bool, error) {
+	if tx.HouseholdID() != uuid.Nil {
+		return loadHouseholdInvitation(ctx, tx, id)
+	}
+
 	var (
 		f          eventstore.Fold[domain.InvitationState]
 		redeemedBy *uuid.UUID
@@ -59,6 +68,10 @@ func (InvitationFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID
 // Save implements eventstore.FoldStore. The code lookup row is replaced, so
 // a reissued Invitation is found only by its new code.
 func (InvitationFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f eventstore.Fold[domain.InvitationState], expected int64) error {
+	if tx.HouseholdID() != uuid.Nil {
+		return saveHouseholdInvitation(ctx, tx, id, f, expected)
+	}
+
 	s := f.State
 
 	var redeemedBy *uuid.UUID
@@ -90,15 +103,107 @@ func (InvitationFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUID
 		return eventstore.ErrVersionConflict
 	}
 
+	return saveInvitationCode(ctx, tx, id, s.CodeHash, nil)
+}
+
+// saveInvitationCode replaces the Invitation's code lookup row. The
+// transaction must be in instance scope. household is the Invitation's
+// Household, nil for an instance-level Invitation.
+func saveInvitationCode(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, hash domain.CodeHash, household *uuid.UUID) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM invitation_codes WHERE invitation_id = $1`, id); err != nil {
 		return fmt.Errorf("replace invitation code: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `INSERT INTO invitation_codes (code_hash, invitation_id) VALUES ($1, $2)`, s.CodeHash, id); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO invitation_codes (code_hash, invitation_id, household_id) VALUES ($1, $2, $3)`,
+		hash, id, household); err != nil {
 		return fmt.Errorf("save invitation code: %w", err)
 	}
 
 	return nil
+}
+
+func loadHouseholdInvitation(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (eventstore.Fold[domain.InvitationState], bool, error) {
+	var (
+		f          eventstore.Fold[domain.InvitationState]
+		redeemedBy *uuid.UUID
+		redeemedAt *time.Time
+	)
+
+	err := tx.QueryRow(ctx, `SELECT code_hash, issued_by, issued_at, expires_at, redeemed_by, redeemed_at,
+		version, schema_version
+		FROM household_invitations WHERE household_id = $1 AND id = $2`, tx.HouseholdID(), id).
+		Scan(&f.State.CodeHash, &f.State.IssuedBy, &f.State.IssuedAt, &f.State.ExpiresAt, &redeemedBy, &redeemedAt,
+			&f.Version, &f.SchemaVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return eventstore.Fold[domain.InvitationState]{}, false, nil
+	}
+
+	if err != nil {
+		return eventstore.Fold[domain.InvitationState]{}, false, fmt.Errorf("load household invitation: %w", err)
+	}
+
+	f.State.Issued, f.State.Role, f.State.HouseholdID = true, domain.RoleUser, tx.HouseholdID()
+
+	if redeemedBy != nil {
+		f.State.RedeemedBy = *redeemedBy
+	}
+
+	if redeemedAt != nil {
+		f.State.RedeemedAt = *redeemedAt
+	}
+
+	return f, true, nil
+}
+
+// saveHouseholdInvitation writes the Household's row, then switches to
+// instance scope for the code lookup row, and back.
+func saveHouseholdInvitation(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, f eventstore.Fold[domain.InvitationState],
+	expected int64,
+) error {
+	household := tx.HouseholdID()
+	s := f.State
+
+	if s.HouseholdID != household {
+		return fmt.Errorf("save invitation %s: %w", id, errWrongHousehold)
+	}
+
+	var redeemedBy *uuid.UUID
+	if s.Redeemed() {
+		redeemedBy = &s.RedeemedBy
+	}
+
+	var redeemedAt *time.Time
+	if !s.RedeemedAt.IsZero() {
+		redeemedAt = &s.RedeemedAt
+	}
+
+	args := []any{
+		household, id, s.CodeHash, s.IssuedBy, s.IssuedAt, s.ExpiresAt, redeemedBy, redeemedAt,
+		f.Version, f.SchemaVersion,
+	}
+	q := `INSERT INTO household_invitations (household_id, id, code_hash, issued_by, issued_at, expires_at,
+	      redeemed_by, redeemed_at, version, schema_version)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING`
+
+	if expected != 0 {
+		args = append(args, expected)
+		q = `UPDATE household_invitations SET code_hash = $3, issued_by = $4, issued_at = $5, expires_at = $6,
+		     redeemed_by = $7, redeemed_at = $8, version = $9, schema_version = $10
+		     WHERE household_id = $1 AND id = $2 AND version = $11`
+	}
+
+	tag, err := tx.Exec(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("save household invitation: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return eventstore.ErrVersionConflict
+	}
+
+	return inInstanceScope(ctx, tx, func() error {
+		return saveInvitationCode(ctx, tx, id, s.CodeHash, &household)
+	})
 }
 
 // UserFolds stores User folds and their identity lookup rows.
