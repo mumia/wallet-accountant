@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `createRegistration` with a Household code:
   - looks the code up in instance scope;

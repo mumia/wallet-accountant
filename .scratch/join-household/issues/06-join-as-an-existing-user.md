@@ -4,7 +4,7 @@
 
 **Blocked by:** 04
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Join Household runs in one database transaction:
   1. In instance scope, resolve the caller and look up the code hash to find the Invitation and its Household. Nothing found, or the bootstrap Invitation, gets 422 `invalid-invitation`.
