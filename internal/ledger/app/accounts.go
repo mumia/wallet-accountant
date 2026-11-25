@@ -107,12 +107,15 @@ type AccountMonths struct {
 	OpenMonth string
 }
 
-// NewAccount is the request to add an Account.
+// NewAccount is the request to add an Account. A cash Account sends its
+// Opening count twice; any other kind sends neither.
 type NewAccount struct {
-	Name      string
-	Kind      domain.AccountKind
-	Currency  string
-	StartDate time.Time
+	Name                     string
+	Kind                     domain.AccountKind
+	Currency                 string
+	StartDate                time.Time
+	OpeningCount             *Count
+	OpeningCountConfirmation *Count
 }
 
 // Accounts manages a Household's Accounts.
@@ -121,15 +124,20 @@ type Accounts struct {
 	accounts  AccountAggregate
 	reader    AccountReader
 	ingestion Ingestion
+	openings  OpeningBalances
 }
 
 // NewAccounts returns the Accounts service.
-func NewAccounts(scope HouseholdScope, accounts AccountAggregate, reader AccountReader, ingestion Ingestion) *Accounts {
-	return &Accounts{scope: scope, accounts: accounts, reader: reader, ingestion: ingestion}
+func NewAccounts(scope HouseholdScope, accounts AccountAggregate, reader AccountReader, ingestion Ingestion,
+	openings OpeningBalances,
+) *Accounts {
+	return &Accounts{scope: scope, accounts: accounts, reader: reader, ingestion: ingestion, openings: openings}
 }
 
-// Add adds an Account to the Household, awaiting its first Statement import
-// (consistency map: Add Account).
+// Add adds an Account to the Household. A statement Account awaits its
+// first Statement import; a cash Account's Opening balance is recorded from
+// its Opening count in the same transaction, after the two counts are
+// checked equal (consistency map: Add Account, Add Account (cash)).
 func (a *Accounts) Add(ctx context.Context, household uuid.UUID, req NewAccount) (Account, error) {
 	id, err := sharedkernel.NewID()
 	if err != nil {
@@ -139,16 +147,38 @@ func (a *Accounts) Add(ctx context.Context, household uuid.UUID, req NewAccount)
 	var added Account
 
 	err = a.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		cash := req.Kind == domain.AccountKindCash
+
+		count, err := openingCount(cash, req.Currency, req.OpeningCount, req.OpeningCountConfirmation)
+		if err != nil {
+			return err
+		}
+
 		res, err := a.accounts.Execute(ctx, tx, id, domain.AddAccount{
-			Name: req.Name, Kind: req.Kind, Currency: req.Currency, StartDate: req.StartDate,
+			Name: req.Name, Kind: req.Kind, Currency: req.Currency, StartDate: req.StartDate, OpeningCount: count,
 		})
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}
 
-		added = accountOf(id, res.State)
+		if !cash {
+			added = accountOf(id, res.State)
 
-		return nil
+			return nil
+		}
+
+		opening, err := sharedkernel.NewID()
+		if err != nil {
+			return err //nolint:wrapcheck // already wrapped by the shared kernel
+		}
+
+		if err := a.openings.RecordOpeningBalance(ctx, tx, id, opening, *count); err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		added, err = a.AccountForImport(ctx, tx, id)
+
+		return err
 	})
 	if err != nil {
 		return Account{}, fmt.Errorf("add account: %w", err)

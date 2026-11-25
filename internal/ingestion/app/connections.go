@@ -30,6 +30,9 @@ var (
 	// ErrAccountNotFound is returned for an Account that is not in the
 	// Household.
 	ErrAccountNotFound = errors.New("account not found")
+	// ErrCashAccountConnection is returned for a Connection on a cash
+	// Account, which is kept entirely by hand.
+	ErrCashAccountConnection = errors.New("a cash account takes no connection")
 	// ErrConnectionNotFound is returned for a Connection that is not one of
 	// the Account's.
 	ErrConnectionNotFound = errors.New("connection not found")
@@ -166,6 +169,15 @@ func (c *Connections) Create(ctx context.Context, household, account uuid.UUID, 
 	var created Connection
 
 	err = c.inAccount(ctx, household, account, func(ctx context.Context, tx *eventstore.Tx) error {
+		target, err := c.currencies.ImportAccount(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		if target.Cash {
+			return ErrCashAccountConnection
+		}
+
 		res, err := c.connections.Execute(ctx, tx, id, domain.CreateConnection{
 			AccountID: account, Name: req.Name, Kind: req.Kind, CSVMapping: req.CSVMapping,
 		})

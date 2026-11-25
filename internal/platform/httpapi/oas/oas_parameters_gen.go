@@ -2517,6 +2517,126 @@ func decodeGetHouseholdParams(args [1]string, argsEscaped bool, r *http.Request)
 	return params, nil
 }
 
+// GetMatchParams is parameters of getMatch operation.
+type GetMatchParams struct {
+	// The Household's ID.
+	HouseholdID uuid.UUID
+	// The Match's ID.
+	MatchID uuid.UUID
+}
+
+func unpackGetMatchParams(packed middleware.Parameters) (params GetMatchParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "household_id",
+			In:   "path",
+		}
+		params.HouseholdID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "match_id",
+			In:   "path",
+		}
+		params.MatchID = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetMatchParams(args [2]string, argsEscaped bool, r *http.Request) (params GetMatchParams, _ error) {
+	// Decode path: household_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "household_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.HouseholdID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "household_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: match_id.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "match_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.MatchID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "match_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // KeepImportedTransactionParams is parameters of keepImportedTransaction operation.
 type KeepImportedTransactionParams struct {
 	// The Household's ID.
@@ -2845,6 +2965,8 @@ type ListAccountTransactionsParams struct {
 	AccountID uuid.UUID
 	// Only this Booking month, written YYYY-MM.
 	BookingMonth OptString `json:",omitempty,omitzero"`
+	// When true, only the Account's Transfer legs that are In transit.
+	InTransit OptBool `json:",omitempty,omitzero"`
 	// Where the page starts, the `next_cursor` of the previous page; absent for the first page.
 	Cursor OptString `json:",omitempty,omitzero"`
 	// The most items a page holds.
@@ -2873,6 +2995,15 @@ func unpackListAccountTransactionsParams(packed middleware.Parameters) (params L
 		}
 		if v, ok := packed[key]; ok {
 			params.BookingMonth = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "in_transit",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.InTransit = v.(OptBool)
 		}
 	}
 	{
@@ -3052,6 +3183,52 @@ func decodeListAccountTransactionsParams(args [2]string, argsEscaped bool, r *ht
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "booking_month",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Set default value for query: in_transit.
+	{
+		val := bool(false)
+		params.InTransit.SetTo(val)
+	}
+	// Decode query: in_transit.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "in_transit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotInTransitVal bool
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToBool(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotInTransitVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.InTransit.SetTo(paramsDotInTransitVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "in_transit",
 			In:   "query",
 			Err:  err,
 		}
@@ -4181,6 +4358,172 @@ func decodeListStatementImportsParams(args [2]string, argsEscaped bool, r *http.
 	return params, nil
 }
 
+// ListTransferSuggestionsParams is parameters of listTransferSuggestions operation.
+type ListTransferSuggestionsParams struct {
+	// The Household's ID.
+	HouseholdID uuid.UUID
+	// The Imported transaction's ID.
+	ImportedTransactionID uuid.UUID
+	// The cash Account whose legs are suggested.
+	AccountID uuid.UUID
+}
+
+func unpackListTransferSuggestionsParams(packed middleware.Parameters) (params ListTransferSuggestionsParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "household_id",
+			In:   "path",
+		}
+		params.HouseholdID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "imported_transaction_id",
+			In:   "path",
+		}
+		params.ImportedTransactionID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "account_id",
+			In:   "query",
+		}
+		params.AccountID = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeListTransferSuggestionsParams(args [2]string, argsEscaped bool, r *http.Request) (params ListTransferSuggestionsParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Decode path: household_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "household_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.HouseholdID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "household_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: imported_transaction_id.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "imported_transaction_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ImportedTransactionID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "imported_transaction_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode query: account_id.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "account_id",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.AccountID = c
+				return nil
+			}); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "account_id",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // MarkNotificationReadParams is parameters of markNotificationRead operation.
 type MarkNotificationReadParams struct {
 	// The Household's ID.
@@ -4508,6 +4851,406 @@ func decodePreviewStatementImportParams(args [2]string, argsEscaped bool, r *htt
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "connection_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode header: Idempotency-Key.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Idempotency-Key",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotIdempotencyKeyVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotIdempotencyKeyVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.IdempotencyKey.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Idempotency-Key",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// RecordCashTransactionParams is parameters of recordCashTransaction operation.
+type RecordCashTransactionParams struct {
+	// The Household's ID.
+	HouseholdID uuid.UUID
+	// The Account's ID.
+	AccountID uuid.UUID
+	// A key the client chooses for one request, such as a UUID. Sending the request again with the same
+	// key and body returns the stored response without repeating it; the same key with a different body
+	// gets 422. Keys are scoped to the caller.
+	IdempotencyKey OptString `json:",omitempty,omitzero"`
+}
+
+func unpackRecordCashTransactionParams(packed middleware.Parameters) (params RecordCashTransactionParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "household_id",
+			In:   "path",
+		}
+		params.HouseholdID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "account_id",
+			In:   "path",
+		}
+		params.AccountID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "Idempotency-Key",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.IdempotencyKey = v.(OptString)
+		}
+	}
+	return params
+}
+
+func decodeRecordCashTransactionParams(args [2]string, argsEscaped bool, r *http.Request) (params RecordCashTransactionParams, _ error) {
+	h := uri.NewHeaderDecoder(r.Header)
+	// Decode path: household_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "household_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.HouseholdID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "household_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: account_id.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "account_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.AccountID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "account_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode header: Idempotency-Key.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Idempotency-Key",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotIdempotencyKeyVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotIdempotencyKeyVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.IdempotencyKey.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Idempotency-Key",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// RecountOpeningParams is parameters of recountOpening operation.
+type RecountOpeningParams struct {
+	// The Household's ID.
+	HouseholdID uuid.UUID
+	// The Account's ID.
+	AccountID uuid.UUID
+	// A key the client chooses for one request, such as a UUID. Sending the request again with the same
+	// key and body returns the stored response without repeating it; the same key with a different body
+	// gets 422. Keys are scoped to the caller.
+	IdempotencyKey OptString `json:",omitempty,omitzero"`
+}
+
+func unpackRecountOpeningParams(packed middleware.Parameters) (params RecountOpeningParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "household_id",
+			In:   "path",
+		}
+		params.HouseholdID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "account_id",
+			In:   "path",
+		}
+		params.AccountID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "Idempotency-Key",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.IdempotencyKey = v.(OptString)
+		}
+	}
+	return params
+}
+
+func decodeRecountOpeningParams(args [2]string, argsEscaped bool, r *http.Request) (params RecountOpeningParams, _ error) {
+	h := uri.NewHeaderDecoder(r.Header)
+	// Decode path: household_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "household_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.HouseholdID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "household_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: account_id.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "account_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.AccountID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "account_id",
 			In:   "path",
 			Err:  err,
 		}

@@ -33,7 +33,10 @@ docs: |-
   the Account's latest closed month (`NOT_LATEST_CLOSED`), or the open
   month has Accepted Transactions that aren't reversed
   (`OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS`, with the `open_month` and
-  the `accepted` count): reverse them first. Retrying with the same
+  the `accepted` count): reverse them first. A cash Account has no
+  Accepted Transactions, so that condition never applies to it: its
+  later months' Transactions stay, and the month must be closed again
+  with a new Cash count. Retrying with the same
   Idempotency-Key returns the original result.
 
   Operation `reopenAccountMonth`.

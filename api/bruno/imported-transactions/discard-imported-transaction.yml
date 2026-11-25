@@ -1,7 +1,7 @@
 info:
   name: Discard a pending Imported transaction or a Suspected duplicate
   type: http
-  seq: 4
+  seq: 5
 http:
   method: POST
   url: '{{baseUrl}}/households/:household_id/imported-transactions/:imported_transaction_id/discard'

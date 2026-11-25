@@ -23,10 +23,6 @@ type AcceptImportedTransactionUnauthorized Problem
 
 func (*AcceptImportedTransactionUnauthorized) acceptImportedTransactionRes() {}
 
-type AcceptImportedTransactionUnprocessableEntity Problem
-
-func (*AcceptImportedTransactionUnprocessableEntity) acceptImportedTransactionRes() {}
-
 // An Account.
 // Ref: #/components/schemas/Account
 type Account struct {
@@ -150,9 +146,10 @@ func (s *Account) SetSuspectedDuplicates(val int32) {
 	s.SuspectedDuplicates = val
 }
 
-func (*Account) addAccountRes()    {}
-func (*Account) changeAccountRes() {}
-func (*Account) getAccountRes()    {}
+func (*Account) addAccountRes()     {}
+func (*Account) changeAccountRes()  {}
+func (*Account) getAccountRes()     {}
+func (*Account) recountOpeningRes() {}
 
 // A new name for an Account; its kind, Account currency and start date never change.
 // Ref: #/components/schemas/AccountChange
@@ -171,8 +168,8 @@ func (s *AccountChange) SetName(val string) {
 	s.Name = val
 }
 
-// A new Account. There is no Opening balance field; the first Statement import works it out
-// (ADR-0018).
+// A new Account. There is no Opening balance field: a statement Account's first Statement import works
+// it out, and a cash Account's comes from its Opening count, typed twice (ADR-0018).
 // Ref: #/components/schemas/AccountCreation
 type AccountCreation struct {
 	// The Account's name.
@@ -180,7 +177,9 @@ type AccountCreation struct {
 	Kind     AccountKind  `json:"kind"`
 	Currency CurrencyCode `json:"currency"`
 	// The day the Account's history begins, and the date of its Opening balance.
-	StartDate time.Time `json:"start_date"`
+	StartDate                time.Time `json:"start_date"`
+	OpeningCount             OptMoney  `json:"opening_count"`
+	OpeningCountConfirmation OptMoney  `json:"opening_count_confirmation"`
 }
 
 // GetName returns the value of Name.
@@ -203,6 +202,16 @@ func (s *AccountCreation) GetStartDate() time.Time {
 	return s.StartDate
 }
 
+// GetOpeningCount returns the value of OpeningCount.
+func (s *AccountCreation) GetOpeningCount() OptMoney {
+	return s.OpeningCount
+}
+
+// GetOpeningCountConfirmation returns the value of OpeningCountConfirmation.
+func (s *AccountCreation) GetOpeningCountConfirmation() OptMoney {
+	return s.OpeningCountConfirmation
+}
+
 // SetName sets the value of Name.
 func (s *AccountCreation) SetName(val string) {
 	s.Name = val
@@ -221,6 +230,16 @@ func (s *AccountCreation) SetCurrency(val CurrencyCode) {
 // SetStartDate sets the value of StartDate.
 func (s *AccountCreation) SetStartDate(val time.Time) {
 	s.StartDate = val
+}
+
+// SetOpeningCount sets the value of OpeningCount.
+func (s *AccountCreation) SetOpeningCount(val OptMoney) {
+	s.OpeningCount = val
+}
+
+// SetOpeningCountConfirmation sets the value of OpeningCountConfirmation.
+func (s *AccountCreation) SetOpeningCountConfirmation(val OptMoney) {
+	s.OpeningCountConfirmation = val
 }
 
 type AccountKind string
@@ -270,6 +289,11 @@ type AccountMonth struct {
 	// Whether a Reopen of this month would be refused right now: always true unless it is the Account's
 	// latest closed month and the open month has no Accepted Transactions that aren't reversed.
 	ReopenBlocked bool `json:"reopen_blocked"`
+	// The day a closed cash month's Cash count was taken; absent otherwise.
+	CountedOn OptDate `json:"counted_on"`
+	// The month's Transfer legs that are In transit: not Matched and not reversed. They never stop a Month
+	// close.
+	TransferLegsInTransit int32 `json:"transfer_legs_in_transit"`
 }
 
 // GetAccountID returns the value of AccountID.
@@ -327,6 +351,16 @@ func (s *AccountMonth) GetReopenBlocked() bool {
 	return s.ReopenBlocked
 }
 
+// GetCountedOn returns the value of CountedOn.
+func (s *AccountMonth) GetCountedOn() OptDate {
+	return s.CountedOn
+}
+
+// GetTransferLegsInTransit returns the value of TransferLegsInTransit.
+func (s *AccountMonth) GetTransferLegsInTransit() int32 {
+	return s.TransferLegsInTransit
+}
+
 // SetAccountID sets the value of AccountID.
 func (s *AccountMonth) SetAccountID(val uuid.UUID) {
 	s.AccountID = val
@@ -382,6 +416,16 @@ func (s *AccountMonth) SetReopenBlocked(val bool) {
 	s.ReopenBlocked = val
 }
 
+// SetCountedOn sets the value of CountedOn.
+func (s *AccountMonth) SetCountedOn(val OptDate) {
+	s.CountedOn = val
+}
+
+// SetTransferLegsInTransit sets the value of TransferLegsInTransit.
+func (s *AccountMonth) SetTransferLegsInTransit(val int32) {
+	s.TransferLegsInTransit = val
+}
+
 func (*AccountMonth) closeAccountMonthRes()  {}
 func (*AccountMonth) getAccountMonthRes()    {}
 func (*AccountMonth) reopenAccountMonthRes() {}
@@ -427,6 +471,12 @@ type AccountTransaction struct {
 	ReversedByTransactionID OptUUID `json:"reversed_by_transaction_id"`
 	// The Imported transaction whose Accept recorded it.
 	ImportedTransactionID OptUUID `json:"imported_transaction_id"`
+	// The other Account of the Transfer, when this is a Transfer leg.
+	CounterpartAccountID OptUUID `json:"counterpart_account_id"`
+	// The Match linking this Transfer leg to the other one; absent while it is In transit.
+	MatchID OptUUID `json:"match_id"`
+	// Whether an Accept as Transfer recorded this cash leg automatically.
+	CreatedByTransfer OptBool `json:"created_by_transfer"`
 }
 
 // GetTransactionID returns the value of TransactionID.
@@ -479,6 +529,21 @@ func (s *AccountTransaction) GetImportedTransactionID() OptUUID {
 	return s.ImportedTransactionID
 }
 
+// GetCounterpartAccountID returns the value of CounterpartAccountID.
+func (s *AccountTransaction) GetCounterpartAccountID() OptUUID {
+	return s.CounterpartAccountID
+}
+
+// GetMatchID returns the value of MatchID.
+func (s *AccountTransaction) GetMatchID() OptUUID {
+	return s.MatchID
+}
+
+// GetCreatedByTransfer returns the value of CreatedByTransfer.
+func (s *AccountTransaction) GetCreatedByTransfer() OptBool {
+	return s.CreatedByTransfer
+}
+
 // SetTransactionID sets the value of TransactionID.
 func (s *AccountTransaction) SetTransactionID(val uuid.UUID) {
 	s.TransactionID = val
@@ -527,6 +592,21 @@ func (s *AccountTransaction) SetReversedByTransactionID(val OptUUID) {
 // SetImportedTransactionID sets the value of ImportedTransactionID.
 func (s *AccountTransaction) SetImportedTransactionID(val OptUUID) {
 	s.ImportedTransactionID = val
+}
+
+// SetCounterpartAccountID sets the value of CounterpartAccountID.
+func (s *AccountTransaction) SetCounterpartAccountID(val OptUUID) {
+	s.CounterpartAccountID = val
+}
+
+// SetMatchID sets the value of MatchID.
+func (s *AccountTransaction) SetMatchID(val OptUUID) {
+	s.MatchID = val
+}
+
+// SetCreatedByTransfer sets the value of CreatedByTransfer.
+func (s *AccountTransaction) SetCreatedByTransfer(val OptBool) {
+	s.CreatedByTransfer = val
 }
 
 // A page of an Account's Transactions.
@@ -595,6 +675,83 @@ func (s *BearerAuth) SetToken(val string) {
 // SetRoles sets the value of Roles.
 func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
+}
+
+// A Transaction on a cash Account. Its other side is `category_id`, or `counterpart_account_id` for a
+// Transfer leg, never both; neither leaves it in Uncategorised.
+// Ref: #/components/schemas/CashTransactionCreation
+type CashTransactionCreation struct {
+	// The day it happened, both its Booking date and its Transaction date; not after today.
+	Date   time.Time `json:"date"`
+	Amount Money     `json:"amount"`
+	// What it was.
+	Description string `json:"description"`
+	// Who was paid, or who paid.
+	Payee OptString `json:"payee"`
+	// The Category on the other side, with Accept's Category rules.
+	CategoryID OptUUID `json:"category_id"`
+	// The other Account, which makes this a Transfer leg.
+	CounterpartAccountID OptUUID `json:"counterpart_account_id"`
+}
+
+// GetDate returns the value of Date.
+func (s *CashTransactionCreation) GetDate() time.Time {
+	return s.Date
+}
+
+// GetAmount returns the value of Amount.
+func (s *CashTransactionCreation) GetAmount() Money {
+	return s.Amount
+}
+
+// GetDescription returns the value of Description.
+func (s *CashTransactionCreation) GetDescription() string {
+	return s.Description
+}
+
+// GetPayee returns the value of Payee.
+func (s *CashTransactionCreation) GetPayee() OptString {
+	return s.Payee
+}
+
+// GetCategoryID returns the value of CategoryID.
+func (s *CashTransactionCreation) GetCategoryID() OptUUID {
+	return s.CategoryID
+}
+
+// GetCounterpartAccountID returns the value of CounterpartAccountID.
+func (s *CashTransactionCreation) GetCounterpartAccountID() OptUUID {
+	return s.CounterpartAccountID
+}
+
+// SetDate sets the value of Date.
+func (s *CashTransactionCreation) SetDate(val time.Time) {
+	s.Date = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *CashTransactionCreation) SetAmount(val Money) {
+	s.Amount = val
+}
+
+// SetDescription sets the value of Description.
+func (s *CashTransactionCreation) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetPayee sets the value of Payee.
+func (s *CashTransactionCreation) SetPayee(val OptString) {
+	s.Payee = val
+}
+
+// SetCategoryID sets the value of CategoryID.
+func (s *CashTransactionCreation) SetCategoryID(val OptUUID) {
+	s.CategoryID = val
+}
+
+// SetCounterpartAccountID sets the value of CounterpartAccountID.
+func (s *CashTransactionCreation) SetCounterpartAccountID(val OptUUID) {
+	s.CounterpartAccountID = val
 }
 
 // A Category.
@@ -1643,6 +1800,14 @@ type GetHouseholdUnauthorized Problem
 
 func (*GetHouseholdUnauthorized) getHouseholdRes() {}
 
+type GetMatchNotFound Problem
+
+func (*GetMatchNotFound) getMatchRes() {}
+
+type GetMatchUnauthorized Problem
+
+func (*GetMatchUnauthorized) getMatchRes() {}
+
 type GetMeForbidden Problem
 
 func (*GetMeForbidden) getMeRes() {}
@@ -1911,6 +2076,10 @@ type ImportedTransactionAcceptance struct {
 	// The Category on the other side of the Transaction; absent, or the Uncategorised Category, leaves it
 	// in Uncategorised.
 	CategoryID OptUUID `json:"category_id"`
+	// The cash Account on the other side, which Accepts the row as a Transfer instead of with a Category.
+	TransferAccountID OptUUID `json:"transfer_account_id"`
+	// An In transit leg on `transfer_account_id` to Match the row to, instead of recording a new cash leg.
+	MatchTransactionID OptUUID `json:"match_transaction_id"`
 }
 
 // GetCategoryID returns the value of CategoryID.
@@ -1918,9 +2087,29 @@ func (s *ImportedTransactionAcceptance) GetCategoryID() OptUUID {
 	return s.CategoryID
 }
 
+// GetTransferAccountID returns the value of TransferAccountID.
+func (s *ImportedTransactionAcceptance) GetTransferAccountID() OptUUID {
+	return s.TransferAccountID
+}
+
+// GetMatchTransactionID returns the value of MatchTransactionID.
+func (s *ImportedTransactionAcceptance) GetMatchTransactionID() OptUUID {
+	return s.MatchTransactionID
+}
+
 // SetCategoryID sets the value of CategoryID.
 func (s *ImportedTransactionAcceptance) SetCategoryID(val OptUUID) {
 	s.CategoryID = val
+}
+
+// SetTransferAccountID sets the value of TransferAccountID.
+func (s *ImportedTransactionAcceptance) SetTransferAccountID(val OptUUID) {
+	s.TransferAccountID = val
+}
+
+// SetMatchTransactionID sets the value of MatchTransactionID.
+func (s *ImportedTransactionAcceptance) SetMatchTransactionID(val OptUUID) {
+	s.MatchTransactionID = val
 }
 
 // A page of an Account's Imported transactions.
@@ -2174,6 +2363,18 @@ type ListStatementImportsUnauthorized Problem
 
 func (*ListStatementImportsUnauthorized) listStatementImportsRes() {}
 
+type ListTransferSuggestionsBadRequest Problem
+
+func (*ListTransferSuggestionsBadRequest) listTransferSuggestionsRes() {}
+
+type ListTransferSuggestionsNotFound Problem
+
+func (*ListTransferSuggestionsNotFound) listTransferSuggestionsRes() {}
+
+type ListTransferSuggestionsUnauthorized Problem
+
+func (*ListTransferSuggestionsUnauthorized) listTransferSuggestionsRes() {}
+
 type MarkNotificationReadNotFound Problem
 
 func (*MarkNotificationReadNotFound) markNotificationReadRes() {}
@@ -2181,6 +2382,102 @@ func (*MarkNotificationReadNotFound) markNotificationReadRes() {}
 type MarkNotificationReadUnauthorized Problem
 
 func (*MarkNotificationReadUnauthorized) markNotificationReadRes() {}
+
+// A confirmed link between two records of the same money movement.
+// Ref: #/components/schemas/Match
+type Match struct {
+	// The Match's ID (UUIDv7).
+	MatchID uuid.UUID `json:"match_id"`
+	// What the Match links; `ACCOUNT_TRANSFER` is the two legs of a Transfer.
+	Kind string `json:"kind"`
+	// The two Transactions it links.
+	Legs []MatchLeg `json:"legs"`
+	// The User who confirmed it.
+	ConfirmedBy uuid.UUID `json:"confirmed_by"`
+	// When it was confirmed.
+	ConfirmedAt time.Time `json:"confirmed_at"`
+}
+
+// GetMatchID returns the value of MatchID.
+func (s *Match) GetMatchID() uuid.UUID {
+	return s.MatchID
+}
+
+// GetKind returns the value of Kind.
+func (s *Match) GetKind() string {
+	return s.Kind
+}
+
+// GetLegs returns the value of Legs.
+func (s *Match) GetLegs() []MatchLeg {
+	return s.Legs
+}
+
+// GetConfirmedBy returns the value of ConfirmedBy.
+func (s *Match) GetConfirmedBy() uuid.UUID {
+	return s.ConfirmedBy
+}
+
+// GetConfirmedAt returns the value of ConfirmedAt.
+func (s *Match) GetConfirmedAt() time.Time {
+	return s.ConfirmedAt
+}
+
+// SetMatchID sets the value of MatchID.
+func (s *Match) SetMatchID(val uuid.UUID) {
+	s.MatchID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *Match) SetKind(val string) {
+	s.Kind = val
+}
+
+// SetLegs sets the value of Legs.
+func (s *Match) SetLegs(val []MatchLeg) {
+	s.Legs = val
+}
+
+// SetConfirmedBy sets the value of ConfirmedBy.
+func (s *Match) SetConfirmedBy(val uuid.UUID) {
+	s.ConfirmedBy = val
+}
+
+// SetConfirmedAt sets the value of ConfirmedAt.
+func (s *Match) SetConfirmedAt(val time.Time) {
+	s.ConfirmedAt = val
+}
+
+func (*Match) getMatchRes() {}
+
+// One Transaction a Match links.
+// Ref: #/components/schemas/MatchLeg
+type MatchLeg struct {
+	// The Transaction.
+	TransactionID uuid.UUID `json:"transaction_id"`
+	// The Account it is on.
+	AccountID uuid.UUID `json:"account_id"`
+}
+
+// GetTransactionID returns the value of TransactionID.
+func (s *MatchLeg) GetTransactionID() uuid.UUID {
+	return s.TransactionID
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *MatchLeg) GetAccountID() uuid.UUID {
+	return s.AccountID
+}
+
+// SetTransactionID sets the value of TransactionID.
+func (s *MatchLeg) SetTransactionID(val uuid.UUID) {
+	s.TransactionID = val
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *MatchLeg) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
 
 // The signed-in User.
 // Ref: #/components/schemas/Me
@@ -2498,10 +2795,14 @@ func (s *MonthCloseProblem) SetDifference(val OptMoney) {
 
 func (*MonthCloseProblem) closeAccountMonthRes() {}
 
-// The Statement balance a month closes with.
+// The Statement balance a month closes with; for a cash Account, the amount counted and the day it was
+// counted.
 // Ref: #/components/schemas/MonthClosing
 type MonthClosing struct {
 	StatementBalance Money `json:"statement_balance"`
+	// The day a cash Account's cash was counted: after the month's last day and no later than today.
+	// Required for a cash Account, refused for any other.
+	CountedOn OptDate `json:"counted_on"`
 }
 
 // GetStatementBalance returns the value of StatementBalance.
@@ -2509,15 +2810,26 @@ func (s *MonthClosing) GetStatementBalance() Money {
 	return s.StatementBalance
 }
 
+// GetCountedOn returns the value of CountedOn.
+func (s *MonthClosing) GetCountedOn() OptDate {
+	return s.CountedOn
+}
+
 // SetStatementBalance sets the value of StatementBalance.
 func (s *MonthClosing) SetStatementBalance(val Money) {
 	s.StatementBalance = val
 }
 
+// SetCountedOn sets the value of CountedOn.
+func (s *MonthClosing) SetCountedOn(val OptDate) {
+	s.CountedOn = val
+}
+
 // Problem details (RFC 9457) of a request that conflicts with the current state. When it is about a
 // month (`/problems/month-closed`, `/problems/month-not-open-yet`, `/problems/month-not-ended`,
-// `/problems/statement-import-touches-closed-month`), `booking_month` names it and `open_month` gives
-// the Account's open month.
+// `/problems/statement-import-touches-closed-month`), `booking_month` names it, `open_month` gives the
+// Account's open month and `account_id` the Account, which can be another than the request's own, such
+// as the cash Account of a Transfer.
 // Ref: #/components/schemas/MonthProblem
 type MonthProblem struct {
 	// Identifies the problem type.
@@ -2532,6 +2844,8 @@ type MonthProblem struct {
 	BookingMonth OptString `json:"booking_month"`
 	// The Account's open month, written YYYY-MM.
 	OpenMonth OptString `json:"open_month"`
+	// The Account whose month it is.
+	AccountID OptUUID `json:"account_id"`
 }
 
 // GetType returns the value of Type.
@@ -2564,6 +2878,11 @@ func (s *MonthProblem) GetOpenMonth() OptString {
 	return s.OpenMonth
 }
 
+// GetAccountID returns the value of AccountID.
+func (s *MonthProblem) GetAccountID() OptUUID {
+	return s.AccountID
+}
+
 // SetType sets the value of Type.
 func (s *MonthProblem) SetType(val string) {
 	s.Type = val
@@ -2594,10 +2913,16 @@ func (s *MonthProblem) SetOpenMonth(val OptString) {
 	s.OpenMonth = val
 }
 
+// SetAccountID sets the value of AccountID.
+func (s *MonthProblem) SetAccountID(val OptUUID) {
+	s.AccountID = val
+}
+
 func (*MonthProblem) acceptImportedTransactionRes()  {}
 func (*MonthProblem) closeAccountMonthRes()          {}
 func (*MonthProblem) discardImportedTransactionRes() {}
 func (*MonthProblem) keepImportedTransactionRes()    {}
+func (*MonthProblem) recordCashTransactionRes()      {}
 func (*MonthProblem) reverseTransactionRes()         {}
 func (*MonthProblem) voidStatementImportRes()        {}
 
@@ -2852,6 +3177,33 @@ func (s *NotificationList) SetItems(val []Notification) {
 }
 
 func (*NotificationList) listNotificationsRes() {}
+
+// A cash Account's new Opening count, typed twice.
+// Ref: #/components/schemas/OpeningRecount
+type OpeningRecount struct {
+	OpeningCount             Money `json:"opening_count"`
+	OpeningCountConfirmation Money `json:"opening_count_confirmation"`
+}
+
+// GetOpeningCount returns the value of OpeningCount.
+func (s *OpeningRecount) GetOpeningCount() Money {
+	return s.OpeningCount
+}
+
+// GetOpeningCountConfirmation returns the value of OpeningCountConfirmation.
+func (s *OpeningRecount) GetOpeningCountConfirmation() Money {
+	return s.OpeningCountConfirmation
+}
+
+// SetOpeningCount sets the value of OpeningCount.
+func (s *OpeningRecount) SetOpeningCount(val Money) {
+	s.OpeningCount = val
+}
+
+// SetOpeningCountConfirmation sets the value of OpeningCountConfirmation.
+func (s *OpeningRecount) SetOpeningCountConfirmation(val Money) {
+	s.OpeningCountConfirmation = val
+}
 
 // NewOptBool returns new OptBool with value set to v.
 func NewOptBool(v bool) OptBool {
@@ -3870,6 +4222,30 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 	s.Response = val
 }
 
+type RecordCashTransactionNotFound Problem
+
+func (*RecordCashTransactionNotFound) recordCashTransactionRes() {}
+
+type RecordCashTransactionUnauthorized Problem
+
+func (*RecordCashTransactionUnauthorized) recordCashTransactionRes() {}
+
+type RecountOpeningConflict Problem
+
+func (*RecountOpeningConflict) recountOpeningRes() {}
+
+type RecountOpeningNotFound Problem
+
+func (*RecountOpeningNotFound) recountOpeningRes() {}
+
+type RecountOpeningUnauthorized Problem
+
+func (*RecountOpeningUnauthorized) recountOpeningRes() {}
+
+type RecountOpeningUnprocessableEntity Problem
+
+func (*RecountOpeningUnprocessableEntity) recountOpeningRes() {}
+
 // An Invitation code to redeem, and the new User's display name.
 // Ref: #/components/schemas/Registration
 type Registration struct {
@@ -4726,6 +5102,12 @@ type Transaction struct {
 	ReversalOfTransactionID OptUUID `json:"reversal_of_transaction_id"`
 	// The Transaction that reversed this one, once it is reversed.
 	ReversedByTransactionID OptUUID `json:"reversed_by_transaction_id"`
+	// The other Account of the Transfer, when this is a Transfer leg.
+	CounterpartAccountID OptUUID `json:"counterpart_account_id"`
+	// The Match linking this Transfer leg to the other one; absent while it is In transit.
+	MatchID OptUUID `json:"match_id"`
+	// Whether an Accept as Transfer recorded this cash leg automatically.
+	CreatedByTransfer OptBool `json:"created_by_transfer"`
 }
 
 // GetTransactionID returns the value of TransactionID.
@@ -4793,6 +5175,21 @@ func (s *Transaction) GetReversedByTransactionID() OptUUID {
 	return s.ReversedByTransactionID
 }
 
+// GetCounterpartAccountID returns the value of CounterpartAccountID.
+func (s *Transaction) GetCounterpartAccountID() OptUUID {
+	return s.CounterpartAccountID
+}
+
+// GetMatchID returns the value of MatchID.
+func (s *Transaction) GetMatchID() OptUUID {
+	return s.MatchID
+}
+
+// GetCreatedByTransfer returns the value of CreatedByTransfer.
+func (s *Transaction) GetCreatedByTransfer() OptBool {
+	return s.CreatedByTransfer
+}
+
 // SetTransactionID sets the value of TransactionID.
 func (s *Transaction) SetTransactionID(val uuid.UUID) {
 	s.TransactionID = val
@@ -4858,8 +5255,24 @@ func (s *Transaction) SetReversedByTransactionID(val OptUUID) {
 	s.ReversedByTransactionID = val
 }
 
-func (*Transaction) changeTransactionRes()  {}
-func (*Transaction) reverseTransactionRes() {}
+// SetCounterpartAccountID sets the value of CounterpartAccountID.
+func (s *Transaction) SetCounterpartAccountID(val OptUUID) {
+	s.CounterpartAccountID = val
+}
+
+// SetMatchID sets the value of MatchID.
+func (s *Transaction) SetMatchID(val OptUUID) {
+	s.MatchID = val
+}
+
+// SetCreatedByTransfer sets the value of CreatedByTransfer.
+func (s *Transaction) SetCreatedByTransfer(val OptBool) {
+	s.CreatedByTransfer = val
+}
+
+func (*Transaction) changeTransactionRes()     {}
+func (*Transaction) recordCashTransactionRes() {}
+func (*Transaction) reverseTransactionRes()    {}
 
 // A change to a Transaction.
 // Ref: #/components/schemas/TransactionChange
@@ -4877,6 +5290,95 @@ func (s *TransactionChange) GetCategoryID() uuid.UUID {
 func (s *TransactionChange) SetCategoryID(val uuid.UUID) {
 	s.CategoryID = val
 }
+
+// A list of Transactions.
+// Ref: #/components/schemas/TransactionList
+type TransactionList struct {
+	// The Transactions.
+	Items []Transaction `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *TransactionList) GetItems() []Transaction {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *TransactionList) SetItems(val []Transaction) {
+	s.Items = val
+}
+
+func (*TransactionList) listTransferSuggestionsRes() {}
+
+// Problem details (RFC 9457) of a request that can't be carried out. A refused Transfer
+// (`/problems/invalid-transfer`) gives its `reason`.
+// Ref: #/components/schemas/TransferProblem
+type TransferProblem struct {
+	// Identifies the problem type.
+	Type string `json:"type"`
+	// A short, human-readable summary of the problem type.
+	Title string `json:"title"`
+	// The HTTP status code.
+	Status int32 `json:"status"`
+	// A human-readable explanation of this occurrence.
+	Detail OptString `json:"detail"`
+	// Why the Transfer is refused.
+	Reason OptString `json:"reason"`
+}
+
+// GetType returns the value of Type.
+func (s *TransferProblem) GetType() string {
+	return s.Type
+}
+
+// GetTitle returns the value of Title.
+func (s *TransferProblem) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *TransferProblem) GetStatus() int32 {
+	return s.Status
+}
+
+// GetDetail returns the value of Detail.
+func (s *TransferProblem) GetDetail() OptString {
+	return s.Detail
+}
+
+// GetReason returns the value of Reason.
+func (s *TransferProblem) GetReason() OptString {
+	return s.Reason
+}
+
+// SetType sets the value of Type.
+func (s *TransferProblem) SetType(val string) {
+	s.Type = val
+}
+
+// SetTitle sets the value of Title.
+func (s *TransferProblem) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *TransferProblem) SetStatus(val int32) {
+	s.Status = val
+}
+
+// SetDetail sets the value of Detail.
+func (s *TransferProblem) SetDetail(val OptString) {
+	s.Detail = val
+}
+
+// SetReason sets the value of Reason.
+func (s *TransferProblem) SetReason(val OptString) {
+	s.Reason = val
+}
+
+func (*TransferProblem) acceptImportedTransactionRes() {}
+func (*TransferProblem) listTransferSuggestionsRes()   {}
+func (*TransferProblem) recordCashTransactionRes()     {}
 
 // A Statement import whose Balance check stops a Month close.
 // Ref: #/components/schemas/UncheckedStatementImport

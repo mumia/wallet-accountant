@@ -73,6 +73,10 @@ type GetHouseholdRes interface {
 	getHouseholdRes()
 }
 
+type GetMatchRes interface {
+	getMatchRes()
+}
+
 type GetMeRes interface {
 	getMeRes()
 }
@@ -129,12 +133,24 @@ type ListStatementImportsRes interface {
 	listStatementImportsRes()
 }
 
+type ListTransferSuggestionsRes interface {
+	listTransferSuggestionsRes()
+}
+
 type MarkNotificationReadRes interface {
 	markNotificationReadRes()
 }
 
 type PreviewStatementImportRes interface {
 	previewStatementImportRes()
+}
+
+type RecordCashTransactionRes interface {
+	recordCashTransactionRes()
+}
+
+type RecountOpeningRes interface {
+	recountOpeningRes()
 }
 
 type RemoveMemberRes interface {

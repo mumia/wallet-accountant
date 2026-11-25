@@ -19,6 +19,11 @@ http:
       type: query
       description: Only this Booking month, written YYYY-MM
       disabled: true
+    - name: in_transit
+      value: "false"
+      type: query
+      description: When true, only the Account's Transfer legs that are In transit
+      disabled: true
     - name: cursor
       value: ""
       type: query
@@ -35,7 +40,9 @@ docs: |-
   each with its signed amount on this Account (positive is money in),
   Booking date, Transaction date, description and Category. Sorted by
   Booking date, then in the order they were recorded, and paged with a
-  cursor. `booking_month` keeps only one Booking month. The list is
-  always current: it is read in the request's own transaction.
+  cursor. `booking_month` keeps only one Booking month, and
+  `in_transit=true` only the Transfer legs that are In transit: not
+  Matched and not reversed. The list is always current: it is read in
+  the request's own transaction.
 
   Operation `listAccountTransactions`.

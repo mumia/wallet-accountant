@@ -35,6 +35,10 @@ func NewTransactionHandler(transactions *app.Transactions) *TransactionHandler {
 // ListAccountTransactions implements listAccountTransactions.
 func (h *TransactionHandler) ListAccountTransactions(ctx context.Context, params oas.ListAccountTransactionsParams,
 ) (oas.ListAccountTransactionsRes, error) {
+	if inTransitPending(params) {
+		return nil, httpapi.ErrNotImplemented
+	}
+
 	filter := app.TransactionFilter{Limit: int(params.Limit.Or(DefaultPageSize))}
 
 	if m, ok := params.BookingMonth.Get(); ok {

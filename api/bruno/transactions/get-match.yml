@@ -1,0 +1,23 @@
+info:
+  name: A Match
+  type: http
+  seq: 3
+http:
+  method: GET
+  url: '{{baseUrl}}/households/:household_id/matches/:match_id'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: match_id
+      value: '{{match_id}}'
+      type: path
+      description: The Match's ID
+  auth: inherit
+docs: |-
+  Returns a confirmed Match: the two Transfer legs it links, who
+  confirmed it and when. A Match removed by reversing one of its legs
+  gets 404.
+
+  Operation `getMatch`.

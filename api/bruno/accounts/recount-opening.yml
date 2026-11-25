@@ -1,0 +1,47 @@
+info:
+  name: Correct a cash Account's Opening count
+  type: http
+  seq: 5
+http:
+  method: POST
+  url: '{{baseUrl}}/households/:household_id/accounts/:account_id/opening-count'
+  params:
+    - name: household_id
+      value: '{{household_id}}'
+      type: path
+      description: The Household's ID
+    - name: account_id
+      value: '{{account_id}}'
+      type: path
+      description: The Account's ID
+  headers:
+    - name: Idempotency-Key
+      value: '{{$randomUUID}}'
+      description: A key the client chooses for one request, such as a UUID.
+  body:
+    type: json
+    data: |-
+      {
+        "opening_count": {
+          "amount": 1234.56,
+          "currency": "EUR"
+        },
+        "opening_count_confirmation": {
+          "amount": 1234.56,
+          "currency": "EUR"
+        }
+      }
+  auth: inherit
+docs: |-
+  Replaces a cash Account's Opening count while its start date's month
+  is still the Account's open month (ADR-0018). The Opening balance
+  Transaction is reversed, linked to its reversal, and a new one is
+  recorded on the start date from the new count, typed twice. The same
+  count again records nothing. Two counts that differ get 422
+  `/problems/opening-count-mismatch`; a count in another currency or
+  with more decimal places than the Account's gets 422
+  `/problems/invalid-account`; an Account that isn't cash gets 422
+  `/problems/not-a-cash-account`; and once the start month has closed,
+  409 `/problems/opening-count-locked`.
+
+  Operation `recountOpening`.

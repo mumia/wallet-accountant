@@ -79,6 +79,9 @@ func (e *DuplicateImportError) Error() string {
 // is its Open month (YYYY-MM): every month before it is closed, every month
 // after it not open yet (ADR-0024).
 type ImportAccount struct {
+	// Cash says it is a cash Account, kept entirely by hand, which takes no
+	// Connection.
+	Cash                         bool
 	Currency                     sharedkernel.Currency
 	StartDate                    time.Time
 	AwaitingFirstStatementImport bool

@@ -20,17 +20,39 @@ type Handler interface {
 	// `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
 	// `/problems/invalid-category`. A row booked in a closed month gets 409 `/problems/month-closed`, and
 	// one booked in a month that isn't open yet 409 `/problems/month-not-open-yet` (ADR-0024); both name
-	// the `booking_month`, and the second also the Account's `open_month`. Retrying with the same
-	// Idempotency-Key and body returns the original result and never books twice.
+	// the `booking_month`, and the second also the Account's `open_month`.
+	//
+	// With `transfer_account_id` instead of `category_id`, the row is Accepted as a Transfer to or from
+	// that cash Account: the Transaction recorded is the row's Transfer leg, against the Account transfer
+	// Category, and the cash Account gets the opposite leg, dated on the row's Transaction date, with its
+	// description and payee. The two legs are Matched in the same transaction. With
+	// `match_transaction_id`, no cash leg is recorded: the given leg, one the cash Account already has In
+	// transit (see `listTransferSuggestions`), is Matched instead. A cash leg dated in a closed month of
+	// the cash Account gets 409 `/problems/month-closed`, naming the cash Account in `account_id`. Refused
+	// Transfers get 422 `/problems/invalid-transfer` with a `reason`: both `category_id` and
+	// `transfer_account_id` (`CATEGORY_AND_TRANSFER`), `match_transaction_id` alone
+	// (`MATCH_WITHOUT_TRANSFER`), a counterpart that isn't a cash Account (`COUNTERPART_NOT_CASH`;
+	// Transfers between statement Accounts come later), the row's own Account (`SAME_ACCOUNT`), another
+	// Account currency (`CURRENCY_MISMATCH`), an Account that isn't the Household's (`UNKNOWN_ACCOUNT`),
+	// or a leg to match that isn't an In transit leg on the cash Account naming this row's Account with
+	// the opposite amount (`NOT_A_MATCHING_LEG`).
+	//
+	// Retrying with the same Idempotency-Key and body returns the original result and never books twice.
 	//
 	// POST /households/{household_id}/imported-transactions/{imported_transaction_id}/accept
 	AcceptImportedTransaction(ctx context.Context, req OptImportedTransactionAcceptance, params AcceptImportedTransactionParams) (AcceptImportedTransactionRes, error)
 	// AddAccount implements addAccount operation.
 	//
-	// Adds an Account with a name, a kind, an Account currency and a start date. The new Account awaits
-	// its first Statement import and has no balance: its Opening balance is worked out from that import,
-	// never typed (ADR-0018). Cash Accounts are not supported yet; a `CASH` or unknown kind, an unknown
-	// currency or a blank name gets 422 with the problem type `/problems/invalid-account`.
+	// Adds an Account with a name, a kind, an Account currency and a start date. A statement Account (any
+	// kind but `CASH`) awaits its first Statement import and has no balance: its Opening balance is worked
+	// out from that import, never typed (ADR-0018). A cash Account is kept entirely by hand: it takes
+	// `opening_count`, the cash counted on the start date, and `opening_count_confirmation`, the same
+	// count typed again. Its Opening balance is recorded from the count at once, so it never awaits a
+	// Statement import and has a balance from the start. Two counts that differ get 422
+	// `/problems/opening-count-mismatch`. An unknown kind, an unknown currency, a blank name, a cash
+	// Account without both counts, a count in another currency than the Account's or with more decimal
+	// places than it has, or a count sent for any other kind gets 422 with the problem type
+	// `/problems/invalid-account`.
 	//
 	// POST /households/{household_id}/accounts
 	AddAccount(ctx context.Context, req *AccountCreation, params AddAccountParams) (AddAccountRes, error)
@@ -82,7 +104,8 @@ type Handler interface {
 	// `/problems/invalid-category`. A reversed Transaction gets 409 `/problems/transaction-reversed`; a
 	// reversal gets 422 `/problems/transaction-is-a-reversal`, and the Opening balance Transaction 422
 	// `/problems/opening-balance-transaction`. In a closed month the Category can still change, but not to
-	// Uncategorised: that gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024).
+	// Uncategorised: that gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024). A Transfer leg's
+	// other side is always the Account transfer Category: it gets 422 `/problems/transfer-leg`.
 	//
 	// PATCH /households/{household_id}/transactions/{transaction_id}
 	ChangeTransaction(ctx context.Context, req *TransactionChange, params ChangeTransactionParams) (ChangeTransactionRes, error)
@@ -99,10 +122,18 @@ type Handler interface {
 	// in or before the month has its Balance check waiting or failed (voided imports don't count), or the
 	// computed closing balance differs from the Statement balance (both amounts and the difference are
 	// given). Nothing is ever booked to make the balances meet: a gap is closed by correcting the entry
-	// that is wrong (ADR-0018). A month already closed gets 409 `/problems/month-already-closed`, and an
-	// Account awaiting its first Statement import 409 `/problems/account-awaiting-first-statement-import`.
-	// A Statement balance in another currency than the Account's, or with more decimal places than it has,
-	// or a month before the Account's start date gets 422 `/problems/invalid-month-close`.
+	// that is wrong (ADR-0018). A cash Account's month closes by a Cash count instead: `statement_balance`
+	// is the amount counted and `counted_on` the day it was counted, after the month's last day and no
+	// later than today (UTC); otherwise 422 `/problems/invalid-count-date`. The count is compared with the
+	// Opening balance plus every Transaction booked up to the end of `counted_on` (a gap gives that
+	// `computed_balance`, the count as `statement_balance` and the `difference`: record what really
+	// happened, such as a loss against an Expense Category). The month-end balance the count proves is
+	// stored as the month's Statement balance. `counted_on` is required for a cash Account and refused
+	// with 400 `/problems/invalid-month-closing` for any other. A month already closed gets 409
+	// `/problems/month-already-closed`, and an Account awaiting its first Statement import 409
+	// `/problems/account-awaiting-first-statement-import`. A Statement balance in another currency than
+	// the Account's, or with more decimal places than it has, or a month before the Account's start date
+	// gets 422 `/problems/invalid-month-close`.
 	//
 	// POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/close
 	CloseAccountMonth(ctx context.Context, req *MonthClosing, params CloseAccountMonthParams) (CloseAccountMonthRes, error)
@@ -124,7 +155,8 @@ type Handler interface {
 	// the Account ignoring case: a name already used gets 422 `/problems/connection-name-taken`. Live bank
 	// feeds are not supported yet; a `BANK_FEED` or unknown kind, or a name of only spaces, gets 422 with
 	// the problem type `/problems/invalid-connection`; an empty or too long name gets 400. An invalid
-	// mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is created.
+	// mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is created. A cash Account is
+	// kept by hand and takes no Connection: it gets 422 `/problems/invalid-connection`.
 	//
 	// POST /households/{household_id}/accounts/{account_id}/connections
 	CreateConnection(ctx context.Context, req *ConnectionCreation, params CreateConnectionParams) (CreateConnectionRes, error)
@@ -212,6 +244,13 @@ type Handler interface {
 	//
 	// GET /households/{household_id}
 	GetHousehold(ctx context.Context, params GetHouseholdParams) (GetHouseholdRes, error)
+	// GetMatch implements getMatch operation.
+	//
+	// Returns a confirmed Match: the two Transfer legs it links, who confirmed it and when. A Match
+	// removed by reversing one of its legs gets 404.
+	//
+	// GET /households/{household_id}/matches/{match_id}
+	GetMatch(ctx context.Context, params GetMatchParams) (GetMatchRes, error)
 	// GetMe implements getMe operation.
 	//
 	// Returns the User the bearer token belongs to, and whether they are Instance administrator. An
@@ -249,8 +288,9 @@ type Handler interface {
 	// Lists the Account's Transactions as a single-entry list (ADR-0001): each with its signed amount on
 	// this Account (positive is money in), Booking date, Transaction date, description and Category.
 	// Sorted by Booking date, then in the order they were recorded, and paged with a cursor.
-	// `booking_month` keeps only one Booking month. The list is always current: it is read in the
-	// request's own transaction.
+	// `booking_month` keeps only one Booking month, and `in_transit=true` only the Transfer legs that are
+	// In transit: not Matched and not reversed. The list is always current: it is read in the request's
+	// own transaction.
 	//
 	// GET /households/{household_id}/accounts/{account_id}/transactions
 	ListAccountTransactions(ctx context.Context, params ListAccountTransactionsParams) (ListAccountTransactionsRes, error)
@@ -328,6 +368,17 @@ type Handler interface {
 	//
 	// GET /households/{household_id}/connections/{connection_id}/statement-imports
 	ListStatementImports(ctx context.Context, params ListStatementImportsParams) (ListStatementImportsRes, error)
+	// ListTransferSuggestions implements listTransferSuggestions operation.
+	//
+	// Lists the Transfer legs on the cash Account `account_id` that could be the other side of this
+	// Imported transaction: not Matched and not reversed, naming the row's Account as their counterpart,
+	// with the opposite amount, and dated within 7 days either side of the row's Transaction date. Closest
+	// date first. They are worked out on each request and never stored; a User confirms one by Accepting
+	// the row with it as `match_transaction_id`. An `account_id` that isn't a cash Account of the
+	// Household gets 422 `/problems/invalid-transfer` (`COUNTERPART_NOT_CASH` or `UNKNOWN_ACCOUNT`).
+	//
+	// GET /households/{household_id}/imported-transactions/{imported_transaction_id}/transfer-suggestions
+	ListTransferSuggestions(ctx context.Context, params ListTransferSuggestionsParams) (ListTransferSuggestionsRes, error)
 	// MarkNotificationRead implements markNotificationRead operation.
 	//
 	// Marks the Notification read for the caller only; every other member still sees it unread until they
@@ -364,6 +415,41 @@ type Handler interface {
 	//
 	// POST /households/{household_id}/connections/{connection_id}/statement-imports/previews
 	PreviewStatementImport(ctx context.Context, req *StatementImportPreviewUploadMultipart, params PreviewStatementImportParams) (PreviewStatementImportRes, error)
+	// RecordCashTransaction implements recordCashTransaction operation.
+	//
+	// Records a Transaction on a cash Account, which is kept entirely by hand. `date` is both its Booking
+	// date and its Transaction date, and `amount` is signed (positive is money in), in the Account
+	// currency. The other side is `category_id`, with the Category rules of Accept (absent, or the
+	// Uncategorised Category, leaves it in Uncategorised; any other Internal Category gets 422
+	// `/problems/internal-category`; a Category that isn't one of the Household's 422
+	// `/problems/invalid-category`), or `counterpart_account_id`, which makes it a Transfer leg against
+	// the Account transfer Category. A leg whose counterpart is a statement Account stays In transit until
+	// that Account's row is Accepted as a Transfer and Matched to it. A leg whose counterpart is another
+	// cash Account records that Account's leg too, with the opposite amount and the same date, description
+	// and payee, and confirms the Match between them: the response is this Account's leg, with its
+	// `match_id`. Both `category_id` and `counterpart_account_id`, a counterpart that is the Account
+	// itself, isn't one of the Household's, or has another Account currency get 422
+	// `/problems/invalid-transfer` with a `reason`. An Account that isn't cash gets 422
+	// `/problems/not-a-cash-account`: statement Accounts take Transactions only from their statements. A
+	// zero amount, one in another currency or with more decimal places than the Account's, a date after
+	// today (UTC) or before the Account's start date gets 422 `/problems/invalid-transaction`. A date in a
+	// closed month of either Account gets 409 `/problems/month-closed`, naming the Account in
+	// `account_id`; months after the open month are fine for a cash Account (ADR-0024).
+	//
+	// POST /households/{household_id}/accounts/{account_id}/transactions
+	RecordCashTransaction(ctx context.Context, req *CashTransactionCreation, params RecordCashTransactionParams) (RecordCashTransactionRes, error)
+	// RecountOpening implements recountOpening operation.
+	//
+	// Replaces a cash Account's Opening count while its start date's month is still the Account's open
+	// month (ADR-0018). The Opening balance Transaction is reversed, linked to its reversal, and a new one
+	// is recorded on the start date from the new count, typed twice. The same count again records nothing.
+	// Two counts that differ get 422 `/problems/opening-count-mismatch`; a count in another currency or
+	// with more decimal places than the Account's gets 422 `/problems/invalid-account`; an Account that
+	// isn't cash gets 422 `/problems/not-a-cash-account`; and once the start month has closed, 409
+	// `/problems/opening-count-locked`.
+	//
+	// POST /households/{household_id}/accounts/{account_id}/opening-count
+	RecountOpening(ctx context.Context, req *OpeningRecount, params RecountOpeningParams) (RecountOpeningRes, error)
 	// RemoveMember implements removeMember operation.
 	//
 	// Removes the member from the Household. With the caller's own User ID the caller leaves. Any member
@@ -382,7 +468,9 @@ type Handler interface {
 	// isn't closed (`NOT_CLOSED`), it isn't the Account's latest closed month (`NOT_LATEST_CLOSED`), or
 	// the open month has Accepted Transactions that aren't reversed
 	// (`OPEN_MONTH_HAS_ACCEPTED_TRANSACTIONS`, with the `open_month` and the `accepted` count): reverse
-	// them first. Retrying with the same Idempotency-Key returns the original result.
+	// them first. A cash Account has no Accepted Transactions, so that condition never applies to it: its
+	// later months' Transactions stay, and the month must be closed again with a new Cash count. Retrying
+	// with the same Idempotency-Key returns the original result.
 	//
 	// POST /households/{household_id}/accounts/{account_id}/months/{booking_month}/reopen
 	ReopenAccountMonth(ctx context.Context, params ReopenAccountMonthParams) (ReopenAccountMonthRes, error)
@@ -397,6 +485,13 @@ type Handler interface {
 	// and the Opening balance Transaction 422 `/problems/opening-balance-transaction` (only voiding the
 	// first Statement import changes it). A Transaction booked in a closed month gets 409
 	// `/problems/month-closed`, naming the `booking_month`: Reopen back to it first (ADR-0024).
+	//
+	// Reversing a Matched Transfer leg removes its Match. When the leg is an Accepted row's, a cash leg
+	// recorded automatically by that Accept is reversed with it; a cash leg entered by hand stays, In
+	// transit, to be Matched again. Reversing a cash leg alone leaves the other leg In transit. Reversing
+	// either leg of a Transfer between two cash Accounts reverses both. When any Transaction it would
+	// reverse is booked in a closed month of its Account, nothing is reversed: 409
+	// `/problems/month-closed`, naming that Account in `account_id`.
 	//
 	// POST /households/{household_id}/transactions/{transaction_id}/reverse
 	ReverseTransaction(ctx context.Context, params ReverseTransactionParams) (ReverseTransactionRes, error)

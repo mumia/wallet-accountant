@@ -1,7 +1,7 @@
 info:
   name: Reverse a Transaction
   type: http
-  seq: 3
+  seq: 5
 http:
   method: POST
   url: '{{baseUrl}}/households/:household_id/transactions/:transaction_id/reverse'
@@ -40,5 +40,14 @@ docs: |-
   voiding the first Statement import changes it). A Transaction booked
   in a closed month gets 409 `/problems/month-closed`, naming the
   `booking_month`: Reopen back to it first (ADR-0024).
+
+  Reversing a Matched Transfer leg removes its Match. When the leg is
+  an Accepted row's, a cash leg recorded automatically by that Accept
+  is reversed with it; a cash leg entered by hand stays, In transit,
+  to be Matched again. Reversing a cash leg alone leaves the other leg
+  In transit. Reversing either leg of a Transfer between two cash
+  Accounts reverses both. When any Transaction it would reverse is
+  booked in a closed month of its Account, nothing is reversed: 409
+  `/problems/month-closed`, naming that Account in `account_id`.
 
   Operation `reverseTransaction`.

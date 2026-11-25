@@ -280,12 +280,19 @@ func (t *Transactions) RecordOpeningBalance(ctx context.Context, tx *eventstore.
 		return fmt.Errorf("record opening balance of account %s: %w", account, err)
 	}
 
+	return t.recordOpeningTransaction(ctx, tx, account, transaction, fold.State, amount)
+}
+
+// recordOpeningTransaction records the Opening balance Transaction of the
+// Account s, on its start date, between it and the Opening balance Internal
+// Category. The Account's own Opening balance event is the caller's.
+func (t *Transactions) recordOpeningTransaction(ctx context.Context, tx *eventstore.Tx, account, transaction uuid.UUID,
+	s domain.AccountState, amount sharedkernel.Decimal,
+) error {
 	category, err := t.internal.InternalCategory(ctx, tx, domain.RoleOpeningBalance)
 	if err != nil {
 		return fmt.Errorf("find the opening balance category: %w", err)
 	}
-
-	s := fold.State
 
 	if _, err := t.transactions.Execute(ctx, tx, transaction, domain.RecordTransaction{
 		OpeningBalance:  true,

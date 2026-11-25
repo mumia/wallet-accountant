@@ -22,7 +22,9 @@ http:
     type: json
     data: |-
       {
-        "category_id": "00000000-0000-0000-0000-000000000000"
+        "category_id": "00000000-0000-0000-0000-000000000000",
+        "transfer_account_id": "00000000-0000-0000-0000-000000000000",
+        "match_transaction_id": "00000000-0000-0000-0000-000000000000"
       }
   auth: inherit
 docs: |-
@@ -43,6 +45,28 @@ docs: |-
   one booked in a month that isn't open yet 409
   `/problems/month-not-open-yet` (ADR-0024); both name the
   `booking_month`, and the second also the Account's `open_month`.
+
+  With `transfer_account_id` instead of `category_id`, the row is
+  Accepted as a Transfer to or from that cash Account: the Transaction
+  recorded is the row's Transfer leg, against the Account transfer
+  Category, and the cash Account gets the opposite leg, dated on the
+  row's Transaction date, with its description and payee. The two legs
+  are Matched in the same transaction. With `match_transaction_id`, no
+  cash leg is recorded: the given leg, one the cash Account already
+  has In transit (see `listTransferSuggestions`), is Matched instead.
+  A cash leg dated in a closed month of the cash Account gets 409
+  `/problems/month-closed`, naming the cash Account in `account_id`.
+  Refused Transfers get 422 `/problems/invalid-transfer` with a
+  `reason`: both `category_id` and `transfer_account_id`
+  (`CATEGORY_AND_TRANSFER`), `match_transaction_id` alone
+  (`MATCH_WITHOUT_TRANSFER`), a counterpart that isn't a cash Account
+  (`COUNTERPART_NOT_CASH`; Transfers between statement Accounts come
+  later), the row's own Account (`SAME_ACCOUNT`), another Account
+  currency (`CURRENCY_MISMATCH`), an Account that isn't the
+  Household's (`UNKNOWN_ACCOUNT`), or a leg to match that isn't an In
+  transit leg on the cash Account naming this row's Account with the
+  opposite amount (`NOT_A_MATCHING_LEG`).
+
   Retrying with the same Idempotency-Key and body returns the original
   result and never books twice.
 
