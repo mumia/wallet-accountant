@@ -58,7 +58,8 @@ func NewAccountAggregate(folds eventstore.FoldStore[domain.AccountState]) Accoun
 		// 5: a closed month flagged by every change that touches it.
 		// 6: the Open month and the unreversed Transactions per Booking
 		// month; flags gone (ADR-0024).
-		FoldSchemaVersion: 6,
+		// 7: a cash month's Cash count with its Month close.
+		FoldSchemaVersion: 7,
 	}
 }
 

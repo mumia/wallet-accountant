@@ -102,7 +102,8 @@ func TestRecordingCashTransactions(t *testing.T) {
 	}
 
 	app.Post(t, "/api/households/"+household+"/accounts/"+wallet.AccountID+"/months/2026-01/close", token,
-		map[string]any{"statement_balance": eur("37.50")}).AssertJSON(t, http.StatusOK, &map[string]any{})
+		map[string]any{"statement_balance": eur("37.50"), "counted_on": "2026-02-01"}).
+		AssertJSON(t, http.StatusOK, &map[string]any{})
 
 	// January is closed: no new Transaction, no reversal there.
 	late := recordCash(t, app, token, household, wallet.AccountID, map[string]any{

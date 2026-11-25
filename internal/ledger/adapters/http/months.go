@@ -22,6 +22,8 @@ const (
 	MonthNotEndedType                       = "/problems/month-not-ended"
 	AccountAwaitingFirstStatementImportType = "/problems/account-awaiting-first-statement-import"
 	InvalidMonthCloseType                   = "/problems/invalid-month-close"
+	InvalidMonthClosingType                 = "/problems/invalid-month-closing"
+	InvalidCountDateType                    = "/problems/invalid-count-date"
 	MonthReopenRefusedType                  = "/problems/month-reopen-refused"
 )
 
@@ -101,19 +103,20 @@ func (h *MonthHandler) ListAccountMonths(ctx context.Context, params oas.ListAcc
 // CloseAccountMonth implements closeAccountMonth.
 func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClosing, params oas.CloseAccountMonthParams,
 ) (oas.CloseAccountMonthRes, error) {
-	if cashClosePending(req) {
-		return nil, httpapi.ErrNotImplemented
-	}
-
 	month, err := time.Parse(domain.MonthLayout, params.BookingMonth)
 	if err != nil {
 		return new(oas.CloseAccountMonthBadRequest(httpapi.Problem(http.StatusBadRequest, "", "",
 			"The booking_month must be written YYYY-MM."))), nil
 	}
 
+	var countedOn *time.Time
+	if d, ok := req.CountedOn.Get(); ok {
+		countedOn = &d
+	}
+
 	balance := req.StatementBalance
 	closed, err := h.months.Close(ctx, params.HouseholdID, params.AccountID, month, balance.Amount.Value,
-		string(balance.Currency))
+		string(balance.Currency), countedOn)
 
 	conflict := func(typ, title, detail string) (oas.CloseAccountMonthRes, error) {
 		return httpapi.MonthConflict(typ, title, detail, "", ""), nil
@@ -158,6 +161,18 @@ func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClos
 		return invalid("The Statement balance has more decimal places than the Account currency.")
 	case errors.Is(err, app.ErrMonthBeforeStartDate):
 		return invalid("The month is before the Account's start date.")
+	case errors.Is(err, app.ErrCountedOnRequired):
+		return new(oas.CloseAccountMonthBadRequest(httpapi.Problem(http.StatusBadRequest, InvalidMonthClosingType,
+			"Invalid Month closing", "A cash month closes by a Cash count: send counted_on, the day the cash was counted."))), nil
+	case errors.Is(err, app.ErrCountedOnNotForStatementAccount):
+		return new(oas.CloseAccountMonthBadRequest(httpapi.Problem(http.StatusBadRequest, InvalidMonthClosingType,
+			"Invalid Month closing", "Only a cash Account's month closes by a count: leave out counted_on."))), nil
+	case errors.Is(err, app.ErrInvalidCountDate):
+		return &oas.MonthCloseProblem{
+			Type: InvalidCountDateType, Title: "Invalid count date", Status: http.StatusUnprocessableEntity,
+			Detail: oas.NewOptString(fmt.Sprintf("The cash must be counted after %s ends, and no later than today.",
+				httpapi.MonthWords(month.Format(domain.MonthLayout)))),
+		}, nil
 	case err != nil:
 		return nil, fmt.Errorf("close account month: %w", err)
 	}
@@ -318,6 +333,10 @@ func accountMonthOut(m app.AccountMonth) (*oas.AccountMonth, error) {
 
 		out.StatementBalance = oas.NewOptMoney(statement)
 		out.ClosedAt = oas.NewOptDateTime(m.ClosedAt)
+
+		if !m.CountedOn.IsZero() {
+			out.CountedOn = oas.NewOptDate(m.CountedOn)
+		}
 	}
 
 	return out, nil

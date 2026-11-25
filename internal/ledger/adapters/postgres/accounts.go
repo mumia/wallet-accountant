@@ -60,7 +60,7 @@ func (AccountFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUID) (
 // map stays nil when it has no month.
 func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *domain.AccountState) error {
 	rows, err := tx.Query(ctx, `SELECT booking_month, net_change::text, uncategorised, live, statement_balance::text,
-			closed_at, closed_by
+			closed_at, closed_by, counted_on, cash_count::text
 		FROM account_months WHERE household_id = $1 AND account_id = $2`, tx.HouseholdID(), account)
 	if err != nil {
 		return fmt.Errorf("load account months: %w", err)
@@ -74,9 +74,12 @@ func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *do
 			statement     *string
 			closedAt      *time.Time
 			closedBy      *uuid.UUID
+			countedOn     *time.Time
+			cashCount     *string
 		)
 
-		if err := rows.Scan(&month, &change, &count, &live, &statement, &closedAt, &closedBy); err != nil {
+		if err := rows.Scan(&month, &change, &count, &live, &statement, &closedAt, &closedBy, &countedOn,
+			&cashCount); err != nil {
 			return fmt.Errorf("load account months: %w", err)
 		}
 
@@ -111,6 +114,10 @@ func loadMonths(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, s *do
 			if s.Closed, err = closeOf(s.Closed, month, *statement, closedAt, closedBy); err != nil {
 				return err
 			}
+
+			if s.Closed, err = countOf(s.Closed, month, countedOn, cashCount); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -142,6 +149,26 @@ func closeOf(closes map[string]domain.MonthClose, month, statement string, close
 		closes = map[string]domain.MonthClose{}
 	}
 
+	closes[month] = c
+
+	return closes, nil
+}
+
+// countOf adds a stored Cash count to month's Month close in closes; a
+// statement Account's month has none.
+func countOf(closes map[string]domain.MonthClose, month string, countedOn *time.Time, count *string,
+) (map[string]domain.MonthClose, error) {
+	if countedOn == nil || count == nil {
+		return closes, nil
+	}
+
+	amount, err := sharedkernel.ParseDecimal(*count)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	c := closes[month]
+	c.CountedOn, c.Count = *countedOn, amount
 	closes[month] = c
 
 	return closes, nil
@@ -214,6 +241,8 @@ func saveMonths(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.A
 		counts, lives   []int
 		closedAts       []*time.Time
 		closedBys       []*uuid.UUID
+		countedOns      []*time.Time
+		cashCounts      []*string
 	)
 
 	for month := range set {
@@ -221,6 +250,8 @@ func saveMonths(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.A
 			statement *string
 			closedAt  *time.Time
 			closedBy  *uuid.UUID
+			countedOn *time.Time
+			cashCount *string
 		)
 
 		c, closed := s.Closed[month]
@@ -234,6 +265,10 @@ func saveMonths(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.A
 			if c.ClosedBy != uuid.Nil {
 				closedBy = &c.ClosedBy
 			}
+
+			if !c.CountedOn.IsZero() {
+				countedOn, cashCount = &c.CountedOn, new(c.Count.String())
+			}
 		}
 
 		months = append(months, month)
@@ -243,21 +278,28 @@ func saveMonths(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, s domain.A
 		statements = append(statements, statement)
 		closedAts = append(closedAts, closedAt)
 		closedBys = append(closedBys, closedBy)
+		countedOns = append(countedOns, countedOn)
+		cashCounts = append(cashCounts, cashCount)
 	}
 
 	if _, err := tx.Exec(ctx, `INSERT INTO account_months AS m (household_id, account_id, booking_month, net_change,
-			uncategorised, live, statement_balance, closed_at, closed_by)
-		SELECT $1, $2, u.month, u.change::numeric, u.count, u.live, u.statement::numeric, u.closed_at, u.closed_by
-		FROM unnest($3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::timestamptz[], $9::uuid[])
-			AS u (month, change, count, live, statement, closed_at, closed_by)
+			uncategorised, live, statement_balance, closed_at, closed_by, counted_on, cash_count)
+		SELECT $1, $2, u.month, u.change::numeric, u.count, u.live, u.statement::numeric, u.closed_at, u.closed_by,
+			u.counted_on, u.cash_count::numeric
+		FROM unnest($3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::timestamptz[], $9::uuid[],
+				$10::date[], $11::text[])
+			AS u (month, change, count, live, statement, closed_at, closed_by, counted_on, cash_count)
 		ON CONFLICT (account_id, booking_month) DO UPDATE SET net_change = EXCLUDED.net_change,
 			uncategorised = EXCLUDED.uncategorised, live = EXCLUDED.live,
 			statement_balance = EXCLUDED.statement_balance, closed_at = EXCLUDED.closed_at,
-			closed_by = EXCLUDED.closed_by
-		WHERE (m.net_change, m.uncategorised, m.live, m.statement_balance, m.closed_at, m.closed_by)
+			closed_by = EXCLUDED.closed_by, counted_on = EXCLUDED.counted_on, cash_count = EXCLUDED.cash_count
+		WHERE (m.net_change, m.uncategorised, m.live, m.statement_balance, m.closed_at, m.closed_by, m.counted_on,
+				m.cash_count)
 			IS DISTINCT FROM (EXCLUDED.net_change, EXCLUDED.uncategorised, EXCLUDED.live,
-				EXCLUDED.statement_balance, EXCLUDED.closed_at, EXCLUDED.closed_by)`,
-		tx.HouseholdID(), id, months, changes, counts, lives, statements, closedAts, closedBys); err != nil {
+				EXCLUDED.statement_balance, EXCLUDED.closed_at, EXCLUDED.closed_by, EXCLUDED.counted_on,
+				EXCLUDED.cash_count)`,
+		tx.HouseholdID(), id, months, changes, counts, lives, statements, closedAts, closedBys, countedOns,
+		cashCounts); err != nil {
 		return fmt.Errorf("save account months: %w", err)
 	}
 
@@ -334,4 +376,36 @@ func (AccountReader) MonthsForShare(ctx context.Context, tx *eventstore.Tx, acco
 	}
 
 	return m, true, nil
+}
+
+// CashCounts implements app.CashCounts.
+type CashCounts struct{}
+
+var _ app.CashCounts = CashCounts{}
+
+// MovedAfter implements app.CashCounts with the Account Posting lookup rows,
+// once the Account's row is locked for update: a Transaction booked
+// concurrently either committed before the lock, and is summed, or waits
+// for it and then fails its version check.
+func (CashCounts) MovedAfter(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, after, through time.Time,
+) (sharedkernel.Decimal, error) {
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM accounts WHERE household_id = $1 AND id = $2 FOR UPDATE`,
+		tx.HouseholdID(), account); err != nil {
+		return sharedkernel.Decimal{}, fmt.Errorf("lock account %s: %w", account, err)
+	}
+
+	var moved string
+
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(amount), 0)::text FROM account_postings
+		WHERE household_id = $1 AND account_id = $2 AND booking_date > $3 AND booking_date <= $4`,
+		tx.HouseholdID(), account, after, through).Scan(&moved); err != nil {
+		return sharedkernel.Decimal{}, fmt.Errorf("sum account %s postings: %w", account, err)
+	}
+
+	d, err := sharedkernel.ParseDecimal(moved)
+	if err != nil {
+		return sharedkernel.Decimal{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	return d, nil
 }

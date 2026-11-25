@@ -76,9 +76,16 @@ func (s AccountState) LatestClosed() string {
 
 // ReopenRefusal is every reason the Booking month (MonthLayout) can't be
 // reopened now; nil when it can. Only the latest closed month can, while
-// the Open month has no Transactions that aren't reversed (ADR-0024).
+// the Open month has no Transactions that aren't reversed (ADR-0024). A
+// cash Account skips that last condition: it books in later months anyway,
+// and the month closes again with a new Cash count.
 func (s AccountState) ReopenRefusal(month string) *MonthReopenRefusedError {
 	_, closed := s.Closed[month]
+
+	accepted := s.Live[s.OpenMonth]
+	if s.IsCash() {
+		accepted = 0
+	}
 
 	refused := &MonthReopenRefusedError{
 		Month:           month,
@@ -86,7 +93,7 @@ func (s AccountState) ReopenRefusal(month string) *MonthReopenRefusedError {
 		NotClosed:       !closed,
 		NotLatestClosed: closed && month != s.LatestClosed(),
 		LatestClosed:    s.LatestClosed(),
-		Accepted:        s.Live[s.OpenMonth],
+		Accepted:        accepted,
 	}
 
 	if refused.NotClosed || refused.NotLatestClosed || refused.Accepted > 0 {

@@ -22,12 +22,6 @@ func (h *TransactionHandler) GetMatch(context.Context, oas.GetMatchParams) (oas.
 	return nil, httpapi.ErrNotImplemented
 }
 
-// cashClosePending reports whether a Month close sends a Cash count's date
-// (ticket 04).
-func cashClosePending(req *oas.MonthClosing) bool {
-	return req.CountedOn.Set
-}
-
 // inTransitPending reports whether a Transaction list asks for In transit
 // legs only (ticket 05).
 func inTransitPending(params oas.ListAccountTransactionsParams) bool {

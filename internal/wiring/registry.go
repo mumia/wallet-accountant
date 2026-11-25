@@ -84,7 +84,8 @@ func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
 		ledgerpg.TransactionReader{}, ledgerpg.CategoryReader{}, ledgerIngestion{imported: imported})
 	accounts := ledgerapp.NewAccounts(households, accountAggregate, ledgerpg.AccountReader{},
 		ledgerIngestion{imported: imported}, transactions)
-	months := ledgerapp.NewMonths(households, accountAggregate, ledgerIngestion{imported: imported})
+	months := ledgerapp.NewMonths(households, accountAggregate, ledgerIngestion{imported: imported},
+		ledgerpg.CashCounts{})
 	connections := ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{})
 	ledger := ingestionLedger{accounts: accounts, transactions: transactions, months: months}
 	rows := ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{})

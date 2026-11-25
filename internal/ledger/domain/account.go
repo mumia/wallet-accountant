@@ -537,9 +537,17 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 	case MonthClosed:
 		// Kept to the microsecond, as the fold store and the event store
 		// keep times, so a stored fold equals a rebuilt one.
-		s.Closed = closed(s.Closed, ev.Month, MonthClose{
+		c := MonthClose{
 			StatementBalance: ev.StatementBalance, ClosedAt: e.Time.Truncate(time.Microsecond), ClosedBy: e.ActorID,
-		})
+		}
+
+		if ev.Count != nil {
+			// The event was written with DateLayout, so it always parses.
+			c.CountedOn, _ = time.Parse(DateLayout, ev.CountedOn)
+			c.Count = *ev.Count
+		}
+
+		s.Closed = closed(s.Closed, ev.Month, c)
 		s.OpenMonth = NextMonth(ev.Month)
 	case MonthReopened:
 		s.Closed = reopened(s.Closed, ev.Month)

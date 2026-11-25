@@ -32,11 +32,6 @@ func TestCashAndTransferOperationsAnswerNotImplementedYet(t *testing.T) {
 				"date": "2026-01-05", "amount": eur, "description": "ATM", "counterpart_account_id": anID,
 			})
 		},
-		"close by a Cash count (04)": func() *apitest.Response {
-			return app.Post(t, base+"/accounts/"+main.AccountID+"/months/2026-01/close", token, map[string]any{
-				"statement_balance": eur, "counted_on": "2026-02-02",
-			})
-		},
 		"getMatch (05)": func() *apitest.Response {
 			return app.Get(t, base+"/matches/"+anID, token)
 		},

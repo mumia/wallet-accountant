@@ -214,7 +214,7 @@ func TestRecountingAnOpeningCountIsRefused(t *testing.T) {
 
 	// Once the start month closes, the Opening count is locked (ADR-0024).
 	app.Post(t, base+wallet.AccountID+"/months/2026-01/close", token, map[string]any{
-		"statement_balance": eur("40.00"),
+		"statement_balance": eur("40.00"), "counted_on": "2026-02-01",
 	}).AssertJSON(t, http.StatusOK, &map[string]any{})
 	app.Post(t, base+wallet.AccountID+"/opening-count", token, count).
 		AssertProblem(t, http.StatusConflict, "/problems/opening-count-locked")
