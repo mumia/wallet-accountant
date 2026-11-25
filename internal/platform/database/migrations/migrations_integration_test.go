@@ -22,9 +22,9 @@ func TestMigrationsAreRepeatable(t *testing.T) {
 	t.Parallel()
 	urls := databasetest.New(t)
 
-	if err := migrations.Up(t.Context(), urls.Owner, urls.App, urls.Reader); err != nil {
-		t.Fatalf("second run: %v", err)
-	}
+	// The second run goes through databasetest.Migrate too: it sets the
+	// cluster-wide role passwords, which must not race other tests' runs.
+	databasetest.Migrate(t, func() error { return migrations.Up(t.Context(), urls.Owner, urls.App, urls.Reader) })
 }
 
 func TestEventStoreAdmitsOnlyTheHouseholdThatIsSet(t *testing.T) {
