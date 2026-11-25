@@ -264,9 +264,10 @@ func TestAMemberCanRevokeAnotherMembersInvitation(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 	alice := app.Register(t, "https://issuer.example", "alice")
-	bob, bobID := registerAs(t, app, "bob", "Bob")
+	bob := app.Register(t, "https://issuer.example", "bob")
 	home := createHousehold(t, app, alice, "Home")
-	app.SeedMember(t, home.HouseholdID, bobID, time.Now())
+	join(app, t, bob, issueInvitation(t, app, alice, home.HouseholdID).Code).
+		AssertJSON(t, http.StatusCreated, &household{})
 
 	issued := issueInvitation(t, app, alice, home.HouseholdID)
 

@@ -98,17 +98,18 @@ func TestAHouseholdsCreatorIsItsOnlyMember(t *testing.T) {
 
 func TestMembersAreListedOldestFirstWithTheirNames(t *testing.T) {
 	t.Parallel()
-	app := apitest.Start(t, apitest.WithClock(func() time.Time { return creationTime }))
+	clock := newSettableClock(creationTime)
+	app := apitest.Start(t, apitest.WithClock(clock.Now))
 	// Bob registers first, so his User ID sorts before Alice's: the list
 	// must be ordered by when each joined, not by ID.
 	bob, bobID := registerAs(t, app, "bob", "Bob")
 	alice, aliceID := registerAs(t, app, "alice", "Alice")
 	home := createHousehold(t, app, alice, "Home")
 
-	// Joining through an Invitation (ticket 06) isn't there yet, so Bob's
-	// membership is seeded.
 	bobJoined := creationTime.Add(26 * time.Hour)
-	app.SeedMember(t, home.HouseholdID, bobID, bobJoined)
+	clock.set(bobJoined)
+	join(app, t, bob, issueInvitation(t, app, alice, home.HouseholdID).Code).
+		AssertJSON(t, http.StatusCreated, &household{})
 
 	want := []member{
 		{UserID: aliceID, DisplayName: named("Alice"), JoinedAt: creationTime},

@@ -84,9 +84,9 @@ func TestAnInvitationToAHouseholdIsStoredInItsScopeWithItsLookupRowInInstanceSco
 		t.Error("instance scope loads the Invitation")
 	}
 
-	lookup := func(scope uuid.UUID) (uuid.UUID, bool) {
+	lookup := func(scope uuid.UUID) (app.InvitationCode, bool) {
 		var (
-			got   uuid.UUID
+			got   app.InvitationCode
 			found bool
 		)
 
@@ -103,8 +103,10 @@ func TestAnInvitationToAHouseholdIsStoredInItsScopeWithItsLookupRowInInstanceSco
 		return got, found
 	}
 
-	if got, ok := lookup(uuid.Nil); !ok || got != id {
-		t.Errorf("instance scope looks the code up as %s (found %t), want %s", got, ok, id)
+	want := app.InvitationCode{InvitationID: id, HouseholdID: household}
+
+	if got, ok := lookup(uuid.Nil); !ok || got != want {
+		t.Errorf("instance scope looks the code up as %+v (found %t), want %+v", got, ok, want)
 	}
 
 	if _, ok := lookup(household); ok {
@@ -112,15 +114,6 @@ func TestAnInvitationToAHouseholdIsStoredInItsScopeWithItsLookupRowInInstanceSco
 	}
 
 	databasetest.InScope(t, urls.App, uuid.Nil, func(tx pgx.Tx) {
-		var got uuid.UUID
-		if err := tx.QueryRow(ctx, `SELECT household_id FROM invitation_codes WHERE invitation_id = $1`, id).Scan(&got); err != nil {
-			t.Fatalf("read the lookup row's Household: %v", err)
-		}
-
-		if got != household {
-			t.Errorf("the lookup row's Household = %s, want %s", got, household)
-		}
-
 		// Lose the lookup row, which the rebuild below brings back.
 		if _, err := tx.Exec(ctx, `DELETE FROM invitation_codes WHERE invitation_id = $1`, id); err != nil {
 			t.Fatal(err)
@@ -131,8 +124,8 @@ func TestAnInvitationToAHouseholdIsStoredInItsScopeWithItsLookupRowInInstanceSco
 		t.Fatalf("rebuild: %v", err)
 	}
 
-	if got, ok := lookup(uuid.Nil); !ok || got != id {
-		t.Errorf("after a rebuild, instance scope looks the code up as %s (found %t), want %s", got, ok, id)
+	if got, ok := lookup(uuid.Nil); !ok || got != want {
+		t.Errorf("after a rebuild, instance scope looks the code up as %+v (found %t), want %+v", got, ok, want)
 	}
 
 	if s, ok := loaded(household); !ok || s.IssuedBy != issuer {

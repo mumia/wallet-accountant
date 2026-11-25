@@ -40,7 +40,6 @@ type App struct {
 	client  *http.Client
 	auth    *authntest.Authenticator
 	reader  *pgxpool.Pool
-	pool    *pgxpool.Pool
 	users   *householdsapp.Users
 	cfg     config.Config
 	tel     *telemetry.Telemetry
@@ -121,8 +120,7 @@ func Start(t testing.TB, opts ...Option) *App {
 		t.Fatalf("app pool: %v", err)
 	}
 
-	app.pool = appPool
-	app.users = wiring.NewUsers(appPool)
+	app.users = wiring.NewUsers(appPool, time.Now)
 
 	done := make(chan error, 1)
 
