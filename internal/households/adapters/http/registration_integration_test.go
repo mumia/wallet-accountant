@@ -255,3 +255,159 @@ func TestUsersSurviveARebuild(t *testing.T) {
 		t.Errorf("GET /me after rebuild = %+v, want %+v", after, before)
 	}
 }
+
+func register(app *apitest.App, t *testing.T, token, code string) *apitest.Response {
+	t.Helper()
+
+	return app.Post(t, "/api/registrations", token, map[string]string{"invitation_code": code, "display_name": "Bea"})
+}
+
+func TestRegisteringWithAHouseholdCodeJoinsTheHousehold(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	alice := app.Register(t, "https://issuer.example", "alice")
+	home := createHousehold(t, app, alice, "Home")
+
+	var account struct {
+		AccountID string `json:"account_id"`
+	}
+	app.Post(t, "/api/households/"+home.HouseholdID+"/accounts", alice, map[string]string{
+		"name": "Main", "kind": "BANK_ACCOUNT", "currency": "EUR", "start_date": "2026-01-01",
+	}).AssertJSON(t, http.StatusCreated, &account)
+
+	issued := issueInvitation(t, app, alice, home.HouseholdID)
+	bea := app.TokenFor("https://issuer.example", "bea")
+
+	var registered me
+	register(app, t, bea, issued.Code).AssertJSON(t, http.StatusCreated, &registered)
+
+	if registered.UserID == "" || registered.IsInstanceAdministrator || registered.DisplayName != "Bea" {
+		t.Errorf("registered = %+v, want a User named Bea who is not Instance administrator", registered)
+	}
+
+	var got me
+	app.Get(t, "/api/me", bea).AssertJSON(t, http.StatusOK, &got)
+
+	if got != registered {
+		t.Errorf("GET /me = %+v, want %+v", got, registered)
+	}
+
+	var list householdList
+	app.Get(t, "/api/households", bea).AssertJSON(t, http.StatusOK, &list)
+
+	if len(list.Items) != 1 || list.Items[0] != home {
+		t.Errorf("bea's Households = %+v, want only %+v", list.Items, home)
+	}
+
+	var accounts struct {
+		Items []struct {
+			AccountID string `json:"account_id"`
+		} `json:"items"`
+	}
+	app.Get(t, "/api/households/"+home.HouseholdID+"/accounts", bea).AssertJSON(t, http.StatusOK, &accounts)
+
+	if len(accounts.Items) != 1 || accounts.Items[0].AccountID != account.AccountID {
+		t.Errorf("bea sees Accounts %+v, want alice's %s", accounts.Items, account.AccountID)
+	}
+
+	if invitations := listInvitations(t, app, alice, home.HouseholdID); len(invitations.Items) != 0 {
+		t.Errorf("open Invitations after registering: %+v, want none", invitations.Items)
+	}
+
+	// An identity that is already a User still can't register again.
+	again := issueInvitation(t, app, alice, home.HouseholdID)
+	register(app, t, bea, again.Code).AssertProblem(t, http.StatusConflict, "/problems/already-registered")
+}
+
+func TestAnExpiredOrRevokedHouseholdCodeRegistersNobody(t *testing.T) {
+	t.Parallel()
+
+	// Registering redeems a seeded Invitation that expires a day after the
+	// wall clock, so the test's clock starts there.
+	clock := newSettableClock(time.Now().UTC().Truncate(time.Second))
+	app := apitest.Start(t, apitest.WithClock(clock.Now))
+	alice := app.Register(t, "https://issuer.example", "alice")
+	home := createHousehold(t, app, alice, "Home")
+
+	expired := issueInvitation(t, app, alice, home.HouseholdID)
+
+	clock.add(24 * time.Hour)
+
+	revoked := issueInvitation(t, app, alice, home.HouseholdID)
+	revokeInvitation(t, app, alice, home.HouseholdID, revoked.InvitationID)
+
+	var first apitest.ProblemBody
+
+	for i, tc := range []struct{ name, code string }{
+		{"unknown", "not-a-code"},
+		{"expired", expired.Code},
+		{"revoked", revoked.Code},
+	} {
+		token := app.TokenFor("https://issuer.example", "caller-with-"+tc.name+"-code")
+
+		p := register(app, t, token, tc.code).AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-invitation")
+		if i == 0 {
+			first = p
+		} else if p != first {
+			t.Errorf("%s: problem %+v differs from %+v", tc.name, p, first)
+		}
+
+		app.Get(t, "/api/me", token).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
+	}
+
+	if members := listMembers(t, app, alice, home.HouseholdID); len(members) != 1 {
+		t.Errorf("members = %+v, want only alice", members)
+	}
+}
+
+func TestConcurrentRegistrationsWithOneHouseholdCodeAdmitOneMember(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t)
+	alice := app.Register(t, "https://issuer.example", "alice")
+	home := createHousehold(t, app, alice, "Home")
+	issued := issueInvitation(t, app, alice, home.HouseholdID)
+
+	const callers = 4
+
+	tokens := make([]string, callers)
+	for i := range tokens {
+		tokens[i] = app.TokenFor("https://issuer.example", fmt.Sprintf("racer-%d", i))
+	}
+
+	statuses := make([]int, callers)
+
+	var wg sync.WaitGroup
+	for i, token := range tokens {
+		wg.Go(func() { statuses[i] = register(app, t, token, issued.Code).Status })
+	}
+
+	wg.Wait()
+
+	registered := 0
+
+	for i, status := range statuses {
+		switch status {
+		case http.StatusCreated:
+			registered++
+
+			var list householdList
+			app.Get(t, "/api/households", tokens[i]).AssertJSON(t, http.StatusOK, &list)
+
+			if len(list.Items) != 1 || list.Items[0] != home {
+				t.Errorf("racer %d's Households = %+v, want only %+v", i, list.Items, home)
+			}
+		case http.StatusUnprocessableEntity:
+			app.Get(t, "/api/me", tokens[i]).AssertProblem(t, http.StatusForbidden, "/problems/registration-required")
+		default:
+			t.Errorf("racer %d: status %d, want 201 or 422", i, status)
+		}
+	}
+
+	if registered != 1 {
+		t.Errorf("%d identities registered with one code, want 1 (statuses %v)", registered, statuses)
+	}
+
+	if members := listMembers(t, app, alice, home.HouseholdID); len(members) != 2 {
+		t.Errorf("members = %+v, want alice and one racer", members)
+	}
+}

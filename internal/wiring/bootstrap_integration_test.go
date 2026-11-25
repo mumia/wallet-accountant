@@ -3,6 +3,7 @@
 package wiring_test
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -17,6 +18,7 @@ import (
 type me struct {
 	UserID                  string `json:"user_id"`
 	IsInstanceAdministrator bool   `json:"is_instance_administrator"`
+	DisplayName             string `json:"display_name,omitempty"`
 }
 
 func TestBootstrapAdmitsTheFirstInstanceAdministratorOnce(t *testing.T) {
@@ -51,8 +53,17 @@ func TestBootstrapAdmitsTheFirstInstanceAdministratorOnce(t *testing.T) {
 	app.Post(t, "/api/registrations", owner, map[string]string{"invitation_code": second, "display_name": "Ana"}).
 		AssertJSON(t, http.StatusCreated, &registered)
 
-	if !registered.IsInstanceAdministrator {
-		t.Errorf("registered = %+v, want Instance administrator", registered)
+	if !registered.IsInstanceAdministrator || registered.DisplayName != "Ana" {
+		t.Errorf("registered = %+v, want an Instance administrator named Ana", registered)
+	}
+
+	var households struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	app.Get(t, "/api/households", owner).AssertJSON(t, http.StatusOK, &households)
+
+	if len(households.Items) != 0 {
+		t.Errorf("Households after redeeming the bootstrap code = %s, want none", households.Items)
 	}
 
 	var got me

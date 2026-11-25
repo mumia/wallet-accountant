@@ -142,6 +142,10 @@ func (u *Users) Rename(ctx context.Context, id authn.Identity, displayName strin
 // in one database transaction, each under its own version check, so two
 // concurrent redemptions of one code can't both succeed: the loser retries
 // and finds the Invitation redeemed (ADR-0017).
+//
+// A code to a Household registers the User with role user, then joins the
+// Household in the same transaction: the instance-level User events come
+// first, then the Household's, and any refusal rolls the registration back.
 func (u *Users) Register(ctx context.Context, id authn.Identity, code, displayName string) (User, error) {
 	userID, err := uuid.NewV7()
 	if err != nil {
@@ -164,28 +168,38 @@ func (u *Users) Register(ctx context.Context, id authn.Identity, code, displayNa
 			return err //nolint:wrapcheck // the adapter's error
 		}
 
-		// Redeeming an Invitation to a Household here comes with ticket 07.
-		if !ok || found.HouseholdID != uuid.Nil {
+		if !ok {
 			return ErrInvalidInvitation
 		}
 
-		invitationID := found.InvitationID
+		joining := found.HouseholdID != uuid.Nil
+		role := domain.RoleUser
 
-		redeemed, err := u.invitations.Execute(ctx, tx, invitationID,
-			domain.RedeemInvitation{CodeHash: hash, UserID: userID, At: u.now()})
-		if err != nil {
-			return asInvalidInvitation(err)
+		if !joining {
+			redeemed, err := u.invitations.Execute(ctx, tx, found.InvitationID,
+				domain.RedeemInvitation{CodeHash: hash, UserID: userID, At: u.now()})
+			if err != nil {
+				return asInvalidInvitation(err)
+			}
+
+			role = redeemed.State.Role
 		}
 
 		registered, err := u.users.Execute(ctx, tx, userID, domain.RegisterUser{
 			Issuer:       id.Issuer,
 			Subject:      id.Subject,
-			InvitationID: invitationID,
-			Role:         redeemed.State.Role,
+			InvitationID: found.InvitationID,
+			Role:         role,
 			DisplayName:  displayName,
 		})
 		if err != nil {
 			return err //nolint:wrapcheck // already wrapped by the runtime
+		}
+
+		if joining {
+			if _, err := u.join(ctx, tx, userID, hash, found); err != nil {
+				return err
+			}
 		}
 
 		user = User{
