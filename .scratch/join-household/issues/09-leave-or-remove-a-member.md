@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] `RemoveMember { UserID }` → `household.memberremoved { userid }`, with whoever removed them as `actorid`:
   - a User who isn't a member gets 404;
