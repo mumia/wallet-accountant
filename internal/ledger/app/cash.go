@@ -37,10 +37,6 @@ var (
 	// ErrBookedBeforeStartDate is returned for a cash Transaction dated
 	// before the Account's start date.
 	ErrBookedBeforeStartDate = domain.ErrBookedBeforeStartDate
-	// ErrCashToCashNotBuilt is returned for a cash Transfer leg naming
-	// another cash Account, which ticket 09 of
-	// .scratch/cash-accounts-and-transfers builds.
-	ErrCashToCashNotBuilt = errors.New("transfers between cash accounts aren't built yet")
 )
 
 // Count is an amount of cash counted, in a currency.
@@ -226,6 +222,12 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 		return TransactionDetail{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
 
+	// The counterpart's leg of a cash ↔ cash Transfer.
+	otherLeg, err := sharedkernel.NewID()
+	if err != nil {
+		return TransactionDetail{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
 	var out TransactionDetail
 
 	err = t.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
@@ -250,7 +252,7 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 		}
 
 		if c.Counterpart != nil {
-			return t.recordCashLeg(ctx, tx, id, c, &out)
+			return t.recordCashLeg(ctx, tx, [2]uuid.UUID{id, otherLeg}, c, &out)
 		}
 
 		category, uncategorised, err := t.chooseCategory(ctx, tx, c.Category)
@@ -289,11 +291,16 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 	return out, nil
 }
 
-// recordCashLeg records a cash Transaction that is a Transfer leg naming a
-// statement Account: one leg, In transit until the bank row's Accept
-// Matches it (spec "Recording a cash leg first"). A cash counterpart is
-// ErrCashToCashNotBuilt for now.
-func (t *Transactions) recordCashLeg(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, c CashTransaction,
+// recordCashLeg records a cash Transaction that is a Transfer leg, with
+// ids[0], and returns it in out (spec "Recording a cash leg first"):
+//   - naming a statement Account, it is one leg, In transit until the bank
+//     row's Accept Matches it;
+//   - naming another cash Account, the counterpart gets the opposite leg,
+//     ids[1], on the same date with the same description and payee, both
+//     booked in Account ID order, and the two are Matched at once. Both
+//     Accounts must take the date: a closed month of either refuses it,
+//     naming that Account.
+func (t *Transactions) recordCashLeg(ctx context.Context, tx *eventstore.Tx, ids [2]uuid.UUID, c CashTransaction,
 	out *TransactionDetail,
 ) error {
 	other, found, err := t.accounts.Folds.Load(ctx, tx, *c.Counterpart)
@@ -301,24 +308,43 @@ func (t *Transactions) recordCashLeg(ctx context.Context, tx *eventstore.Tx, id 
 		return fmt.Errorf("load account %s: %w", *c.Counterpart, err)
 	}
 
-	if found && other.State.IsCash() && *c.Counterpart != c.Account {
-		return ErrCashToCashNotBuilt
-	}
-
-	if err := t.RecordTransferLeg(ctx, tx, TransferLegBooking{
-		Account: c.Account, Counterpart: *c.Counterpart, Transaction: id,
+	own := TransferLegBooking{
+		Account: c.Account, Counterpart: *c.Counterpart, Transaction: ids[0],
 		BookingDate: c.Date, TransactionDate: c.Date, Amount: c.Amount, Currency: c.Currency,
 		Description: c.Description, Payee: c.Payee,
-	}); err != nil {
-		return err
+	}
+	legs := []TransferLegBooking{own}
+
+	cashToCash := found && other.State.IsCash() && *c.Counterpart != c.Account
+	if cashToCash {
+		theirs := own
+		theirs.Account, theirs.Counterpart, theirs.Transaction, theirs.Amount = *c.Counterpart, c.Account, ids[1],
+			c.Amount.Neg()
+
+		legs = append(legs, theirs)
+		if theirs.Account.String() < own.Account.String() {
+			legs = []TransferLegBooking{theirs, own}
+		}
 	}
 
-	fold, _, err := t.transactions.Folds.Load(ctx, tx, id)
+	for _, leg := range legs {
+		if err := t.RecordTransferLeg(ctx, tx, leg); err != nil {
+			return err
+		}
+	}
+
+	if cashToCash {
+		if _, err := t.ConfirmTransfer(ctx, tx, ids[0], ids[1]); err != nil {
+			return err
+		}
+	}
+
+	fold, _, err := t.transactions.Folds.Load(ctx, tx, ids[0])
 	if err != nil {
-		return fmt.Errorf("load transaction %s: %w", id, err)
+		return fmt.Errorf("load transaction %s: %w", ids[0], err)
 	}
 
-	*out, err = t.detail(ctx, tx, id, fold.State)
+	*out, err = t.detail(ctx, tx, ids[0], fold.State)
 
 	return err
 }

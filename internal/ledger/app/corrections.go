@@ -180,7 +180,12 @@ func (t *Transactions) Reverse(ctx context.Context, household, id uuid.UUID) (Tr
 				return err
 			}
 
-			if other.state.CreatedByTransfer && !fold.State.CreatedByTransfer {
+			cascades, err := t.cascades(ctx, tx, reverse[0], other)
+			if err != nil {
+				return err
+			}
+
+			if cascades {
 				other.reversal = cascade
 				reverse = append(reverse, other)
 			}
@@ -218,6 +223,29 @@ type reversing struct {
 
 // account is the Account the Transaction is booked on, for ordering.
 func (r reversing) account() uuid.UUID { return r.state.Leg(r.id).AccountID }
+
+// cascades reports whether reversing the leg self also reverses the leg it
+// was Matched to, other: the other exists only because of it. That is the
+// cash leg an Accept as Transfer recorded on its own, and either leg of a
+// cash ↔ cash Transfer, neither of which can stand alone.
+func (t *Transactions) cascades(ctx context.Context, tx *eventstore.Tx, self, other reversing) (bool, error) {
+	if other.state.CreatedByTransfer && !self.state.CreatedByTransfer {
+		return true, nil
+	}
+
+	for _, leg := range []reversing{self, other} {
+		fold, found, err := t.accounts.Folds.Load(ctx, tx, leg.account())
+		if err != nil {
+			return false, fmt.Errorf("load account %s: %w", leg.account(), err)
+		}
+
+		if !found || !fold.State.IsCash() {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
 
 // unmatch removes the Match linking the leg id to another, unmatches both
 // legs, and returns the other one.

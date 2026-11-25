@@ -43,8 +43,9 @@ func transferRefused(e *app.TransferRefusedError) *oas.TransferProblem {
 	return p
 }
 
-// RecordCashTransaction implements recordCashTransaction. A Transfer leg
-// naming another cash Account answers 501 until ticket 09.
+// RecordCashTransaction implements recordCashTransaction. For a cash ↔
+// cash Transfer it answers with the leg on this Account, carrying the
+// match_id that names the other.
 func (h *TransactionHandler) RecordCashTransaction(ctx context.Context, req *oas.CashTransactionCreation,
 	params oas.RecordCashTransactionParams,
 ) (oas.RecordCashTransactionRes, error) {
@@ -74,9 +75,6 @@ func (h *TransactionHandler) RecordCashTransaction(ctx context.Context, req *oas
 	}
 
 	d, err := h.transactions.RecordCash(ctx, params.HouseholdID, c)
-	if errors.Is(err, app.ErrCashToCashNotBuilt) {
-		return nil, httpapi.ErrNotImplemented
-	}
 
 	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
 		return transferRefused(refused), nil
@@ -94,6 +92,11 @@ func (h *TransactionHandler) RecordCashTransaction(ctx context.Context, req *oas
 	case errors.Is(err, app.ErrMonthClosed) && monthErr != nil:
 		p := httpapi.MonthClosed(monthErr.Month, monthErr.OpenMonth)
 		p.AccountID = oas.NewOptUUID(params.AccountID)
+
+		// A cash ↔ cash Transfer can be refused by the counterpart.
+		if a, ok := errors.AsType[*app.AccountError](err); ok {
+			p.AccountID = oas.NewOptUUID(a.Account)
+		}
 
 		return p, nil
 	case errors.Is(err, app.ErrNotACashAccount):
