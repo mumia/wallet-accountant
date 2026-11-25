@@ -24,6 +24,9 @@ var (
 	// ErrTransactionNotMatched is returned for unmatching a Transfer leg
 	// from a Match it isn't linked by.
 	ErrTransactionNotMatched = errors.New("transaction not matched by this match")
+	// ErrTransactionMatched is returned for reversing a Transfer leg that
+	// is still Matched: its Match is removed first.
+	ErrTransactionMatched = errors.New("transaction is matched")
 	// ErrMatchIDRequired is returned for matching or unmatching without the
 	// Match.
 	ErrMatchIDRequired = errors.New("match ID required")

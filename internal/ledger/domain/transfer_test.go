@@ -219,3 +219,19 @@ func TestConfirmingAMatchRefusals(t *testing.T) {
 	decidertest.Given(t, domain.Match, confirmed, domain.MatchEvent(domain.MatchRemoved{})).
 		When(domain.RemoveMatch{}).ThenError(domain.ErrMatchRemoved)
 }
+
+// A Matched leg is reversed only once its Match is removed; unmatched, it
+// reverses like any Transaction.
+func TestReversingAMatchedLegNeedsItUnmatchedFirst(t *testing.T) {
+	t.Parallel()
+
+	matched := []domain.TransactionEvent{legRecorded(), domain.TransactionMatched{MatchID: aMatch}}
+
+	decidertest.Given(t, domain.Transaction, matched...).
+		When(domain.ReverseTransaction{ReversalID: legReversal}).ThenError(domain.ErrTransactionMatched)
+
+	decidertest.Given(t, domain.Transaction, append(slices.Clone(matched),
+		domain.TransactionEvent(domain.TransactionUnmatched{MatchID: aMatch}))...).
+		When(domain.ReverseTransaction{ReversalID: legReversal}).
+		Then(domain.TransactionReversed{ReversalID: legReversal})
+}

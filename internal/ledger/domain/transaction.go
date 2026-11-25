@@ -367,6 +367,8 @@ func reverseTransaction(s TransactionState, c ReverseTransaction) ([]Transaction
 		return nil, ErrTransactionAlreadyReversed
 	case c.ReversalID == sharedkernel.NilID:
 		return nil, ErrReversalIDRequired
+	case s.MatchID != sharedkernel.NilID:
+		return nil, ErrTransactionMatched
 	}
 
 	return []TransactionEvent{TransactionReversed(c)}, nil

@@ -46,7 +46,12 @@ func correctionRefusal(err error) (correction, bool) {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrTransactionNotFound):
 		return correction{notFound: true}, true
 	case errors.Is(err, app.ErrMonthClosed) && monthErr != nil:
-		return correction{month: httpapi.MonthClosed(monthErr.Month, monthErr.OpenMonth)}, true
+		p := httpapi.MonthClosed(monthErr.Month, monthErr.OpenMonth)
+		if a, ok := errors.AsType[*app.AccountError](err); ok {
+			p.AccountID = oas.NewOptUUID(a.Account)
+		}
+
+		return correction{month: p}, true
 	case errors.Is(err, app.ErrUncategorisedInClosedMonth) && monthErr != nil:
 		return refused(http.StatusUnprocessableEntity, UncategorisedInClosedMonthType, "Uncategorised in a closed month",
 			httpapi.MonthWords(monthErr.Month)+" is closed, so its Transactions can't go back to Uncategorised. "+
