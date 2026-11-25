@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/mumia/wallet-accountant/internal/households/app"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi/oas"
@@ -55,15 +57,36 @@ func (h *NotificationHandler) MarkNotificationRead(ctx context.Context, params o
 	return notificationResponse(n), nil
 }
 
+// notificationResponse leaves out the fields of other kinds.
 func notificationResponse(n app.Notification) *oas.Notification {
-	return &oas.Notification{
-		NotificationID:      n.ID,
-		Kind:                strings.ToUpper(string(n.Kind)),
-		StatementImportID:   oas.NewOptUUID(n.StatementImportID),
-		ConnectionID:        oas.NewOptUUID(n.ConnectionID),
-		AccountID:           oas.NewOptUUID(n.AccountID),
-		SuspectedDuplicates: oas.NewOptInt32(int32(n.SuspectedDuplicates)), //nolint:gosec // a file's row count fits
-		CreatedAt:           n.RaisedAt,
-		Read:                n.Read,
+	res := &oas.Notification{
+		NotificationID: n.ID,
+		Kind:           strings.ToUpper(string(n.Kind)),
+		CreatedAt:      n.RaisedAt,
+		Read:           n.Read,
 	}
+
+	optUUID := func(id uuid.UUID) oas.OptUUID {
+		if id == uuid.Nil {
+			return oas.OptUUID{}
+		}
+
+		return oas.NewOptUUID(id)
+	}
+	res.StatementImportID, res.ConnectionID, res.AccountID =
+		optUUID(n.StatementImportID), optUUID(n.ConnectionID), optUUID(n.AccountID)
+
+	if n.SuspectedDuplicates != 0 {
+		res.SuspectedDuplicates = oas.NewOptInt32(int32(n.SuspectedDuplicates)) //nolint:gosec // a file's row count fits
+	}
+
+	if n.Member.ID != uuid.Nil {
+		res.Member = oas.NewOptUserRef(userRefResponse(n.Member))
+	}
+
+	if n.RemovedBy.ID != uuid.Nil {
+		res.RemovedBy = oas.NewOptUserRef(userRefResponse(n.RemovedBy))
+	}
+
+	return res
 }
