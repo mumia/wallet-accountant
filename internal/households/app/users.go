@@ -43,26 +43,39 @@ type User struct {
 // Lookups finds Invitations and Users by their lookup rows. All of them are
 // in instance scope.
 type Lookups interface {
-	// InvitationByCode returns the Invitation whose current code has hash.
-	InvitationByCode(ctx context.Context, tx *eventstore.Tx, hash domain.CodeHash) (uuid.UUID, bool, error)
+	// InvitationByCode returns the Invitation whose current code has hash,
+	// with the Household it admits to.
+	InvitationByCode(ctx context.Context, tx *eventstore.Tx, hash domain.CodeHash) (InvitationCode, bool, error)
 	// UserByIdentity returns the User the OIDC identity registered as.
 	UserByIdentity(ctx context.Context, tx *eventstore.Tx, id authn.Identity) (User, bool, error)
 }
 
-// Users admits identities as Users by Invitation, and resolves identities to
-// Users.
+// InvitationCode is an Invitation code's lookup row: the Invitation, and the
+// Household it admits to, uuid.Nil for an instance-level Invitation such as
+// the bootstrap one.
+type InvitationCode struct {
+	InvitationID uuid.UUID
+	HouseholdID  uuid.UUID
+}
+
+// Users admits identities as Users by Invitation, joins Users to Households
+// by Invitation, and resolves identities to Users.
 type Users struct {
 	store       *eventstore.Store
 	invitations InvitationAggregate
 	users       UserAggregate
+	households  HouseholdAggregate
 	lookups     Lookups
 	now         func() time.Time
 }
 
 // NewUsers returns the Users service. now is the clock commands are
-// timestamped with, which judges Invitation expiry.
-func NewUsers(store *eventstore.Store, invitations InvitationAggregate, users UserAggregate, lookups Lookups, now func() time.Time) *Users {
-	return &Users{store: store, invitations: invitations, users: users, lookups: lookups, now: now}
+// timestamped with, which judges Invitation expiry; the store's clock
+// should be the same.
+func NewUsers(store *eventstore.Store, invitations InvitationAggregate, users UserAggregate, households HouseholdAggregate,
+	lookups Lookups, now func() time.Time,
+) *Users {
+	return &Users{store: store, invitations: invitations, users: users, households: households, lookups: lookups, now: now}
 }
 
 // Me returns the User the identity belongs to.
@@ -90,11 +103,49 @@ func (u *Users) Me(ctx context.Context, id authn.Identity) (User, error) {
 	return user, nil
 }
 
+// Rename changes the display name of the User the identity belongs to. It
+// runs in instance scope, on the caller's own User only.
+func (u *Users) Rename(ctx context.Context, id authn.Identity, displayName string) (User, error) {
+	var user User
+
+	err := u.store.InTx(ctx, eventstore.Scope{}, func(ctx context.Context, tx *eventstore.Tx) error {
+		found, ok, err := u.lookups.UserByIdentity(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !ok {
+			return ErrRegistrationRequired
+		}
+
+		tx.SetActor(found.ID)
+
+		renamed, err := u.users.Execute(ctx, tx, found.ID, domain.RenameUser{DisplayName: displayName})
+		if err != nil {
+			return err //nolint:wrapcheck // the domain's or the runtime's error
+		}
+
+		user = found
+		user.DisplayName = renamed.State.DisplayName
+
+		return nil
+	})
+	if err != nil {
+		return User{}, fmt.Errorf("rename user: %w", err)
+	}
+
+	return user, nil
+}
+
 // Register redeems the Invitation code for the identity and registers it as
 // a User with the Invitation's role and the display name it chose. The Invitation and the User are decided
 // in one database transaction, each under its own version check, so two
 // concurrent redemptions of one code can't both succeed: the loser retries
 // and finds the Invitation redeemed (ADR-0017).
+//
+// A code to a Household registers the User with role user, then joins the
+// Household in the same transaction: the instance-level User events come
+// first, then the Household's, and any refusal rolls the registration back.
 func (u *Users) Register(ctx context.Context, id authn.Identity, code, displayName string) (User, error) {
 	userID, err := uuid.NewV7()
 	if err != nil {
@@ -112,7 +163,7 @@ func (u *Users) Register(ctx context.Context, id authn.Identity, code, displayNa
 			return ErrAlreadyRegistered
 		}
 
-		invitationID, ok, err := u.lookups.InvitationByCode(ctx, tx, hash)
+		found, ok, err := u.lookups.InvitationByCode(ctx, tx, hash)
 		if err != nil {
 			return err //nolint:wrapcheck // the adapter's error
 		}
@@ -121,21 +172,34 @@ func (u *Users) Register(ctx context.Context, id authn.Identity, code, displayNa
 			return ErrInvalidInvitation
 		}
 
-		redeemed, err := u.invitations.Execute(ctx, tx, invitationID,
-			domain.RedeemInvitation{CodeHash: hash, UserID: userID, At: u.now()})
-		if err != nil {
-			return asInvalidInvitation(err)
+		joining := found.HouseholdID != uuid.Nil
+		role := domain.RoleUser
+
+		if !joining {
+			redeemed, err := u.invitations.Execute(ctx, tx, found.InvitationID,
+				domain.RedeemInvitation{CodeHash: hash, UserID: userID, At: u.now()})
+			if err != nil {
+				return asInvalidInvitation(err)
+			}
+
+			role = redeemed.State.Role
 		}
 
 		registered, err := u.users.Execute(ctx, tx, userID, domain.RegisterUser{
 			Issuer:       id.Issuer,
 			Subject:      id.Subject,
-			InvitationID: invitationID,
-			Role:         redeemed.State.Role,
+			InvitationID: found.InvitationID,
+			Role:         role,
 			DisplayName:  displayName,
 		})
 		if err != nil {
 			return err //nolint:wrapcheck // already wrapped by the runtime
+		}
+
+		if joining {
+			if _, err := u.join(ctx, tx, userID, hash, found); err != nil {
+				return err
+			}
 		}
 
 		user = User{

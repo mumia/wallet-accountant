@@ -13,6 +13,9 @@ var (
 	ErrUserAlreadyRegistered = errors.New("user already registered")
 	// ErrDisplayNameRequired is returned for a blank display name.
 	ErrDisplayNameRequired = errors.New("display name required")
+	// ErrUserNotRegistered is returned for renaming a User who was never
+	// registered.
+	ErrUserNotRegistered = errors.New("user not registered")
 )
 
 // UserState is a User's fold.
@@ -40,9 +43,17 @@ type (
 		Role         Role
 		DisplayName  string
 	}
+
+	// RenameUser changes the User's display name, or sets one for a User
+	// who registered before display names existed. The same name again
+	// records nothing.
+	RenameUser struct {
+		DisplayName string
+	}
 )
 
 func (RegisterUser) isUserCommand() {}
+func (RenameUser) isUserCommand()   {}
 
 type (
 	// UserEvent is a User's event.
@@ -59,9 +70,15 @@ type (
 		// existed.
 		DisplayName string `json:"displayname,omitempty"`
 	}
+
+	// UserRenamed is recorded when a User changes their display name.
+	UserRenamed struct {
+		DisplayName string `json:"displayname"`
+	}
 )
 
 func (UserRegistered) isUserEvent() {}
+func (UserRenamed) isUserEvent()    {}
 
 // User is the User Decider (instance scope, ADR-0017).
 var User = decider.Decider[UserState, UserCommand, UserEvent]{
@@ -84,16 +101,34 @@ func decideUser(s UserState, c UserCommand) ([]UserEvent, error) {
 		c.DisplayName = name
 
 		return []UserEvent{UserRegistered(c)}, nil
+	case RenameUser:
+		if !s.Registered {
+			return nil, ErrUserNotRegistered
+		}
+
+		name := strings.TrimSpace(c.DisplayName)
+		if name == "" {
+			return nil, ErrDisplayNameRequired
+		}
+
+		if name == s.DisplayName {
+			return nil, nil
+		}
+
+		return []UserEvent{UserRenamed{DisplayName: name}}, nil
 	default:
 		return nil, nil
 	}
 }
 
 func evolveUser(s UserState, e decider.Envelope[UserEvent]) UserState {
-	if ev, ok := e.Event.(UserRegistered); ok {
+	switch ev := e.Event.(type) {
+	case UserRegistered:
 		s.Registered = true
 		s.Issuer, s.Subject, s.InvitationID = ev.Issuer, ev.Subject, ev.InvitationID
 		s.IsInstanceAdministrator = ev.Role == RoleInstanceAdministrator
+		s.DisplayName = ev.DisplayName
+	case UserRenamed:
 		s.DisplayName = ev.DisplayName
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -22,6 +23,11 @@ var (
 	// ErrInvalidHousehold is returned for a Household the domain refuses to
 	// create, for example with a blank name or an unknown Base currency.
 	ErrInvalidHousehold = errors.New("invalid household")
+	// ErrMemberNotFound is returned for removing a User who isn't a member
+	// of the Household.
+	ErrMemberNotFound = errors.New("member not found")
+	// ErrLastMember is returned for removing a Household's only member.
+	ErrLastMember = errors.New("the last member can't leave")
 	// errNoIdentity means the request was not authenticated; the HTTP
 	// adapter's security handler makes it impossible.
 	errNoIdentity = errors.New("request has no authenticated identity")
@@ -42,6 +48,21 @@ type HouseholdLookups interface {
 	// IsMember reports whether the User is a member of the Household the
 	// transaction is set to.
 	IsMember(ctx context.Context, tx *eventstore.Tx, user uuid.UUID) (bool, error)
+	// Members returns the members of the Household the transaction is set
+	// to, oldest first, with their display names, which it reads in
+	// instance scope before setting the transaction back to the Household.
+	Members(ctx context.Context, tx *eventstore.Tx) ([]Member, error)
+}
+
+// Member is a User who belongs to a Household, as the members list shows
+// them.
+type Member struct {
+	UserID uuid.UUID
+	// DisplayName is empty for a User who registered before display names
+	// existed and hasn't set one.
+	DisplayName string
+	// JoinedAt is when they became a member.
+	JoinedAt time.Time
 }
 
 // InternalCategories is the Ledger's port that seeds a new Household's
@@ -209,6 +230,41 @@ func (h *Households) Get(ctx context.Context, household uuid.UUID) (Household, e
 	})
 
 	return got, err
+}
+
+// Members returns the members of a Household the caller of ctx is a member
+// of, oldest first.
+func (h *Households) Members(ctx context.Context, household uuid.UUID) ([]Member, error) {
+	var members []Member
+
+	err := h.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		var err error
+		members, err = h.lookups.Members(ctx, tx)
+
+		return err //nolint:wrapcheck // the adapter's error
+	})
+
+	return members, err
+}
+
+// RemoveMember removes a member from a Household the caller of ctx is a
+// member of, as the caller: removing themselves is leaving. Saving the fold
+// deletes both membership rows, so the removed User's next request is
+// refused. A User who isn't a member gets ErrMemberNotFound, and the only
+// member gets ErrLastMember.
+func (h *Households) RemoveMember(ctx context.Context, household, user uuid.UUID) error {
+	return h.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		_, err := h.households.Execute(ctx, tx, household, domain.RemoveMember{UserID: user})
+
+		switch {
+		case errors.Is(err, domain.ErrNotAMember):
+			return fmt.Errorf("%w: %w", ErrMemberNotFound, err)
+		case errors.Is(err, domain.ErrLastMember):
+			return fmt.Errorf("%w: %w", ErrLastMember, err)
+		}
+
+		return err //nolint:wrapcheck // already wrapped by the runtime
+	})
 }
 
 func (h *Households) resolve(ctx context.Context, tx *eventstore.Tx, id authn.Identity) (User, error) {

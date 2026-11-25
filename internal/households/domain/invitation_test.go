@@ -138,3 +138,97 @@ func TestIssuingAnUnredeemedInvitationAgainReissuesItWithANewCodeAndExpiry(t *te
 			IssuedBy:  domain.IssuedByOperator,
 		})
 }
+
+func TestIssuingAnInvitationToAHousehold(t *testing.T) {
+	t.Parallel()
+
+	// The role is always user and the code expires CodeLifetime (24 hours)
+	// after the command's timestamp. The Household and the issuing User come
+	// from the envelope, so the event names neither.
+	decidertest.Given(t, domain.Invitation).
+		When(domain.IssueHouseholdInvitation{CodeHash: firstHash, At: issuedAt}).
+		Then(domain.InvitationIssued{
+			Role:      domain.RoleUser,
+			CodeHash:  firstHash,
+			ExpiresAt: time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC),
+		})
+}
+
+func TestAnInvitationToAHouseholdIsNeverReissued(t *testing.T) {
+	t.Parallel()
+
+	var past domain.InvitationEvent = domain.InvitationIssued{Role: domain.RoleUser, CodeHash: firstHash, ExpiresAt: expiresAt}
+
+	decidertest.Given(t, domain.Invitation, past).
+		When(domain.IssueHouseholdInvitation{CodeHash: domain.HashCode("second-code"), At: issuedAt}).
+		ThenError(domain.ErrInvitationAlreadyIssued)
+}
+
+func TestAnInvitationToAHouseholdExpiresAtExactly24Hours(t *testing.T) {
+	t.Parallel()
+
+	user := sharedkernel.MustParseID("019a8b2c-0000-7000-8000-000000000001")
+	var past domain.InvitationEvent = domain.InvitationIssued{Role: domain.RoleUser, CodeHash: firstHash, ExpiresAt: expiresAt}
+
+	decidertest.Given(t, domain.Invitation, past).
+		When(domain.RedeemInvitation{CodeHash: firstHash, UserID: user, At: issuedAt.Add(24*time.Hour - time.Nanosecond)}).
+		Then(domain.InvitationRedeemed{UserID: user})
+
+	decidertest.Given(t, domain.Invitation, past).
+		When(domain.RedeemInvitation{CodeHash: firstHash, UserID: user, At: issuedAt.Add(24 * time.Hour)}).
+		ThenError(domain.ErrInvitationExpired)
+}
+
+func householdIssued() domain.InvitationEvent {
+	return domain.InvitationIssued{Role: domain.RoleUser, CodeHash: firstHash, ExpiresAt: expiresAt}
+}
+
+func TestRevokingAnUnredeemedInvitation(t *testing.T) {
+	t.Parallel()
+
+	// Revoking judges no expiry, so an Invitation that has expired but was
+	// never redeemed can be revoked too: that does no harm.
+	decidertest.Given(t, domain.Invitation, householdIssued()).
+		When(domain.RevokeInvitation{}).
+		Then(domain.InvitationRevoked{})
+}
+
+func TestRevocationRefusals(t *testing.T) {
+	t.Parallel()
+
+	user := sharedkernel.MustParseID("019a8b2c-0000-7000-8000-000000000001")
+
+	for _, tc := range []struct {
+		name string
+		past []domain.InvitationEvent
+		want error
+	}{
+		{name: "never issued", want: domain.ErrInvitationNotIssued},
+		{
+			name: "already revoked",
+			past: []domain.InvitationEvent{householdIssued(), domain.InvitationRevoked{}},
+			want: domain.ErrInvitationRevoked,
+		},
+		{
+			name: "already redeemed",
+			past: []domain.InvitationEvent{householdIssued(), domain.InvitationRedeemed{UserID: user}},
+			want: domain.ErrInvitationAlreadyRedeemed,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			decidertest.Given(t, domain.Invitation, tc.past...).When(domain.RevokeInvitation{}).ThenError(tc.want)
+		})
+	}
+}
+
+func TestRedeemingARevokedInvitationIsRefusedLikeAWrongCode(t *testing.T) {
+	t.Parallel()
+
+	user := sharedkernel.MustParseID("019a8b2c-0000-7000-8000-000000000001")
+
+	decidertest.Given(t, domain.Invitation, []domain.InvitationEvent{householdIssued(), domain.InvitationRevoked{}}...).
+		When(domain.RedeemInvitation{CodeHash: firstHash, UserID: user, At: issuedAt.Add(time.Hour)}).
+		ThenError(domain.ErrWrongInvitationCode)
+}

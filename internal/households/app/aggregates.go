@@ -14,13 +14,16 @@ const (
 	InvitationIssuedType   = "io.walletaccountant.households.invitation.issued.v1"
 	InvitationReissuedType = "io.walletaccountant.households.invitation.reissued.v1"
 	InvitationRedeemedType = "io.walletaccountant.households.invitation.redeemed.v1"
+	InvitationRevokedType  = "io.walletaccountant.households.invitation.revoked.v1"
 
 	UserStreamType     = "households.user"
 	UserRegisteredType = "io.walletaccountant.households.user.registered.v1"
+	UserRenamedType    = "io.walletaccountant.households.user.renamed.v1"
 
-	HouseholdStreamType      = "households.household"
-	HouseholdCreatedType     = "io.walletaccountant.households.household.created.v1"
-	HouseholdMemberAddedType = "io.walletaccountant.households.household.memberadded.v1"
+	HouseholdStreamType        = "households.household"
+	HouseholdCreatedType       = "io.walletaccountant.households.household.created.v1"
+	HouseholdMemberAddedType   = "io.walletaccountant.households.household.memberadded.v1"
+	HouseholdMemberRemovedType = "io.walletaccountant.households.household.memberremoved.v1"
 
 	NotificationStreamType = "households.notification"
 	NotificationRaisedType = "io.walletaccountant.households.notification.raised.v1"
@@ -60,6 +63,7 @@ func NewInvitationAggregate(folds eventstore.FoldStore[domain.InvitationState]) 
 	eventstore.Register[domain.InvitationEvent, domain.InvitationIssued](codec, InvitationIssuedType)
 	eventstore.Register[domain.InvitationEvent, domain.InvitationReissued](codec, InvitationReissuedType)
 	eventstore.Register[domain.InvitationEvent, domain.InvitationRedeemed](codec, InvitationRedeemedType)
+	eventstore.Register[domain.InvitationEvent, domain.InvitationRevoked](codec, InvitationRevokedType)
 
 	return InvitationAggregate{
 		StreamType:        InvitationStreamType,
@@ -74,6 +78,7 @@ func NewInvitationAggregate(folds eventstore.FoldStore[domain.InvitationState]) 
 func NewUserAggregate(folds eventstore.FoldStore[domain.UserState]) UserAggregate {
 	codec := eventstore.NewCodec[domain.UserEvent](Source)
 	eventstore.Register[domain.UserEvent, domain.UserRegistered](codec, UserRegisteredType)
+	eventstore.Register[domain.UserEvent, domain.UserRenamed](codec, UserRenamedType)
 
 	return UserAggregate{
 		StreamType:        UserStreamType,
@@ -89,6 +94,7 @@ func NewHouseholdAggregate(folds eventstore.FoldStore[domain.HouseholdState]) Ho
 	codec := eventstore.NewCodec[domain.HouseholdEvent](Source)
 	eventstore.Register[domain.HouseholdEvent, domain.HouseholdCreated](codec, HouseholdCreatedType)
 	eventstore.Register[domain.HouseholdEvent, domain.HouseholdMemberAdded](codec, HouseholdMemberAddedType)
+	eventstore.Register[domain.HouseholdEvent, domain.HouseholdMemberRemoved](codec, HouseholdMemberRemovedType)
 
 	return HouseholdAggregate{
 		StreamType:        HouseholdStreamType,

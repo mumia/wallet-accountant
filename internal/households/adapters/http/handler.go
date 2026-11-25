@@ -65,6 +65,27 @@ func (h *Handler) GetMe(ctx context.Context) (oas.GetMeRes, error) {
 	return meResponse(user), nil
 }
 
+// ChangeMe implements changeMe.
+func (h *Handler) ChangeMe(ctx context.Context, req *oas.MeChange) (oas.ChangeMeRes, error) {
+	id, ok := authn.IdentityFrom(ctx)
+	if !ok {
+		return nil, errNoIdentity
+	}
+
+	user, err := h.users.Rename(ctx, id, string(req.DisplayName))
+
+	switch {
+	case errors.Is(err, app.ErrRegistrationRequired):
+		return new(oas.ChangeMeForbidden(registrationRequired())), nil
+	case errors.Is(err, domain.ErrDisplayNameRequired):
+		return new(oas.ChangeMeUnprocessableEntity(blankDisplayName())), nil
+	case err != nil:
+		return nil, fmt.Errorf("change me: %w", err)
+	}
+
+	return meResponse(user), nil
+}
+
 // CreateRegistration implements createRegistration.
 func (h *Handler) CreateRegistration(ctx context.Context, req *oas.Registration, _ oas.CreateRegistrationParams) (oas.CreateRegistrationRes, error) {
 	id, ok := authn.IdentityFrom(ctx)
@@ -76,20 +97,14 @@ func (h *Handler) CreateRegistration(ctx context.Context, req *oas.Registration,
 
 	switch {
 	case errors.Is(err, app.ErrInvalidInvitation):
-		p := httpapi.Problem(http.StatusUnprocessableEntity, InvalidInvitationType, "Invalid Invitation code",
-			"The Invitation code is unknown, expired, superseded or already used.")
-
-		return new(oas.CreateRegistrationUnprocessableEntity(p)), nil
+		return new(oas.CreateRegistrationUnprocessableEntity(invalidInvitation())), nil
 	case errors.Is(err, app.ErrAlreadyRegistered):
 		p := httpapi.Problem(http.StatusConflict, AlreadyRegisteredType, "Already registered",
 			"This identity is already a User.")
 
 		return new(oas.CreateRegistrationConflict(p)), nil
 	case errors.Is(err, domain.ErrDisplayNameRequired):
-		p := httpapi.Problem(http.StatusUnprocessableEntity, InvalidUserType, "Invalid User",
-			"The display name must not be blank.")
-
-		return new(oas.CreateRegistrationUnprocessableEntity(p)), nil
+		return new(oas.CreateRegistrationUnprocessableEntity(blankDisplayName())), nil
 	case err != nil:
 		return nil, fmt.Errorf("create registration: %w", err)
 	}
@@ -177,8 +192,44 @@ func (h *Handler) GetHousehold(ctx context.Context, params oas.GetHouseholdParam
 	return householdResponse(got), nil
 }
 
+// ListMembers implements listMembers.
+func (h *Handler) ListMembers(ctx context.Context, params oas.ListMembersParams) (oas.ListMembersRes, error) {
+	members, err := h.households.Members(ctx, params.HouseholdID)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound):
+		return new(oas.ListMembersNotFound(httpapi.NotFoundProblem())), nil
+	case err != nil:
+		return nil, fmt.Errorf("list members: %w", err)
+	}
+
+	items := make([]oas.Member, 0, len(members))
+	for _, m := range members {
+		item := oas.Member{UserID: m.UserID, JoinedAt: m.JoinedAt}
+		if m.DisplayName != "" {
+			item.DisplayName = oas.NewOptDisplayNameOut(oas.DisplayNameOut(m.DisplayName))
+		}
+
+		items = append(items, item)
+	}
+
+	return &oas.MemberList{Items: items}, nil
+}
+
 func householdResponse(h app.Household) *oas.Household {
 	return &oas.Household{HouseholdID: h.ID, Name: h.Name, BaseCurrency: oas.CurrencyCode(h.BaseCurrency)}
+}
+
+func blankDisplayName() oas.Problem {
+	return httpapi.Problem(http.StatusUnprocessableEntity, InvalidUserType, "Invalid User",
+		"The display name must not be blank.")
+}
+
+// invalidInvitation is the one problem for every code that can't be
+// redeemed, so codes can't be probed.
+func invalidInvitation() oas.Problem {
+	return httpapi.Problem(http.StatusUnprocessableEntity, InvalidInvitationType, "Invalid Invitation code",
+		"The Invitation code is unknown, expired, revoked, superseded or already used.")
 }
 
 func registrationRequired() oas.Problem {

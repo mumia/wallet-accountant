@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -43,6 +44,9 @@ type App struct {
 	users   *householdsapp.Users
 	cfg     config.Config
 	tel     *telemetry.Telemetry
+	// ownerURL connects as wa_owner, for the few tests that must write what
+	// the application can't, such as events from before a change.
+	ownerURL string
 
 	// Logs holds every JSON log record written to stdout.
 	Logs *Buffer
@@ -105,7 +109,7 @@ func Start(t testing.TB, opts ...Option) *App {
 		ShutdownTimeout:   5 * time.Second,
 	}
 
-	app.cfg, app.tel = cfg, tel
+	app.cfg, app.tel, app.ownerURL = cfg, tel, urls.Owner
 
 	app.reader, err = pgxpool.New(ctx, urls.Reader)
 	if err != nil {
@@ -117,7 +121,7 @@ func Start(t testing.TB, opts ...Option) *App {
 		t.Fatalf("app pool: %v", err)
 	}
 
-	app.users = wiring.NewUsers(appPool)
+	app.users = wiring.NewUsers(appPool, time.Now)
 
 	done := make(chan error, 1)
 
@@ -355,4 +359,23 @@ func (a *App) EventCount(t testing.TB) int {
 	}
 
 	return n
+}
+
+// EventActors returns the actor of each event of the type, oldest first,
+// so a test can check who recorded it.
+func (a *App) EventActors(t testing.TB, eventType string) []string {
+	t.Helper()
+
+	rows, err := a.reader.Query(t.Context(),
+		"SELECT actorid::text FROM event_store WHERE type = $1 ORDER BY time, id", eventType)
+	if err != nil {
+		t.Fatalf("read event actors: %v", err)
+	}
+
+	actors, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatalf("read event actors: %v", err)
+	}
+
+	return actors
 }

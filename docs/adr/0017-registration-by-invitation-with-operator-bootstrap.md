@@ -20,6 +20,8 @@ An Invitation is a single-use bearer code with an expiry. The code has 256 bits 
 
 Every later User will also join through an Invitation, issued from inside the app. That lifecycle comes later: who may issue them, whether an Invitation can also make the invitee a member of a Household, listing, revoking and expiry settings. It will extend this ADR with new Invitation and User events.
 
+*Amended by ADR-0025:* any member of a Household can issue an Invitation to it, which admits a new person to the instance and makes them a Member, or makes an existing User a Member. Those Invitations live in Household scope, with only the code lookup in instance scope, expire after 24 hours and can be revoked.
+
 ## Event-sourced, like every other aggregate
 
 User and Invitation are Deciders with stored folds (ADR-0011). Every change to them is an event in the event store, and `rebuild` regenerates their folds from those events.

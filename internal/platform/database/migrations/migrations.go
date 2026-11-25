@@ -69,19 +69,9 @@ func Up(ctx context.Context, ownerURL string, loginURLs ...string) error {
 }
 
 func migrateUp(db *sql.DB) error {
-	src, err := iofs.New(files, ".")
+	m, err := newMigrate(db)
 	if err != nil {
-		return fmt.Errorf("migrations: source: %w", err)
-	}
-
-	driver, err := pgxmigrate.WithInstance(db, &pgxmigrate.Config{})
-	if err != nil {
-		return fmt.Errorf("migrations: driver: %w", err)
-	}
-
-	m, err := migrate.NewWithInstance("iofs", src, "pgx5", driver)
-	if err != nil {
-		return fmt.Errorf("migrations: %w", err)
+		return err
 	}
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
@@ -89,6 +79,25 @@ func migrateUp(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func newMigrate(db *sql.DB) (*migrate.Migrate, error) {
+	src, err := iofs.New(files, ".")
+	if err != nil {
+		return nil, fmt.Errorf("migrations: source: %w", err)
+	}
+
+	driver, err := pgxmigrate.WithInstance(db, &pgxmigrate.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("migrations: driver: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", src, "pgx5", driver)
+	if err != nil {
+		return nil, fmt.Errorf("migrations: %w", err)
+	}
+
+	return m, nil
 }
 
 type login struct{ role, password string }

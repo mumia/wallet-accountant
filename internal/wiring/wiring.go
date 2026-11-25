@@ -131,6 +131,7 @@ func runAPI(ctx context.Context, cfg config.Config, tel *telemetry.Telemetry, op
 	handler, err := httpapi.NewHandler(apiHandler{
 		Handler:             householdshttp.NewHandler(contexts.Users, contexts.Households),
 		NotificationHandler: householdshttp.NewNotificationHandler(contexts.Notifications),
+		InvitationHandler:   householdshttp.NewInvitationHandler(contexts.Invitations),
 		ledgerHandler:       ledgerhttp.NewHandler(contexts.Categories),
 		AccountHandler:      ledgerhttp.NewAccountHandler(contexts.Accounts),
 		ConnectionHandler:   ingestionhttp.NewConnectionHandler(contexts.Connections),
@@ -277,7 +278,7 @@ func runBootstrap(ctx context.Context, cfg config.Config, tel *telemetry.Telemet
 	}
 	defer pool.Close()
 
-	code, expiresAt, err := NewUsers(pool).IssueBootstrapInvitation(ctx)
+	code, expiresAt, err := NewUsers(pool, time.Now).IssueBootstrapInvitation(ctx)
 	if err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
@@ -304,6 +305,7 @@ func runBootstrap(ctx context.Context, cfg config.Config, tel *telemetry.Telemet
 type apiHandler struct {
 	*householdshttp.Handler
 	*householdshttp.NotificationHandler
+	*householdshttp.InvitationHandler
 	*ledgerHandler
 	*ledgerhttp.AccountHandler
 	*ingestionhttp.ConnectionHandler

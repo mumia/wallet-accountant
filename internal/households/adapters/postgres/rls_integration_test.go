@@ -40,7 +40,7 @@ func TestHouseholdMembersAreIsolatedByRowLevelSecurity(t *testing.T) {
 		Name:  "household_members",
 		Setup: insertHousehold,
 		Insert: func(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
-			_, err := tx.Exec(ctx, `INSERT INTO household_members (household_id, user_id) VALUES ($1, $2)`,
+			_, err := tx.Exec(ctx, `INSERT INTO household_members (household_id, user_id, joined_at) VALUES ($1, $2, now())`,
 				household, uuid.New())
 
 			return err
@@ -93,5 +93,35 @@ func TestNotificationReadsAreIsolatedByRowLevelSecurity(t *testing.T) {
 
 			return err
 		},
+	})
+}
+
+func insertHouseholdInvitation(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
+	_, err := tx.Exec(ctx, `INSERT INTO household_invitations (household_id, id, code_hash, issued_by, issued_at,
+		expires_at, version, schema_version) VALUES ($1, $2, $3, $4, now(), now() + interval '1 day', 1, 1)`,
+		household, uuid.New(), uuid.NewString(), uuid.New())
+
+	return err
+}
+
+func TestHouseholdInvitationsAreIsolatedByRowLevelSecurity(t *testing.T) {
+	t.Parallel()
+	urls := databasetest.New(t)
+
+	databasetest.AssertHouseholdIsolation(t, urls, databasetest.HouseholdTable{
+		Name:   "household_invitations",
+		Insert: insertHouseholdInvitation,
+	})
+}
+
+func TestTheCodeLookupRowOfAHouseholdInvitationIsOnlyInInstanceScope(t *testing.T) {
+	t.Parallel()
+	urls := databasetest.New(t)
+
+	databasetest.AssertInstanceScopeOnly(t, urls, "invitation_codes", func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO invitation_codes (code_hash, invitation_id, household_id) VALUES ($1, $2, $3)`,
+			uuid.NewString(), uuid.New(), uuid.New())
+
+		return err
 	})
 }
