@@ -115,6 +115,7 @@ func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
 func handlers() []forwarding.Handler {
 	return []forwarding.Handler{
 		suspectedDuplicatesNotifier(),
+		membershipNotifier(),
 	}
 }
 

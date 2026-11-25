@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -17,7 +18,8 @@ import (
 // of the Household's.
 var ErrNotificationNotFound = errors.New("notification not found")
 
-// Notification is a Notification as one member sees it.
+// Notification is a Notification as one member sees it. Fields of other
+// kinds are zero.
 type Notification struct {
 	ID                  uuid.UUID
 	Kind                domain.NotificationKind
@@ -25,7 +27,11 @@ type Notification struct {
 	ConnectionID        uuid.UUID
 	AccountID           uuid.UUID
 	SuspectedDuplicates int
-	RaisedAt            time.Time
+	// Member is who joined, left or was removed, and RemovedBy who removed
+	// them, with their current display names.
+	Member    UserRef
+	RemovedBy UserRef
+	RaisedAt  time.Time
 	// Read is whether the member has marked it read.
 	Read bool
 }
@@ -35,6 +41,9 @@ type NotificationReader interface {
 	// NotificationsFor lists the Notifications of the Household the
 	// transaction is set to, newest first, each read or not by user.
 	NotificationsFor(ctx context.Context, tx *eventstore.Tx, user uuid.UUID) ([]Notification, error)
+	// NotificationFor returns one of them, false when the Household has no
+	// such Notification.
+	NotificationFor(ctx context.Context, tx *eventstore.Tx, user, id uuid.UUID) (Notification, bool, error)
 }
 
 // Notifications lists a Household's Notifications and marks them read.
@@ -72,7 +81,7 @@ func (n *Notifications) MarkRead(ctx context.Context, household, notification uu
 	var read Notification
 
 	err := n.households.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, user uuid.UUID) error {
-		res, err := n.notifications.Execute(ctx, tx, notification, domain.MarkNotificationRead{UserID: user})
+		_, err := n.notifications.Execute(ctx, tx, notification, domain.MarkNotificationRead{UserID: user})
 		if errors.Is(err, domain.ErrNotificationNotRaised) {
 			return ErrNotificationNotFound
 		}
@@ -81,28 +90,21 @@ func (n *Notifications) MarkRead(ctx context.Context, household, notification uu
 			return err //nolint:wrapcheck // already wrapped by the runtime
 		}
 
-		read = notificationFor(notification, res.State, user)
+		// Read back, so the response names its Users as the list does.
+		var found bool
 
-		return nil
+		read, found, err = n.reader.NotificationFor(ctx, tx, user, notification)
+		if err == nil && !found {
+			err = ErrNotificationNotFound
+		}
+
+		return err
 	})
 	if err != nil {
 		return Notification{}, fmt.Errorf("mark notification %s read: %w", notification, err)
 	}
 
 	return read, nil
-}
-
-func notificationFor(id uuid.UUID, s domain.NotificationState, user uuid.UUID) Notification {
-	return Notification{
-		ID:                  id,
-		Kind:                s.Kind,
-		StatementImportID:   s.StatementImportID,
-		ConnectionID:        s.ConnectionID,
-		AccountID:           s.AccountID,
-		SuspectedDuplicates: s.SuspectedDuplicates,
-		RaisedAt:            s.RaisedAt,
-		Read:                s.IsReadBy(user),
-	}
 }
 
 // SuspectedDuplicatesFound is a Statement import that brought Suspected
@@ -142,6 +144,62 @@ func (r NotificationRaiser) RaiseSuspectedDuplicatesFound(ctx context.Context, t
 	})
 	if err != nil {
 		return fmt.Errorf("raise suspected duplicates found for statement import %s: %w", found.StatementImportID, err)
+	}
+
+	return nil
+}
+
+// MembershipNotificationIn reads a Household event and returns the
+// Notification it raises (join-household spec, "Households:
+// Notifications"): a member who joined through an Invitation, so not the
+// creator of a new Household; a member who left, when the event's actor is
+// the member; and otherwise a member the actor removed. It reports false for
+// any other event.
+func MembershipNotificationIn(ev eventstore.CloudEvent) (domain.NotificationCommand, bool, error) {
+	switch ev.Type {
+	case HouseholdMemberAddedType:
+		var added domain.HouseholdMemberAdded
+		if err := json.Unmarshal(ev.Data, &added); err != nil {
+			return nil, false, fmt.Errorf("read %s %s: %w", ev.Type, ev.ID, err)
+		}
+
+		if added.InvitationID == uuid.Nil {
+			return nil, false, nil
+		}
+
+		return domain.RaiseMemberJoined{MemberID: added.UserID}, true, nil
+	case HouseholdMemberRemovedType:
+		var removed domain.HouseholdMemberRemoved
+		if err := json.Unmarshal(ev.Data, &removed); err != nil {
+			return nil, false, fmt.Errorf("read %s %s: %w", ev.Type, ev.ID, err)
+		}
+
+		if ev.ActorID == removed.UserID {
+			return domain.RaiseMemberLeft{MemberID: removed.UserID}, true, nil
+		}
+
+		return domain.RaiseMemberRemoved{MemberID: removed.UserID, RemovedBy: ev.ActorID}, true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+// RaiseMembershipNotification raises the Notification a Household event
+// brings, if any (MembershipNotificationIn), in tx, which is set to the
+// event's Household.
+func (r NotificationRaiser) RaiseMembershipNotification(ctx context.Context, tx *eventstore.Tx, ev eventstore.CloudEvent) error {
+	raise, ok, err := MembershipNotificationIn(ev)
+	if err != nil || !ok {
+		return err
+	}
+
+	id, err := sharedkernel.NewID()
+	if err != nil {
+		return err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	if _, err := r.notifications.Execute(ctx, tx, id, raise); err != nil {
+		return fmt.Errorf("raise notification for %s %s: %w", ev.Type, ev.ID, err)
 	}
 
 	return nil
