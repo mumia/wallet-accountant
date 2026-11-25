@@ -39,6 +39,9 @@ var transferDetails = map[string]string{
 		"transfer_account_id, not both.",
 	"COUNTERPART_NOT_CASH": "transfer_account_id must be a cash Account: Transfers between statement Accounts " +
 		"come later.",
+	"MATCH_WITHOUT_TRANSFER": "match_transaction_id needs transfer_account_id, the cash Account it is on.",
+	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on the cash Account naming this row's " +
+		"Account with the opposite amount.",
 	"SAME_ACCOUNT":      "transfer_account_id is the row's own Account.",
 	"CURRENCY_MISMATCH": "transfer_account_id has another Account currency than the row.",
 	"UNKNOWN_ACCOUNT":   "transfer_account_id is not one of the Household's Accounts.",
@@ -101,8 +104,12 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 			return transferRefused("CATEGORY_AND_TRANSFER"), nil
 		}
 
-		if matchPending(v) {
-			return nil, httpapi.ErrNotImplemented
+		if v.MatchTransactionID.Set && !v.TransferAccountID.Set {
+			return transferRefused("MATCH_WITHOUT_TRANSFER"), nil
+		}
+
+		if id, ok := v.MatchTransactionID.Get(); ok {
+			a.MatchLeg = &id
 		}
 
 		if id, ok := v.CategoryID.Get(); ok {

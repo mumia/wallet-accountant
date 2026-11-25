@@ -26,8 +26,25 @@ const (
 // Category too.
 const TransferReasonCategoryAndTransfer = "CATEGORY_AND_TRANSFER"
 
+// transferDetails explains each reason a Transfer is refused.
+var transferDetails = map[app.TransferReason]string{
+	app.TransferSameAccount:        "The counterpart is the Transaction's own Account.",
+	app.TransferCurrencyMatch:      "The counterpart has another Account currency.",
+	app.TransferUnknownAccount:     "The counterpart is not one of the Household's Accounts.",
+	app.TransferNotAMatchingLeg:    "The legs aren't the two sides of one Transfer.",
+	app.TransferCounterpartNotCash: "Transfers between statement Accounts come later.",
+}
+
+// transferRefused is the 422 of a refused Transfer.
+func transferRefused(e *app.TransferRefusedError) *oas.TransferProblem {
+	p := httpapi.Unprocessable(InvalidTransferType, "Invalid Transfer", transferDetails[e.Reason])
+	p.Reason = oas.NewOptString(string(e.Reason))
+
+	return p
+}
+
 // RecordCashTransaction implements recordCashTransaction. A Transfer leg
-// (counterpart_account_id) answers 501 until tickets 07 and 09.
+// naming another cash Account answers 501 until ticket 09.
 func (h *TransactionHandler) RecordCashTransaction(ctx context.Context, req *oas.CashTransactionCreation,
 	params oas.RecordCashTransactionParams,
 ) (oas.RecordCashTransactionRes, error) {
@@ -37,10 +54,6 @@ func (h *TransactionHandler) RecordCashTransaction(ctx context.Context, req *oas
 		p.Reason = oas.NewOptString(TransferReasonCategoryAndTransfer)
 
 		return p, nil
-	}
-
-	if transferLegPending(req) {
-		return nil, httpapi.ErrNotImplemented
 	}
 
 	c := app.CashTransaction{
@@ -56,7 +69,18 @@ func (h *TransactionHandler) RecordCashTransaction(ctx context.Context, req *oas
 		c.Category = &id
 	}
 
+	if id, ok := req.CounterpartAccountID.Get(); ok {
+		c.Counterpart = &id
+	}
+
 	d, err := h.transactions.RecordCash(ctx, params.HouseholdID, c)
+	if errors.Is(err, app.ErrCashToCashNotBuilt) {
+		return nil, httpapi.ErrNotImplemented
+	}
+
+	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
+		return transferRefused(refused), nil
+	}
 
 	invalid := func(typ, title, detail string) (oas.RecordCashTransactionRes, error) {
 		return httpapi.Unprocessable(typ, title, detail), nil

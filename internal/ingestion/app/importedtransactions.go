@@ -177,10 +177,12 @@ func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Led
 
 // Acceptance is how a row is Accepted: to Category (nil for
 // Uncategorised), or, with TransferAccount, as a Transfer to or from that
-// cash Account.
+// cash Account. MatchLeg is a leg the cash Account already has to Match
+// instead of recording a new one.
 type Acceptance struct {
 	Category        *uuid.UUID
 	TransferAccount *uuid.UUID
+	MatchLeg        *uuid.UUID
 }
 
 // Accept Accepts a pending Imported transaction booked in its Account's
@@ -246,7 +248,7 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 
 		if a.TransferAccount != nil {
 			err = s.ledger.BookTransfer(ctx, tx, TransferBooking{
-				Booking: booking, CashAccount: *a.TransferAccount, CashLeg: cashLeg,
+				Booking: booking, CashAccount: *a.TransferAccount, CashLeg: cashLeg, MatchLeg: a.MatchLeg,
 			})
 		} else {
 			err = s.ledger.BookAccepted(ctx, tx, booking)
@@ -560,4 +562,51 @@ func ParseImportedCursor(s string) (ImportedCursor, error) {
 	}
 
 	return ImportedCursor{BookingDate: d, ID: u}, nil
+}
+
+// SuggestedLeg is a cash Transfer leg suggested as the other side of an
+// Imported transaction, as the Ledger records it.
+type SuggestedLeg struct {
+	TransactionID        uuid.UUID
+	AccountID            uuid.UUID
+	Amount               sharedkernel.Decimal
+	Currency             string
+	BookingDate          time.Time
+	TransactionDate      time.Time
+	Description          string
+	Payee                string
+	CategoryID           uuid.UUID
+	CategoryName         string
+	CounterpartAccountID uuid.UUID
+}
+
+// TransferSuggestions lists the cash Account's In transit legs that could
+// be the other side of the Imported transaction, read through the Ledger
+// port in one transaction: closest date first, within a week either side
+// of the row's Transaction date (consistency map: List transfer
+// suggestions). A cash Account the row can't be a Transfer with is a
+// *TransferRefusedError.
+func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, household, id, cash uuid.UUID,
+) ([]SuggestedLeg, error) {
+	var out []SuggestedLeg
+
+	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		fold, found, err := s.rows.Folds.Load(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !found {
+			return ErrImportedTransactionNotFound
+		}
+
+		out, err = s.ledger.TransferSuggestions(ctx, tx, fold.State, cash)
+
+		return err //nolint:wrapcheck // the port's error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("transfer suggestions for imported transaction %s: %w", id, err)
+	}
+
+	return out, nil
 }

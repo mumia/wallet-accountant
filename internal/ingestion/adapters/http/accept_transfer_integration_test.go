@@ -197,10 +197,6 @@ func TestAcceptingAsATransferIsRefused(t *testing.T) {
 		})
 	}
 
-	// A leg to match is ticket 07's.
-	f.accept(t, "Rent", map[string]any{"transfer_account_id": wallet, "match_transaction_id": food}).
-		AssertProblem(t, http.StatusNotImplemented, "/problems/not-implemented")
-
 	if pending := f.imported(t, "?state=PENDING").Items; len(pending) != 3 {
 		t.Errorf("%d pending rows, want all three still pending", len(pending))
 	}

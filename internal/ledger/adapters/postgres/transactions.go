@@ -251,3 +251,31 @@ func (CategoryReader) InternalCategory(ctx context.Context, tx *eventstore.Tx, r
 
 	return id, nil
 }
+
+// TransferSuggestions implements app.TransactionReader with the Account
+// Posting lookup rows of In transit legs.
+func (TransactionReader) TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q app.SuggestionQuery,
+) ([]uuid.UUID, error) {
+	date := q.TransactionDate.Format(domain.DateLayout)
+
+	rows, err := tx.Query(ctx, `SELECT p.transaction_id
+		FROM account_postings p
+		JOIN ledger_transactions t ON t.household_id = p.household_id AND t.id = p.transaction_id
+		WHERE p.household_id = $1 AND p.account_id = $2 AND t.counterpart_account_id = $3
+		  AND t.match_id IS NULL AND t.reversed_by_transaction_id IS NULL
+		  AND p.amount = $4::numeric AND p.currency = $5
+		  AND p.transaction_date BETWEEN $6::date - $7::int AND $6::date + $7::int
+		ORDER BY abs(p.transaction_date - $6::date), p.transaction_date, p.transaction_id`,
+		tx.HouseholdID(), q.CashAccount, q.RowAccount, q.Amount.Neg().String(), q.Currency, date,
+		int(app.SuggestionWindow/(24*time.Hour)))
+	if err != nil {
+		return nil, fmt.Errorf("list transfer suggestions: %w", err)
+	}
+
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("list transfer suggestions: %w", err)
+	}
+
+	return ids, nil
+}

@@ -275,11 +275,66 @@ func (t *Transactions) ConfirmTransfer(ctx context.Context, tx *eventstore.Tx, f
 
 // ImportedTransfer is an Imported transaction Accepted as a Transfer to or
 // from a cash Account: the row as ImportedBooking carries it (its Category
-// is ignored), the cash Account, and the ID of the cash leg to record.
+// is ignored), the cash Account, and the ID of the cash leg to record; or,
+// with MatchLeg, the leg the cash Account already has to Match instead.
 type ImportedTransfer struct {
 	Row         ImportedBooking
 	CashAccount uuid.UUID
 	CashLeg     uuid.UUID
+	MatchLeg    *uuid.UUID
+}
+
+// SuggestionWindow is how far either side of a row's Transaction date a
+// cash leg is suggested for it.
+const SuggestionWindow = 7 * 24 * time.Hour
+
+// checkCashCounterpart refuses, for a bank row on the Account account in
+// currency, a cash Account that is the row's own, not the Household's, not
+// cash, or in another currency.
+func (t *Transactions) checkCashCounterpart(ctx context.Context, tx *eventstore.Tx, account, cash uuid.UUID,
+	currency string,
+) error {
+	if cash == account {
+		return &TransferRefusedError{Reason: TransferSameAccount, Err: domain.ErrCounterpartIsItself}
+	}
+
+	fold, found, err := t.accounts.Folds.Load(ctx, tx, cash)
+	if err != nil {
+		return fmt.Errorf("load account %s: %w", cash, err)
+	}
+
+	switch {
+	case !found:
+		return &TransferRefusedError{Reason: TransferUnknownAccount, Err: ErrAccountNotFound}
+	case !fold.State.IsCash():
+		return &TransferRefusedError{Reason: TransferCounterpartNotCash, Err: ErrNotACashAccount}
+	case fold.State.Currency != currency:
+		return &TransferRefusedError{Reason: TransferCurrencyMatch, Err: fmt.Errorf("%w: %s, not %s",
+			ErrCurrencyMismatch, fold.State.Currency, currency)}
+	}
+
+	return nil
+}
+
+// matchingLeg refuses, as NOT_A_MATCHING_LEG, a leg to Match that isn't an
+// In transit leg on the cash Account naming the row's Account, with the
+// opposite amount. There is no date window (spec "Accept as Transfer").
+func (t *Transactions) matchingLeg(ctx context.Context, tx *eventstore.Tx, leg uuid.UUID, b ImportedTransfer) error {
+	fold, found, err := t.transactions.Folds.Load(ctx, tx, leg)
+	if err != nil {
+		return fmt.Errorf("load transaction %s: %w", leg, err)
+	}
+
+	l := fold.State.Leg(leg)
+
+	if !found || !fold.State.InTransit() || l.AccountID != b.CashAccount || l.CounterpartAccountID != b.Row.Account ||
+		l.Currency != b.Row.Currency || !l.Amount.Equal(b.Row.Amount.Neg()) {
+		return &TransferRefusedError{Reason: TransferNotAMatchingLeg, Err: fmt.Errorf(
+			"%w: %s isn't an in transit leg of %s %s on the cash account", domain.ErrLegsDontMatch, leg,
+			b.Row.Amount.Neg(), b.Row.Currency)}
+	}
+
+	return nil
 }
 
 // BookTransfer books an Imported transaction Accepted as a Transfer, in the
@@ -300,23 +355,8 @@ type ImportedTransfer struct {
 func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b ImportedTransfer) (uuid.UUID, error) {
 	r := b.Row
 
-	if b.CashAccount == r.Account {
-		return uuid.Nil, &TransferRefusedError{Reason: TransferSameAccount, Err: domain.ErrCounterpartIsItself}
-	}
-
-	cash, found, err := t.accounts.Folds.Load(ctx, tx, b.CashAccount)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("load account %s: %w", b.CashAccount, err)
-	}
-
-	switch {
-	case !found:
-		return uuid.Nil, &TransferRefusedError{Reason: TransferUnknownAccount, Err: ErrAccountNotFound}
-	case !cash.State.IsCash():
-		return uuid.Nil, &TransferRefusedError{Reason: TransferCounterpartNotCash, Err: ErrNotACashAccount}
-	case cash.State.Currency != r.Currency:
-		return uuid.Nil, &TransferRefusedError{Reason: TransferCurrencyMatch, Err: fmt.Errorf("%w: %s, not %s",
-			ErrCurrencyMismatch, cash.State.Currency, r.Currency)}
+	if err := t.checkCashCounterpart(ctx, tx, r.Account, b.CashAccount, r.Currency); err != nil {
+		return uuid.Nil, err
 	}
 
 	bank := TransferLegBooking{
@@ -328,6 +368,20 @@ func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b Im
 		Account: b.CashAccount, Counterpart: r.Account, Transaction: b.CashLeg, CreatedByTransfer: true,
 		BookingDate: r.TransactionDate, TransactionDate: r.TransactionDate,
 		Amount: r.Amount.Neg(), Currency: r.Currency, Description: r.Description, Payee: r.Payee,
+	}
+
+	if b.MatchLeg != nil {
+		// The cash leg exists: only the bank leg is booked, so only its
+		// Account's fold is written.
+		if err := t.matchingLeg(ctx, tx, *b.MatchLeg, b); err != nil {
+			return uuid.Nil, err
+		}
+
+		if err := t.RecordTransferLeg(ctx, tx, bank); err != nil {
+			return uuid.Nil, err
+		}
+
+		return t.ConfirmTransfer(ctx, tx, bank.Transaction, *b.MatchLeg)
 	}
 
 	legs := []TransferLegBooking{bank, cashLeg}
@@ -342,4 +396,54 @@ func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b Im
 	}
 
 	return t.ConfirmTransfer(ctx, tx, bank.Transaction, cashLeg.Transaction)
+}
+
+// SuggestionQuery asks which cash legs could be the other side of a bank
+// row: the row's Account, signed amount, currency and Transaction date,
+// and the cash Account whose legs are suggested.
+type SuggestionQuery struct {
+	RowAccount      uuid.UUID
+	CashAccount     uuid.UUID
+	Amount          sharedkernel.Decimal
+	Currency        string
+	TransactionDate time.Time
+}
+
+// TransferSuggestions lists, in the caller's transaction, the cash
+// Account's In transit legs naming the row's Account, with the opposite
+// amount, dated within SuggestionWindow of the row's Transaction date,
+// closest first. They are worked out on each request and never stored. A
+// cash Account the row can't be a Transfer with is a *TransferRefusedError.
+func (t *Transactions) TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q SuggestionQuery,
+) ([]TransactionDetail, error) {
+	if err := t.checkCashCounterpart(ctx, tx, q.RowAccount, q.CashAccount, q.Currency); err != nil {
+		return nil, err
+	}
+
+	ids, err := t.reader.TransferSuggestions(ctx, tx, q)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // the adapter's error
+	}
+
+	out := make([]TransactionDetail, 0, len(ids))
+
+	for _, id := range ids {
+		fold, found, err := t.transactions.Folds.Load(ctx, tx, id)
+		if err != nil {
+			return nil, fmt.Errorf("load transaction %s: %w", id, err)
+		}
+
+		if !found {
+			continue
+		}
+
+		d, err := t.detail(ctx, tx, id, fold.State)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, d)
+	}
+
+	return out, nil
 }

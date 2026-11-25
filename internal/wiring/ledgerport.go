@@ -129,15 +129,15 @@ func importedBooking(b ingestionapp.Booking) ledgerapp.ImportedBooking {
 // BookTransfer implements ingestionapp.Ledger.
 func (l ingestionLedger) BookTransfer(ctx context.Context, tx *eventstore.Tx, b ingestionapp.TransferBooking) error {
 	_, err := l.transactions.BookTransfer(ctx, tx, ledgerapp.ImportedTransfer{
-		Row: importedBooking(b.Booking), CashAccount: b.CashAccount, CashLeg: b.CashLeg,
+		Row: importedBooking(b.Booking), CashAccount: b.CashAccount, CashLeg: b.CashLeg, MatchLeg: b.MatchLeg,
 	})
 
 	if m := monthError(err); m != nil {
 		return m
 	}
 
-	if refused, ok := errors.AsType[*ledgerapp.TransferRefusedError](err); ok {
-		return &ingestionapp.TransferRefusedError{Reason: string(refused.Reason), Err: err}
+	if refused := transferRefusal(err); refused != nil {
+		return refused
 	}
 
 	if errors.Is(err, ledgerapp.ErrAccountNotFound) {
@@ -275,4 +275,44 @@ func uncheckedImport(u ingestionapp.UncheckedImport) ledgerdomain.UncheckedImpor
 	}
 
 	return ledgerdomain.UncheckedImport{StatementImportID: u.ID, Check: check}
+}
+
+// transferRefusal is the Ledger's refused Transfer in Ingestion's terms, or
+// nil when err isn't one.
+func transferRefusal(err error) error {
+	if refused, ok := errors.AsType[*ledgerapp.TransferRefusedError](err); ok {
+		return &ingestionapp.TransferRefusedError{Reason: string(refused.Reason), Err: err}
+	}
+
+	return nil
+}
+
+// TransferSuggestions implements ingestionapp.Ledger.
+func (l ingestionLedger) TransferSuggestions(ctx context.Context, tx *eventstore.Tx,
+	row ingestiondomain.ImportedTransactionState, cash uuid.UUID,
+) ([]ingestionapp.SuggestedLeg, error) {
+	legs, err := l.transactions.TransferSuggestions(ctx, tx, ledgerapp.SuggestionQuery{
+		RowAccount: row.AccountID, CashAccount: cash, Amount: row.Amount, Currency: row.Currency,
+		TransactionDate: row.TransactionDate,
+	})
+	if refused := transferRefusal(err); refused != nil {
+		return nil, refused
+	}
+
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already wrapped by the Ledger
+	}
+
+	out := make([]ingestionapp.SuggestedLeg, 0, len(legs))
+
+	for _, d := range legs {
+		out = append(out, ingestionapp.SuggestedLeg{
+			TransactionID: d.ID, AccountID: d.AccountID, Amount: d.Amount, Currency: d.Currency,
+			BookingDate: d.BookingDate, TransactionDate: d.TransactionDate, Description: d.Description,
+			Payee: d.Payee, CategoryID: d.CategoryID, CategoryName: d.CategoryName,
+			CounterpartAccountID: d.CounterpartAccountID,
+		})
+	}
+
+	return out, nil
 }

@@ -37,6 +37,10 @@ var (
 	// ErrBookedBeforeStartDate is returned for a cash Transaction dated
 	// before the Account's start date.
 	ErrBookedBeforeStartDate = domain.ErrBookedBeforeStartDate
+	// ErrCashToCashNotBuilt is returned for a cash Transfer leg naming
+	// another cash Account, which ticket 09 of
+	// .scratch/cash-accounts-and-transfers builds.
+	ErrCashToCashNotBuilt = errors.New("transfers between cash accounts aren't built yet")
 )
 
 // Count is an amount of cash counted, in a currency.
@@ -202,6 +206,9 @@ type CashTransaction struct {
 	Description string
 	Payee       string
 	Category    *uuid.UUID
+	// Counterpart makes it a Transfer leg naming that Account, against
+	// Account transfer; Category is then unused.
+	Counterpart *uuid.UUID
 }
 
 // RecordCash records a cash Transaction in one transaction: a Transaction
@@ -242,6 +249,10 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 			return fmt.Errorf("%w: %s is after %s", ErrDateInTheFuture, c.Date.Format(domain.DateLayout), today)
 		}
 
+		if c.Counterpart != nil {
+			return t.recordCashLeg(ctx, tx, id, c, &out)
+		}
+
 		category, uncategorised, err := t.chooseCategory(ctx, tx, c.Category)
 		if err != nil {
 			return err
@@ -276,4 +287,38 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 	}
 
 	return out, nil
+}
+
+// recordCashLeg records a cash Transaction that is a Transfer leg naming a
+// statement Account: one leg, In transit until the bank row's Accept
+// Matches it (spec "Recording a cash leg first"). A cash counterpart is
+// ErrCashToCashNotBuilt for now.
+func (t *Transactions) recordCashLeg(ctx context.Context, tx *eventstore.Tx, id uuid.UUID, c CashTransaction,
+	out *TransactionDetail,
+) error {
+	other, found, err := t.accounts.Folds.Load(ctx, tx, *c.Counterpart)
+	if err != nil {
+		return fmt.Errorf("load account %s: %w", *c.Counterpart, err)
+	}
+
+	if found && other.State.IsCash() && *c.Counterpart != c.Account {
+		return ErrCashToCashNotBuilt
+	}
+
+	if err := t.RecordTransferLeg(ctx, tx, TransferLegBooking{
+		Account: c.Account, Counterpart: *c.Counterpart, Transaction: id,
+		BookingDate: c.Date, TransactionDate: c.Date, Amount: c.Amount, Currency: c.Currency,
+		Description: c.Description, Payee: c.Payee,
+	}); err != nil {
+		return err
+	}
+
+	fold, _, err := t.transactions.Folds.Load(ctx, tx, id)
+	if err != nil {
+		return fmt.Errorf("load transaction %s: %w", id, err)
+	}
+
+	*out, err = t.detail(ctx, tx, id, fold.State)
+
+	return err
 }
