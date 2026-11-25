@@ -27,9 +27,9 @@ func TestCashAndTransferOperationsAnswerNotImplementedYet(t *testing.T) {
 	anID := uuid.NewString()
 
 	for name, send := range map[string]func() *apitest.Response{
-		"recordCashTransaction (03)": func() *apitest.Response {
+		"cash Transfer leg (07, 09)": func() *apitest.Response {
 			return app.Post(t, base+"/accounts/"+main.AccountID+"/transactions", token, map[string]any{
-				"date": "2026-01-05", "amount": eur, "description": "Coffee",
+				"date": "2026-01-05", "amount": eur, "description": "ATM", "counterpart_account_id": anID,
 			})
 		},
 		"close by a Cash count (04)": func() *apitest.Response {

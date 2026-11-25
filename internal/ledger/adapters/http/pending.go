@@ -11,12 +11,10 @@ import (
 // yet: each answers 501 until its ticket in .scratch/cash-accounts-and-transfers
 // lands.
 
-// RecordCashTransaction implements recordCashTransaction (tickets 03, 07
-// and 09).
-func (h *TransactionHandler) RecordCashTransaction(context.Context, *oas.CashTransactionCreation,
-	oas.RecordCashTransactionParams,
-) (oas.RecordCashTransactionRes, error) {
-	return nil, httpapi.ErrNotImplemented
+// transferLegPending reports whether a cash Transaction is a Transfer leg
+// (tickets 07 and 09).
+func transferLegPending(req *oas.CashTransactionCreation) bool {
+	return req.CounterpartAccountID.Set
 }
 
 // GetMatch implements getMatch (ticket 05).
