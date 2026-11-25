@@ -197,6 +197,7 @@ func (HouseholdLookups) Members(ctx context.Context, tx *eventstore.Tx) ([]app.M
 	members, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (app.Member, error) {
 		var m app.Member
 		err := row.Scan(&m.UserID, &m.JoinedAt)
+		m.JoinedAt = m.JoinedAt.UTC()
 
 		return m, err //nolint:wrapcheck // wrapped below
 	})

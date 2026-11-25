@@ -44,3 +44,10 @@
 - **Left for the merge with ticket 05:** add a revoked code to `TestEveryInvalidCodeGetsTheSameProblem`. A comment marks the spot. `asInvalidInvitation` must also map ticket 05's revoked refusal, if 05 adds a new domain error.
 - **Merge with ticket 08:** expect conflicts in `HouseholdMemberAdded`/`evolveHousehold`, where 08 adds `JoinedAt`, and in `HouseholdFolds.Save`, where 08 adds `joined_at`.
 - **Checks:** `make lint`, `make test` and `make test-integration` pass.
+
+2026-11-25, review fix (an existing member's unusable code):
+
+- **Bug:** `join` ran `AddMember` before the Invitation's Redeem checked the code, so a member of the code's Household got 409 `already-a-member` ("The Invitation code is still unused") for a revoked, expired or redeemed code. That revealed a revoked code (ADR-0025, spec story 9), and the 409 text was false.
+- **Fix:** in `app/memberships.go`, `join` no longer returns on `domain.ErrAlreadyAMember`. It still runs Redeem after `AddMember`, so the event order is unchanged (memberadded, then invitation.redeemed). A code that can't be redeemed gets `ErrInvalidInvitation` (422) whoever sends it. Only when Redeem succeeds for a member does `join` return `ErrAlreadyAMember` (409). The redeemed event is then rolled back with the transaction, so the code stays unused, as `TestJoiningAHouseholdYouBelongToLeavesTheCodeUnused` still shows.
+- **Test:** `TestAMemberWithAnInvalidCodeForTheirHouseholdGetsTheSameProblem` checks that a member gets the same 422 body as for an unknown code when the code is revoked, expired, redeemed by another User, or redeemed by themselves.
+- **Checks:** `make lint`, `make test` and `make test-integration` pass.

@@ -141,6 +141,45 @@ func TestEveryInvalidCodeGetsTheSameProblem(t *testing.T) {
 	}
 }
 
+// A member of the code's own Household gets the same problem for a code
+// that can't be redeemed, so already-a-member never tells them it exists.
+func TestAMemberWithAnInvalidCodeForTheirHouseholdGetsTheSameProblem(t *testing.T) {
+	t.Parallel()
+
+	start := time.Now().UTC().Truncate(time.Second)
+	clock := newSettableClock(start)
+	app := apitest.Start(t, apitest.WithClock(clock.Now))
+	alice := app.Register(t, "https://issuer.example", "alice")
+	bob := app.Register(t, "https://issuer.example", "bob")
+	home := createHousehold(t, app, alice, "Home")
+
+	redeemed := issueInvitation(t, app, alice, home.HouseholdID)
+	join(app, t, bob, redeemed.Code).AssertJSON(t, http.StatusCreated, &household{})
+
+	expired := issueInvitation(t, app, alice, home.HouseholdID)
+
+	clock.add(24 * time.Hour)
+
+	revoked := issueInvitation(t, app, alice, home.HouseholdID)
+	revokeInvitation(t, app, alice, home.HouseholdID, revoked.InvitationID)
+
+	unknown := join(app, t, alice, "not-a-code").
+		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-invitation")
+
+	for _, tc := range []struct{ name, token, code string }{
+		{"revoked", alice, revoked.Code},
+		{"expired", alice, expired.Code},
+		{"redeemed by another", alice, redeemed.Code},
+		{"redeemed by themselves", bob, redeemed.Code},
+	} {
+		p := join(app, t, tc.token, tc.code).
+			AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-invitation")
+		if p != unknown {
+			t.Errorf("%s: problem %+v differs from %+v", tc.name, p, unknown)
+		}
+	}
+}
+
 func TestConcurrentRedemptionsOfOneCodeSucceedOnce(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
