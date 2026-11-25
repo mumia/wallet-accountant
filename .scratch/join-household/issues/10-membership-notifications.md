@@ -4,7 +4,7 @@
 
 **Blocked by:** 06, 09
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] New Notification kinds `member_joined`, `member_left` and `member_removed`, each storing the member's User ID and, for removal, the remover's. They are raised by deferred Households handlers and deduplicated through the processed-events table
 - [ ] `household.memberadded` raises `member_joined` only when it carries an `invitationid`, so creating a Household raises nothing
