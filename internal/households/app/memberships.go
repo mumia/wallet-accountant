@@ -13,7 +13,8 @@ import (
 )
 
 // ErrAlreadyAMember is returned for joining a Household the User already
-// belongs to. The transaction is rolled back, so the code stays unused.
+// belongs to with a code that could be redeemed. The transaction is rolled
+// back, so the code stays unused.
 var ErrAlreadyAMember = errors.New("already a member of the household")
 
 // Join redeems an Invitation to a Household for the User the identity
@@ -64,7 +65,11 @@ func (u *Users) Join(ctx context.Context, id authn.Identity, code string) (House
 
 // join sets the transaction to the Invitation's Household, adds the User as
 // a member, then redeems the Invitation. The transaction must be in
-// instance scope, with the User as its actor.
+// instance scope, with the User as its actor. A code that can't be redeemed
+// gets ErrInvalidInvitation even from a member of its Household, so the
+// refusal never reveals a revoked, expired or redeemed code; a member with
+// a code that can be redeemed gets ErrAlreadyAMember, and the caller's
+// rollback leaves it unused.
 func (u *Users) join(ctx context.Context, tx *eventstore.Tx, user uuid.UUID, hash domain.CodeHash, code InvitationCode,
 ) (Household, error) {
 	if err := tx.SetHousehold(ctx, code.HouseholdID); err != nil {
@@ -74,9 +79,12 @@ func (u *Users) join(ctx context.Context, tx *eventstore.Tx, user uuid.UUID, has
 	added, err := u.households.Execute(ctx, tx, code.HouseholdID,
 		domain.AddMember{UserID: user, InvitationID: code.InvitationID})
 
+	member := errors.Is(err, domain.ErrAlreadyAMember)
+
 	switch {
-	case errors.Is(err, domain.ErrAlreadyAMember):
-		return Household{}, fmt.Errorf("%w: %w", ErrAlreadyAMember, err)
+	case member:
+		// Redeemed below only to check the code, which a refusal of an
+		// unusable one must not reveal; the transaction is rolled back.
 	case errors.Is(err, domain.ErrHouseholdNotCreated):
 		return Household{}, fmt.Errorf("%w: %w", ErrInvalidInvitation, err)
 	case err != nil:
@@ -86,6 +94,10 @@ func (u *Users) join(ctx context.Context, tx *eventstore.Tx, user uuid.UUID, has
 	if _, err := u.invitations.Execute(ctx, tx, code.InvitationID,
 		domain.RedeemInvitation{CodeHash: hash, UserID: user, At: tx.Now()}); err != nil {
 		return Household{}, asInvalidInvitation(err)
+	}
+
+	if member {
+		return Household{}, ErrAlreadyAMember
 	}
 
 	return Household{ID: code.HouseholdID, Name: added.State.Name, BaseCurrency: added.State.BaseCurrency}, nil

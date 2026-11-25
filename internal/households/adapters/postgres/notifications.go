@@ -45,7 +45,7 @@ func (r *notificationRow) state() domain.NotificationState {
 		SuspectedDuplicates: derefInt(r.suspectedDuplicates),
 		MemberID:            derefID(r.member),
 		RemovedBy:           derefID(r.removedBy),
-		RaisedAt:            r.raisedAt,
+		RaisedAt:            r.raisedAt.UTC(),
 	}
 }
 

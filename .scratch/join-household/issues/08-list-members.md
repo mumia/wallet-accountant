@@ -29,3 +29,9 @@
   - ~~`apitest.SeedDisplayName`~~: removed on merge, since ticket 03 had landed. The rename test now goes through `PATCH /me`, and the legacy-User test registers with `apitest.RegisterWithoutDisplayName`.
 - **Fixture change:** the RLS test's `household_members` insert now passes `joined_at`.
 - **Checks:** `make lint`, `make test` and `make test-integration` pass.
+
+2026-11-25, review fix (UTC times):
+
+- `HouseholdLookups.Members` now returns `joined_at` in UTC, as `HouseholdFolds.Load` and `OpenInvitations` already did. The notifications reader's `notificationRow.state()` now returns `raised_at` in UTC as well.
+- **No test added.** pgx builds `timestamptz` values in Go's `time.Local`, not in the session's `TimeZone`, so a non-UTC session would not show the bug. A test would have to change the process-wide `time.Local`, which isn't safe with the parallel tests.
+- **Checks:** `make lint`, `make test` and `make test-integration` pass.
