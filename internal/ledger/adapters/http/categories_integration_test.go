@@ -131,6 +131,7 @@ func TestBuildingTheCategoryTree(t *testing.T) {
 	create(t, app, token, home, map[string]any{"name": "Salary", "kind": "INCOME"})
 
 	assertTree(t, list(t, app, token, home),
+		"Account transfer (INTERNAL)",
 		"Food (EXPENSE)",
 		"  Eating out (EXPENSE)",
 		"    Coffee (EXPENSE)",
@@ -186,6 +187,7 @@ func TestRenamingAndMovingACategory(t *testing.T) {
 	}
 
 	assertTree(t, list(t, app, token, home),
+		"Account transfer (INTERNAL)",
 		"Eating out (EXPENSE)",
 		"  Coffee (EXPENSE)",
 		"  Tea (EXPENSE)",
@@ -319,6 +321,7 @@ func TestAnotherHouseholdGets404ForEveryCategoryRoute(t *testing.T) {
 		AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-category")
 
 	assertTree(t, list(t, app, alicesToken, alices),
+		"Account transfer (INTERNAL)",
 		"Food (EXPENSE)",
 		"Household transfer (INTERNAL)",
 		"Opening balance (INTERNAL)",
@@ -368,6 +371,7 @@ func TestCreatingACategoryIsIdempotent(t *testing.T) {
 	}
 
 	assertTree(t, list(t, app, token, home),
+		"Account transfer (INTERNAL)",
 		"Food (EXPENSE)",
 		"Household transfer (INTERNAL)",
 		"Opening balance (INTERNAL)",
@@ -398,6 +402,7 @@ func TestRebuildRestoresTheCategoryTree(t *testing.T) {
 	}
 
 	assertTree(t, after,
+		"Account transfer (INTERNAL)",
 		"Food (EXPENSE)",
 		"  Espresso (EXPENSE)",
 		"Household transfer (INTERNAL)",

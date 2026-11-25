@@ -15,6 +15,7 @@ func TestSeedingEachInternalCategory(t *testing.T) {
 		domain.RoleOpeningBalance:    "Opening balance",
 		domain.RoleHouseholdTransfer: "Household transfer",
 		domain.RoleUncategorised:     "Uncategorised",
+		domain.RoleAccountTransfer:   "Account transfer",
 	} {
 		t.Run(string(role), func(t *testing.T) {
 			t.Parallel()
@@ -26,11 +27,11 @@ func TestSeedingEachInternalCategory(t *testing.T) {
 	}
 }
 
-func TestThereAreExactlyThreeInternalCategories(t *testing.T) {
+func TestThereAreExactlyFourInternalCategories(t *testing.T) {
 	t.Parallel()
 
-	if got := domain.InternalRoles(); len(got) != 3 {
-		t.Errorf("InternalRoles() = %v, want Opening balance, Household transfer and Uncategorised", got)
+	if got := domain.InternalRoles(); len(got) != 4 {
+		t.Errorf("InternalRoles() = %v, want Opening balance, Household transfer, Uncategorised and Account transfer", got)
 	}
 }
 

@@ -309,6 +309,8 @@ func accountMonthOut(m app.AccountMonth) (*oas.AccountMonth, error) {
 		SuspectedDuplicates: int32(m.SuspectedDuplicates), //nolint:gosec // a count of rows
 		Uncategorised:       int32(m.Uncategorised),       //nolint:gosec // a count of Transactions
 		ReopenBlocked:       m.ReopenBlocked,
+		//nolint:gosec // a count of Transactions
+		TransferLegsInTransit: int32(m.LegsInTransit),
 	}
 
 	out.UncheckedStatementImports = make([]oas.UncheckedStatementImport, 0, len(m.UncheckedImports))

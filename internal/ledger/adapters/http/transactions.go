@@ -35,11 +35,7 @@ func NewTransactionHandler(transactions *app.Transactions) *TransactionHandler {
 // ListAccountTransactions implements listAccountTransactions.
 func (h *TransactionHandler) ListAccountTransactions(ctx context.Context, params oas.ListAccountTransactionsParams,
 ) (oas.ListAccountTransactionsRes, error) {
-	if inTransitPending(params) {
-		return nil, httpapi.ErrNotImplemented
-	}
-
-	filter := app.TransactionFilter{Limit: int(params.Limit.Or(DefaultPageSize))}
+	filter := app.TransactionFilter{Limit: int(params.Limit.Or(DefaultPageSize)), InTransit: params.InTransit.Or(false)}
 
 	if m, ok := params.BookingMonth.Get(); ok {
 		// The contract's pattern already checked it.
@@ -91,6 +87,10 @@ func (h *TransactionHandler) ListAccountTransactions(ctx context.Context, params
 			ReversalOfTransactionID: optionalID(t.ReversalOf),
 			ReversedByTransactionID: optionalID(t.ReversedBy),
 			ImportedTransactionID:   optionalID(t.ImportedTransactionID),
+
+			CounterpartAccountID: optionalID(t.CounterpartAccountID),
+			MatchID:              optionalID(t.MatchID),
+			CreatedByTransfer:    optionalTrue(t.CreatedByTransfer),
 		})
 	}
 
@@ -99,4 +99,36 @@ func (h *TransactionHandler) ListAccountTransactions(ctx context.Context, params
 	}
 
 	return out, nil
+}
+
+// GetMatch implements getMatch.
+func (h *TransactionHandler) GetMatch(ctx context.Context, params oas.GetMatchParams) (oas.GetMatchRes, error) {
+	m, err := h.transactions.Match(ctx, params.HouseholdID, params.MatchID)
+
+	switch {
+	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrMatchNotFound):
+		return new(oas.GetMatchNotFound(httpapi.NotFoundProblem())), nil
+	case err != nil:
+		return nil, fmt.Errorf("get match: %w", err)
+	}
+
+	out := &oas.Match{
+		MatchID: m.ID, Kind: "ACCOUNT_TRANSFER", ConfirmedBy: m.ConfirmedBy, ConfirmedAt: m.ConfirmedAt,
+		Legs: make([]oas.MatchLeg, 0, len(m.Legs)),
+	}
+
+	for _, l := range m.Legs {
+		out.Legs = append(out.Legs, oas.MatchLeg{TransactionID: l.TransactionID, AccountID: l.AccountID})
+	}
+
+	return out, nil
+}
+
+// optionalTrue leaves out false.
+func optionalTrue(b bool) oas.OptBool {
+	if !b {
+		return oas.OptBool{}
+	}
+
+	return oas.NewOptBool(true)
 }

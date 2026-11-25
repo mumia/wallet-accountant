@@ -378,16 +378,51 @@ func (AccountReader) MonthsForShare(ctx context.Context, tx *eventstore.Tx, acco
 	return m, true, nil
 }
 
-// CashCounts implements app.CashCounts.
-type CashCounts struct{}
+// MonthReader implements app.MonthReader.
+type MonthReader struct{}
 
-var _ app.CashCounts = CashCounts{}
+var _ app.MonthReader = MonthReader{}
 
-// MovedAfter implements app.CashCounts with the Account Posting lookup rows,
+// LegsInTransit implements app.MonthReader with the Account Posting lookup
+// rows of Transfer legs that are neither Matched nor reversed.
+func (MonthReader) LegsInTransit(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (map[string]int, error) {
+	rows, err := tx.Query(ctx, `SELECT to_char(p.booking_date, 'YYYY-MM'), count(*)
+		FROM account_postings p
+		JOIN ledger_transactions t ON t.household_id = p.household_id AND t.id = p.transaction_id
+		WHERE p.household_id = $1 AND p.account_id = $2 AND t.counterpart_account_id IS NOT NULL
+		  AND t.match_id IS NULL AND t.reversed_by_transaction_id IS NULL
+		GROUP BY 1`, tx.HouseholdID(), account)
+	if err != nil {
+		return nil, fmt.Errorf("count account %s legs in transit: %w", account, err)
+	}
+
+	counts := map[string]int{}
+
+	for rows.Next() {
+		var (
+			month string
+			n     int
+		)
+
+		if err := rows.Scan(&month, &n); err != nil {
+			return nil, fmt.Errorf("count account %s legs in transit: %w", account, err)
+		}
+
+		counts[month] = n
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("count account %s legs in transit: %w", account, err)
+	}
+
+	return counts, nil
+}
+
+// MovedAfter implements app.MonthReader with the Account Posting lookup rows,
 // once the Account's row is locked for update: a Transaction booked
 // concurrently either committed before the lock, and is summed, or waits
 // for it and then fails its version check.
-func (CashCounts) MovedAfter(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, after, through time.Time,
+func (MonthReader) MovedAfter(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, after, through time.Time,
 ) (sharedkernel.Decimal, error) {
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM accounts WHERE household_id = $1 AND id = $2 FOR UPDATE`,
 		tx.HouseholdID(), account); err != nil {

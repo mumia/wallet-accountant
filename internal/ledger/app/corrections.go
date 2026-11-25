@@ -30,6 +30,9 @@ type TransactionDetail struct {
 	ImportedTransactionID uuid.UUID
 	ReversalOf            uuid.UUID
 	ReversedBy            uuid.UUID
+	CounterpartAccountID  uuid.UUID
+	MatchID               uuid.UUID
+	CreatedByTransfer     bool
 }
 
 // chooseCategory returns the Category a User chose for the non-Account
@@ -72,10 +75,16 @@ func (t *Transactions) SetCategory(ctx context.Context, household, id, category 
 	var out TransactionDetail
 
 	err := t.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		if _, found, err := t.transactions.Folds.Load(ctx, tx, id); err != nil {
+		fold, found, err := t.transactions.Folds.Load(ctx, tx, id)
+
+		switch {
+		case err != nil:
 			return fmt.Errorf("load transaction %s: %w", id, err)
-		} else if !found {
+		case !found:
 			return ErrTransactionNotFound
+		case fold.State.IsTransferLeg():
+			// Before the Category is read, so any Category gets this.
+			return ErrTransferLeg
 		}
 
 		chosen, uncategorised, err := t.chooseCategory(ctx, tx, &category)
@@ -257,6 +266,9 @@ func (t *Transactions) detail(ctx context.Context, tx *eventstore.Tx, id uuid.UU
 		ImportedTransactionID: s.ImportedTransactionID,
 		ReversalOf:            s.ReversalOf,
 		ReversedBy:            s.ReversedBy,
+		CounterpartAccountID:  s.CounterpartAccountID,
+		MatchID:               s.MatchID,
+		CreatedByTransfer:     s.CreatedByTransfer,
 	}
 
 	for _, p := range s.Postings {

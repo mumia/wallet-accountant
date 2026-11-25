@@ -32,12 +32,6 @@ func TestCashAndTransferOperationsAnswerNotImplementedYet(t *testing.T) {
 				"date": "2026-01-05", "amount": eur, "description": "ATM", "counterpart_account_id": anID,
 			})
 		},
-		"getMatch (05)": func() *apitest.Response {
-			return app.Get(t, base+"/matches/"+anID, token)
-		},
-		"in_transit list (05)": func() *apitest.Response {
-			return app.Get(t, base+"/accounts/"+main.AccountID+"/transactions?in_transit=true", token)
-		},
 		"Accept as Transfer (06)": func() *apitest.Response {
 			return app.Post(t, base+"/imported-transactions/"+anID+"/accept", token, map[string]any{
 				"transfer_account_id": anID,

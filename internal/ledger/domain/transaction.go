@@ -85,6 +85,15 @@ type TransactionState struct {
 	// ReversedBy is the Transaction that reversed this one; the zero ID
 	// while it isn't reversed.
 	ReversedBy sharedkernel.ID
+	// CounterpartAccountID is the other Account of the Transfer this
+	// Transaction is a leg of; the zero ID unless it is a Transfer leg.
+	CounterpartAccountID sharedkernel.ID
+	// CreatedByTransfer says an Accept as Transfer recorded this cash leg
+	// on its own.
+	CreatedByTransfer bool
+	// MatchID is the Match linking this leg to the other one; the zero ID
+	// while it is In transit.
+	MatchID sharedkernel.ID
 }
 
 // CategoryID returns the Category of the non-Account side, or the zero ID
@@ -169,10 +178,14 @@ type (
 	// RecordTransaction records a balanced Transaction. TransactionDate
 	// defaults to the Booking date; ValueDate may be zero.
 	// ImportedTransactionID links it to the Imported transaction it books;
-	// ReversalOf to the Transaction it reverses.
+	// ReversalOf to the Transaction it reverses. CounterpartAccountID makes
+	// it a Transfer leg, and CreatedByTransfer says an Accept as Transfer
+	// recorded it.
 	RecordTransaction struct {
 		ImportedTransactionID sharedkernel.ID
 		ReversalOf            sharedkernel.ID
+		CounterpartAccountID  sharedkernel.ID
+		CreatedByTransfer     bool
 		OpeningBalance        bool
 		BookingDate           time.Time
 		TransactionDate       time.Time
@@ -215,6 +228,8 @@ type (
 	TransactionRecorded struct {
 		ImportedTransactionID sharedkernel.ID `json:"importedtransactionid,omitzero"`
 		ReversalOf            sharedkernel.ID `json:"reversalof,omitzero"`
+		CounterpartAccountID  sharedkernel.ID `json:"counterpartaccountid,omitzero"`
+		CreatedByTransfer     bool            `json:"createdbytransfer,omitempty"`
 		OpeningBalance        bool            `json:"openingbalance,omitempty"`
 		BookingDate           string          `json:"bookingdate"`
 		TransactionDate       string          `json:"transactiondate"`
@@ -259,6 +274,10 @@ func decideTransaction(s TransactionState, c TransactionCommand) ([]TransactionE
 		return reverseOpeningBalance(s, c)
 	case SetTransactionCategory:
 		return setTransactionCategory(s, c)
+	case MatchTransaction:
+		return matchTransaction(s, c)
+	case UnmatchTransaction:
+		return unmatchTransaction(s, c)
 	default:
 		return nil, nil
 	}
@@ -293,6 +312,10 @@ func recordTransaction(s TransactionState, c RecordTransaction) ([]TransactionEv
 		}
 	}
 
+	if err := checkLeg(c); err != nil {
+		return nil, err
+	}
+
 	transactionDate := c.TransactionDate
 	if transactionDate.IsZero() {
 		transactionDate = c.BookingDate
@@ -301,6 +324,8 @@ func recordTransaction(s TransactionState, c RecordTransaction) ([]TransactionEv
 	recorded := TransactionRecorded{
 		ImportedTransactionID: c.ImportedTransactionID,
 		ReversalOf:            c.ReversalOf,
+		CounterpartAccountID:  c.CounterpartAccountID,
+		CreatedByTransfer:     c.CreatedByTransfer,
 		OpeningBalance:        c.OpeningBalance,
 		BookingDate:           c.BookingDate.Format(DateLayout),
 		TransactionDate:       transactionDate.Format(DateLayout),
@@ -374,6 +399,8 @@ func setTransactionCategory(s TransactionState, c SetTransactionCategory) ([]Tra
 	previous := s.CategoryID()
 
 	switch {
+	case s.IsTransferLeg():
+		return nil, ErrTransferLeg
 	case s.ReversedBy != sharedkernel.NilID:
 		return nil, ErrTransactionReversed
 	case c.CategoryID == sharedkernel.NilID:
@@ -409,6 +436,10 @@ func evolveTransaction(s TransactionState, e decider.Envelope[TransactionEvent])
 	switch ev := e.Event.(type) {
 	case TransactionReversed:
 		s.ReversedBy = ev.ReversalID
+	case TransactionMatched:
+		s.MatchID = ev.MatchID
+	case TransactionUnmatched:
+		s.MatchID = sharedkernel.NilID
 	case TransactionCategorySet:
 		postings := make([]Posting, len(s.Postings))
 		for i, p := range s.Postings {
@@ -433,6 +464,7 @@ func evolveTransaction(s TransactionState, e decider.Envelope[TransactionEvent])
 
 		s.Description, s.Payee, s.Postings = ev.Description, ev.Payee, ev.Postings
 		s.ImportedTransactionID, s.ReversalOf = ev.ImportedTransactionID, ev.ReversalOf
+		s.CounterpartAccountID, s.CreatedByTransfer = ev.CounterpartAccountID, ev.CreatedByTransfer
 	}
 
 	return s

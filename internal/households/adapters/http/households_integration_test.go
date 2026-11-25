@@ -108,7 +108,7 @@ func TestANewHouseholdComesWithItsThreeInternalCategories(t *testing.T) {
 
 	slices.Sort(names)
 
-	if want := []string{"Household transfer", "Opening balance", "Uncategorised"}; !slices.Equal(names, want) {
+	if want := []string{"Account transfer", "Household transfer", "Opening balance", "Uncategorised"}; !slices.Equal(names, want) {
 		t.Errorf("categories = %v, want %v", names, want)
 	}
 }

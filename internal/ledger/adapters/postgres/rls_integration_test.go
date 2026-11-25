@@ -45,3 +45,20 @@ func TestAccountsAreIsolatedByRowLevelSecurity(t *testing.T) {
 		},
 	})
 }
+
+func TestMatchesAreIsolatedByRowLevelSecurity(t *testing.T) {
+	t.Parallel()
+	urls := databasetest.New(t)
+
+	databasetest.AssertHouseholdIsolation(t, urls, databasetest.HouseholdTable{
+		Name: "matches",
+		Insert: func(ctx context.Context, tx pgx.Tx, household uuid.UUID) error {
+			_, err := tx.Exec(ctx, `INSERT INTO matches (household_id, id, kind, first_transaction_id, first_account_id,
+				second_transaction_id, second_account_id, confirmed_by, confirmed_at, version, schema_version)
+				VALUES ($1, $2, 'account_transfer', $3, $4, $5, $6, $7, now(), 1, 1)`,
+				household, uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New())
+
+			return err
+		},
+	})
+}

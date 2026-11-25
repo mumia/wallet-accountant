@@ -80,12 +80,12 @@ func NewContexts(pool *pgxpool.Pool, now func() time.Time) Contexts {
 	accountAggregate := ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{})
 	transactions := ledgerapp.NewTransactions(households, accountAggregate,
 		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}),
-		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}),
+		ledgerapp.NewCategoryAggregate(ledgerpg.CategoryFolds{}), ledgerapp.NewMatchAggregate(ledgerpg.MatchFolds{}),
 		ledgerpg.TransactionReader{}, ledgerpg.CategoryReader{}, ledgerIngestion{imported: imported})
 	accounts := ledgerapp.NewAccounts(households, accountAggregate, ledgerpg.AccountReader{},
 		ledgerIngestion{imported: imported}, transactions)
 	months := ledgerapp.NewMonths(households, accountAggregate, ledgerIngestion{imported: imported},
-		ledgerpg.CashCounts{})
+		ledgerpg.MonthReader{})
 	connections := ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{})
 	ledger := ingestionLedger{accounts: accounts, transactions: transactions, months: months}
 	rows := ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{})
@@ -131,6 +131,7 @@ func rebuildTargets() []eventstore.RebuildTarget {
 		ledgerapp.NewAccountAggregate(ledgerpg.AccountFolds{}).RebuildTarget(),
 		ingestionapp.NewConnectionAggregate(ingestionpg.ConnectionFolds{}).RebuildTarget(),
 		ledgerapp.NewTransactionAggregate(ledgerpg.TransactionFolds{}).RebuildTarget(),
+		ledgerapp.NewMatchAggregate(ledgerpg.MatchFolds{}).RebuildTarget(),
 		ingestionapp.NewStatementImportAggregate(ingestionpg.StatementImportFolds{}).RebuildTarget(),
 		ingestionapp.NewImportedTransactionAggregate(ingestionpg.ImportedTransactionFolds{}).RebuildTarget(),
 		householdsapp.NewNotificationAggregate(householdspg.NotificationFolds{}).RebuildTarget(),
