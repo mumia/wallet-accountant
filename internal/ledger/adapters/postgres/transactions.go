@@ -31,14 +31,17 @@ func (TransactionFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 		postings  []byte
 		imported  *uuid.UUID
 		of, by    *uuid.UUID
+		other     *uuid.UUID
+		match     *uuid.UUID
 	)
 
 	err := tx.QueryRow(ctx, `SELECT opening_balance, booking_date, transaction_date, value_date, description, payee,
 		postings, imported_transaction_id, reversal_of_transaction_id, reversed_by_transaction_id, version,
-		schema_version
+		schema_version, counterpart_account_id, created_by_transfer, match_id
 		FROM ledger_transactions WHERE household_id = $1 AND id = $2`, tx.HouseholdID(), id).
 		Scan(&f.State.OpeningBalance, &f.State.BookingDate, &f.State.TransactionDate, &valueDate,
-			&f.State.Description, &f.State.Payee, &postings, &imported, &of, &by, &f.Version, &f.SchemaVersion)
+			&f.State.Description, &f.State.Payee, &postings, &imported, &of, &by, &f.Version, &f.SchemaVersion,
+			&other, &f.State.CreatedByTransfer, &match)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return eventstore.Fold[domain.TransactionState]{}, false, nil
 	}
@@ -59,6 +62,14 @@ func (TransactionFolds) Load(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 
 	if by != nil {
 		f.State.ReversedBy = *by
+	}
+
+	if other != nil {
+		f.State.CounterpartAccountID = *other
+	}
+
+	if match != nil {
+		f.State.MatchID = *match
 	}
 
 	if valueDate != nil {
@@ -94,18 +105,22 @@ func (TransactionFolds) Save(ctx context.Context, tx *eventstore.Tx, id uuid.UUI
 	args := []any{
 		tx.HouseholdID(), id, s.OpeningBalance, s.BookingDate, s.TransactionDate, valueDate, s.Description, s.Payee,
 		postings, f.Version, f.SchemaVersion, imported, optionalID(s.ReversalOf), optionalID(s.ReversedBy),
+		optionalID(s.CounterpartAccountID), s.CreatedByTransfer, optionalID(s.MatchID),
 	}
 	q := `INSERT INTO ledger_transactions (household_id, id, opening_balance, booking_date, transaction_date, value_date,
 	          description, payee, postings, version, schema_version, imported_transaction_id,
-	          reversal_of_transaction_id, reversed_by_transaction_id)
-	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ON CONFLICT (id) DO NOTHING`
+	          reversal_of_transaction_id, reversed_by_transaction_id, counterpart_account_id, created_by_transfer,
+	          match_id)
+	      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+	      ON CONFLICT (id) DO NOTHING`
 
 	if expected != 0 {
 		args = append(args, expected)
 		q = `UPDATE ledger_transactions SET opening_balance = $3, booking_date = $4, transaction_date = $5,
 		         value_date = $6, description = $7, payee = $8, postings = $9, version = $10, schema_version = $11,
-		         imported_transaction_id = $12, reversal_of_transaction_id = $13, reversed_by_transaction_id = $14
-		     WHERE household_id = $1 AND id = $2 AND version = $15`
+		         imported_transaction_id = $12, reversal_of_transaction_id = $13, reversed_by_transaction_id = $14,
+		         counterpart_account_id = $15, created_by_transfer = $16, match_id = $17
+		     WHERE household_id = $1 AND id = $2 AND version = $18`
 	}
 
 	tag, err := tx.Exec(ctx, q, args...)
@@ -181,16 +196,21 @@ func (TransactionReader) AccountTransactions(ctx context.Context, tx *eventstore
 			COALESCE(c.name, ''),
 			COALESCE(t.reversal_of_transaction_id, '00000000-0000-0000-0000-000000000000'),
 			COALESCE(t.reversed_by_transaction_id, '00000000-0000-0000-0000-000000000000'),
-			COALESCE(t.imported_transaction_id, '00000000-0000-0000-0000-000000000000')
+			COALESCE(t.imported_transaction_id, '00000000-0000-0000-0000-000000000000'),
+			COALESCE(t.counterpart_account_id, '00000000-0000-0000-0000-000000000000'),
+			COALESCE(t.match_id, '00000000-0000-0000-0000-000000000000'),
+			t.created_by_transfer
 		FROM account_postings p
 		JOIN ledger_transactions t ON t.household_id = p.household_id AND t.id = p.transaction_id
 		LEFT JOIN categories c ON c.household_id = p.household_id AND c.id = p.category_id
 		WHERE p.household_id = $1 AND p.account_id = $2
 		  AND ($3::date IS NULL OR (p.booking_date >= $3 AND p.booking_date < $4))
 		  AND ($5::date IS NULL OR (p.booking_date, p.transaction_id, p.ordinal) > ($5, $6::uuid, $7))
+		  AND (NOT $9 OR (t.counterpart_account_id IS NOT NULL AND t.match_id IS NULL
+		      AND t.reversed_by_transaction_id IS NULL))
 		ORDER BY p.booking_date, p.transaction_id, p.ordinal
 		LIMIT $8`,
-		tx.HouseholdID(), account, from, to, afterDate, afterID, afterOrd, filter.Limit)
+		tx.HouseholdID(), account, from, to, afterDate, afterID, afterOrd, filter.Limit, filter.InTransit)
 	if err != nil {
 		return nil, fmt.Errorf("list account transactions: %w", err)
 	}
@@ -202,7 +222,8 @@ func (TransactionReader) AccountTransactions(ctx context.Context, tx *eventstore
 		)
 
 		if err := r.Scan(&t.TransactionID, &t.Ordinal, &t.BookingDate, &t.TransactionDate, &t.Description, &amount,
-			&t.Currency, &t.CategoryID, &t.CategoryName, &t.ReversalOf, &t.ReversedBy, &t.ImportedTransactionID); err != nil {
+			&t.Currency, &t.CategoryID, &t.CategoryName, &t.ReversalOf, &t.ReversedBy, &t.ImportedTransactionID,
+			&t.CounterpartAccountID, &t.MatchID, &t.CreatedByTransfer); err != nil {
 			return t, err //nolint:wrapcheck // wrapped below
 		}
 
@@ -229,4 +250,32 @@ func (CategoryReader) InternalCategory(ctx context.Context, tx *eventstore.Tx, r
 	}
 
 	return id, nil
+}
+
+// TransferSuggestions implements app.TransactionReader with the Account
+// Posting lookup rows of In transit legs.
+func (TransactionReader) TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q app.SuggestionQuery,
+) ([]uuid.UUID, error) {
+	date := q.TransactionDate.Format(domain.DateLayout)
+
+	rows, err := tx.Query(ctx, `SELECT p.transaction_id
+		FROM account_postings p
+		JOIN ledger_transactions t ON t.household_id = p.household_id AND t.id = p.transaction_id
+		WHERE p.household_id = $1 AND p.account_id = $2 AND t.counterpart_account_id = $3
+		  AND t.match_id IS NULL AND t.reversed_by_transaction_id IS NULL
+		  AND p.amount = $4::numeric AND p.currency = $5
+		  AND p.transaction_date BETWEEN $6::date - $7::int AND $6::date + $7::int
+		ORDER BY abs(p.transaction_date - $6::date), p.transaction_date, p.transaction_id`,
+		tx.HouseholdID(), q.CashAccount, q.RowAccount, q.Amount.Neg().String(), q.Currency, date,
+		int(app.SuggestionWindow/(24*time.Hour)))
+	if err != nil {
+		return nil, fmt.Errorf("list transfer suggestions: %w", err)
+	}
+
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("list transfer suggestions: %w", err)
+	}
+
+	return ids, nil
 }

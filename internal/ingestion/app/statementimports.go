@@ -115,6 +115,17 @@ type Ledger interface {
 	// ErrCategoryNotFound or ErrInternalCategory for a Category it can't be
 	// booked to (consistency map: Accept imported transaction).
 	BookAccepted(ctx context.Context, tx *eventstore.Tx, booking Booking) error
+	// BookTransfer records an Imported transaction Accepted as a Transfer:
+	// the row's Transfer leg, the cash leg on the cash Account, and their
+	// Match. It returns a *TransferRefusedError for a cash Account it can't
+	// be a Transfer to, and a *MonthError naming the cash Account for a cash
+	// leg in a closed month (consistency map: Accept as Transfer).
+	BookTransfer(ctx context.Context, tx *eventstore.Tx, booking TransferBooking) error
+	// TransferSuggestions returns the cash Account's In transit legs that
+	// could be the other side of the row, closest date first, or a
+	// *TransferRefusedError for a cash Account it can't be a Transfer with.
+	TransferSuggestions(ctx context.Context, tx *eventstore.Tx, row domain.ImportedTransactionState, cash uuid.UUID,
+	) ([]SuggestedLeg, error)
 	// ReverseOpeningBalance reverses the Account's Opening balance
 	// Transaction by the Transaction reversal, so the Account awaits its
 	// first Statement import again (consistency map: Void Statement
@@ -130,6 +141,18 @@ type Booking struct {
 	ImportedTransaction uuid.UUID
 	Category            *uuid.UUID
 	Row                 domain.ImportedTransactionState
+}
+
+// TransferBooking is an Imported transaction Accepted as a Transfer to or
+// from CashAccount: Booking's Category is unused, and CashLeg is the ID of
+// the cash leg to record, or MatchLeg the cash Account's leg to Match
+// instead.
+type TransferBooking struct {
+	Booking
+
+	CashAccount uuid.UUID
+	CashLeg     uuid.UUID
+	MatchLeg    *uuid.UUID
 }
 
 // StatementImportAggregate is the Statement import Decider wired to the

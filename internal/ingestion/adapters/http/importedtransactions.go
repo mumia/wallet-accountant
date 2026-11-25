@@ -28,7 +28,32 @@ const (
 	ImportedTransactionSuspectedDuplicateType = "/problems/imported-transaction-suspected-duplicate"
 	InternalCategoryType                      = "/problems/internal-category"
 	InvalidCategoryType                       = "/problems/invalid-category"
+	// InvalidTransferType is for an Accept as Transfer the Ledger refuses;
+	// its reason says why.
+	InvalidTransferType = "/problems/invalid-transfer"
 )
+
+// transferDetails explains each reason an Accept as Transfer is refused.
+var transferDetails = map[string]string{
+	"CATEGORY_AND_TRANSFER": "A Transfer leg is booked against Account transfer: send category_id or " +
+		"transfer_account_id, not both.",
+	"COUNTERPART_NOT_CASH": "transfer_account_id must be a cash Account: Transfers between statement Accounts " +
+		"come later.",
+	"MATCH_WITHOUT_TRANSFER": "match_transaction_id needs transfer_account_id, the cash Account it is on.",
+	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on the cash Account naming this row's " +
+		"Account with the opposite amount.",
+	"SAME_ACCOUNT":      "transfer_account_id is the row's own Account.",
+	"CURRENCY_MISMATCH": "transfer_account_id has another Account currency than the row.",
+	"UNKNOWN_ACCOUNT":   "transfer_account_id is not one of the Household's Accounts.",
+}
+
+// transferRefused is the 422 of a refused Accept as Transfer.
+func transferRefused(reason string) *oas.TransferProblem {
+	p := httpapi.Unprocessable(InvalidTransferType, "Invalid Transfer", transferDetails[reason])
+	p.Reason = oas.NewOptString(reason)
+
+	return p
+}
 
 var importedStatesOut = map[domain.ImportedState]string{
 	domain.ImportedPending:            "PENDING",
@@ -53,7 +78,12 @@ func monthRefusal(err error) *oas.MonthProblem {
 	case !ok:
 		return nil
 	case errors.Is(e.Err, app.ErrMonthClosed):
-		return httpapi.MonthClosed(e.Month, e.OpenMonth)
+		p := httpapi.MonthClosed(e.Month, e.OpenMonth)
+		if e.AccountID != uuid.Nil {
+			p.AccountID = oas.NewOptUUID(e.AccountID)
+		}
+
+		return p
 	case errors.Is(e.Err, app.ErrMonthNotOpenYet):
 		return httpapi.MonthNotOpenYet(e.Month, e.OpenMonth)
 	default:
@@ -65,18 +95,39 @@ func monthRefusal(err error) *oas.MonthProblem {
 func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, req oas.OptImportedTransactionAcceptance,
 	params oas.AcceptImportedTransactionParams,
 ) (oas.AcceptImportedTransactionRes, error) {
-	if transferPending(req) {
-		return nil, httpapi.ErrNotImplemented
+	var a app.Acceptance
+
+	if req.Set {
+		v := req.Value
+
+		if v.CategoryID.Set && v.TransferAccountID.Set {
+			return transferRefused("CATEGORY_AND_TRANSFER"), nil
+		}
+
+		if v.MatchTransactionID.Set && !v.TransferAccountID.Set {
+			return transferRefused("MATCH_WITHOUT_TRANSFER"), nil
+		}
+
+		if id, ok := v.MatchTransactionID.Get(); ok {
+			a.MatchLeg = &id
+		}
+
+		if id, ok := v.CategoryID.Get(); ok {
+			a.Category = &id
+		}
+
+		if id, ok := v.TransferAccountID.Get(); ok {
+			a.TransferAccount = &id
+		}
 	}
 
-	var category *uuid.UUID
-	if id, ok := req.Value.CategoryID.Get(); req.Set && ok {
-		category = &id
-	}
-
-	accepted, err := h.imported.Accept(ctx, params.HouseholdID, params.ImportedTransactionID, category)
+	accepted, err := h.imported.Accept(ctx, params.HouseholdID, params.ImportedTransactionID, a)
 	if p := monthRefusal(err); p != nil {
 		return p, nil
+	}
+
+	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
+		return transferRefused(refused.Reason), nil
 	}
 
 	switch {

@@ -17,5 +17,5 @@ A published daily exchange rate for the transaction date, recorded alongside the
 _Avoid_: Market rate, official rate
 
 **Match**:
-A confirmed link between two records of the same money movement: a manually entered transaction and the matching Imported transaction, a Scheduled transaction occurrence and the real transaction, or the two sides of a Household transfer. The system suggests a Match and a User confirms it.
+A confirmed link between two records of the same money movement: a manually entered transaction and the matching Imported transaction, a Scheduled transaction occurrence and the real transaction, the two Transfer legs of a Transfer, or the two sides of a Household transfer. The system suggests a Match and a User confirms it.
 _Avoid_: Duplicate, merge, reconciliation

@@ -68,6 +68,11 @@ func TestAnAccountFoldLoadsAsSaved(t *testing.T) {
 		"2026-01": {StatementBalance: dec("87.7"), ClosedAt: closedAt, ClosedBy: closedBy},
 		"2026-02": {StatementBalance: dec("3087.7"), ClosedAt: closedAt, ClosedBy: closedBy},
 	}
+	// A cash month keeps its Cash count with its close.
+	second.Closed["2026-02"] = domain.MonthClose{
+		StatementBalance: dec("3087.7"), ClosedAt: closedAt, ClosedBy: closedBy,
+		CountedOn: time.Date(2026, time.March, 3, 0, 0, 0, 0, time.UTC), Count: dec("3080.2"),
+	}
 	second.OpenMonth = "2026-03"
 	// A month whose Live count went to none is gone.
 	second.Live = map[string]int{"2026-01": 2, "2026-03": 1}

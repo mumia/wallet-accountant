@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +32,9 @@ type TransactionDetail struct {
 	ImportedTransactionID uuid.UUID
 	ReversalOf            uuid.UUID
 	ReversedBy            uuid.UUID
+	CounterpartAccountID  uuid.UUID
+	MatchID               uuid.UUID
+	CreatedByTransfer     bool
 }
 
 // chooseCategory returns the Category a User chose for the non-Account
@@ -72,10 +77,16 @@ func (t *Transactions) SetCategory(ctx context.Context, household, id, category 
 	var out TransactionDetail
 
 	err := t.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		if _, found, err := t.transactions.Folds.Load(ctx, tx, id); err != nil {
+		fold, found, err := t.transactions.Folds.Load(ctx, tx, id)
+
+		switch {
+		case err != nil:
 			return fmt.Errorf("load transaction %s: %w", id, err)
-		} else if !found {
+		case !found:
 			return ErrTransactionNotFound
+		case fold.State.IsTransferLeg():
+			// Before the Category is read, so any Category gets this.
+			return ErrTransferLeg
 		}
 
 		chosen, uncategorised, err := t.chooseCategory(ctx, tx, &category)
@@ -129,8 +140,22 @@ func (t *Transactions) SetCategory(ctx context.Context, household, id, category 
 // (ADR-0013, ADR-0018; consistency map: Reverse Transaction). It returns
 // the reversing Transaction. The Opening balance Transaction, a reversal
 // and a Transaction already reversed are refused.
+//
+// A Matched Transfer leg first loses its Match: the Match is removed and
+// both legs are unmatched. The other leg is reversed too when it exists
+// only because of this one: the cash leg an Accept as Transfer recorded on
+// its own. A cash leg entered by hand stays, In transit, and so does a bank
+// leg whose automatic cash leg is reversed alone. Every reversal books on
+// its Account in Account ID order; a closed month of any of them refuses
+// the whole command, naming that Account, and nothing is recorded
+// (consistency map: Reverse Transaction (Transfer leg)).
 func (t *Transactions) Reverse(ctx context.Context, household, id uuid.UUID) (TransactionDetail, error) {
 	reversal, err := sharedkernel.NewID()
+	if err != nil {
+		return TransactionDetail{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	cascade, err := sharedkernel.NewID()
 	if err != nil {
 		return TransactionDetail{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
@@ -138,60 +163,166 @@ func (t *Transactions) Reverse(ctx context.Context, household, id uuid.UUID) (Tr
 	var out TransactionDetail
 
 	err = t.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
-		res, err := t.transactions.Execute(ctx, tx, id, domain.ReverseTransaction{ReversalID: reversal})
-		if errors.Is(err, domain.ErrTransactionNotRecorded) {
+		fold, found, err := t.transactions.Folds.Load(ctx, tx, id)
+		if err != nil {
+			return fmt.Errorf("load transaction %s: %w", id, err)
+		}
+
+		if !found {
 			return ErrTransactionNotFound
 		}
 
-		if err != nil {
-			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
-		}
+		reverse := []reversing{{id: id, reversal: reversal, state: fold.State}}
 
-		original := res.State
-
-		uncategorised, err := t.internal.InternalCategory(ctx, tx, domain.RoleUncategorised)
-		if err != nil {
-			return fmt.Errorf("find the uncategorised category: %w", err)
-		}
-
-		record := original.Reversal(id)
-
-		for _, p := range record.Postings {
-			if p.AccountID == uuid.Nil {
-				continue
+		if fold.State.MatchID != uuid.Nil {
+			other, err := t.unmatch(ctx, tx, id, fold.State.MatchID)
+			if err != nil {
+				return err
 			}
 
-			if _, err := t.accounts.Execute(ctx, tx, p.AccountID, domain.BookReversal{
-				TransactionID:    id,
-				ReversalID:       reversal,
-				BookingDate:      original.BookingDate,
-				Amount:           p.Amount,
-				WasUncategorised: original.CategoryID() == uncategorised,
-			}); err != nil {
-				return fmt.Errorf("book reversal on account %s: %w", p.AccountID, err)
+			cascades, err := t.cascades(ctx, tx, reverse[0], other)
+			if err != nil {
+				return err
+			}
+
+			if cascades {
+				other.reversal = cascade
+				reverse = append(reverse, other)
 			}
 		}
 
-		recorded, err := t.transactions.Execute(ctx, tx, reversal, record)
-		if err != nil {
-			return fmt.Errorf("record reversal: %w", err)
-		}
+		slices.SortFunc(reverse, func(a, b reversing) int {
+			return strings.Compare(a.account().String(), b.account().String())
+		})
 
-		if original.ImportedTransactionID != uuid.Nil {
-			if err := t.ingestion.ReturnToPending(ctx, tx, original.ImportedTransactionID, id); err != nil {
-				return fmt.Errorf("return imported transaction %s to pending: %w", original.ImportedTransactionID, err)
+		for _, r := range reverse {
+			d, err := t.reverseOne(ctx, tx, r)
+			if err != nil {
+				return err
+			}
+
+			if r.id == id {
+				out = d
 			}
 		}
 
-		out, err = t.detail(ctx, tx, reversal, recorded.State)
-
-		return err
+		return nil
 	})
 	if err != nil {
 		return TransactionDetail{}, fmt.Errorf("reverse transaction %s: %w", id, err)
 	}
 
 	return out, nil
+}
+
+// reversing is a Transaction a Reverse reverses, by reversal.
+type reversing struct {
+	id, reversal uuid.UUID
+	state        domain.TransactionState
+}
+
+// account is the Account the Transaction is booked on, for ordering.
+func (r reversing) account() uuid.UUID { return r.state.Leg(r.id).AccountID }
+
+// cascades reports whether reversing the leg self also reverses the leg it
+// was Matched to, other: the other exists only because of it. That is the
+// cash leg an Accept as Transfer recorded on its own, and either leg of a
+// cash ↔ cash Transfer, neither of which can stand alone.
+func (t *Transactions) cascades(ctx context.Context, tx *eventstore.Tx, self, other reversing) (bool, error) {
+	if other.state.CreatedByTransfer && !self.state.CreatedByTransfer {
+		return true, nil
+	}
+
+	for _, leg := range []reversing{self, other} {
+		fold, found, err := t.accounts.Folds.Load(ctx, tx, leg.account())
+		if err != nil {
+			return false, fmt.Errorf("load account %s: %w", leg.account(), err)
+		}
+
+		if !found || !fold.State.IsCash() {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// unmatch removes the Match linking the leg id to another, unmatches both
+// legs, and returns the other one.
+func (t *Transactions) unmatch(ctx context.Context, tx *eventstore.Tx, id, match uuid.UUID) (reversing, error) {
+	res, err := t.matches.Execute(ctx, tx, match, domain.RemoveMatch{})
+	if err != nil {
+		return reversing{}, fmt.Errorf("remove match %s: %w", match, err)
+	}
+
+	var other reversing
+
+	for _, leg := range res.State.Legs {
+		unmatched, err := t.transactions.Execute(ctx, tx, leg.TransactionID, domain.UnmatchTransaction{MatchID: match})
+		if err != nil {
+			return reversing{}, fmt.Errorf("unmatch transaction %s: %w", leg.TransactionID, err)
+		}
+
+		if leg.TransactionID != id {
+			other = reversing{id: leg.TransactionID, state: unmatched.State}
+		}
+	}
+
+	return other, nil
+}
+
+// reverseOne reverses one Transaction by r.reversal: it is marked reversed,
+// each of its Accounts books the reversal (a refusal names the Account), the
+// reversal is recorded, and an Accepted Imported transaction returns to
+// pending through Ingestion.
+func (t *Transactions) reverseOne(ctx context.Context, tx *eventstore.Tx, r reversing) (TransactionDetail, error) {
+	res, err := t.transactions.Execute(ctx, tx, r.id, domain.ReverseTransaction{ReversalID: r.reversal})
+	if errors.Is(err, domain.ErrTransactionNotRecorded) {
+		return TransactionDetail{}, ErrTransactionNotFound
+	}
+
+	if err != nil {
+		return TransactionDetail{}, err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+	}
+
+	original := res.State
+
+	uncategorised, err := t.internal.InternalCategory(ctx, tx, domain.RoleUncategorised)
+	if err != nil {
+		return TransactionDetail{}, fmt.Errorf("find the uncategorised category: %w", err)
+	}
+
+	record := original.Reversal(r.id)
+
+	for _, p := range record.Postings {
+		if p.AccountID == uuid.Nil {
+			continue
+		}
+
+		if _, err := t.accounts.Execute(ctx, tx, p.AccountID, domain.BookReversal{
+			TransactionID:    r.id,
+			ReversalID:       r.reversal,
+			BookingDate:      original.BookingDate,
+			Amount:           p.Amount,
+			WasUncategorised: original.CategoryID() == uncategorised,
+		}); err != nil {
+			return TransactionDetail{}, &AccountError{Account: p.AccountID, Err: fmt.Errorf("book reversal: %w", err)}
+		}
+	}
+
+	recorded, err := t.transactions.Execute(ctx, tx, r.reversal, record)
+	if err != nil {
+		return TransactionDetail{}, fmt.Errorf("record reversal: %w", err)
+	}
+
+	if original.ImportedTransactionID != uuid.Nil {
+		if err := t.ingestion.ReturnToPending(ctx, tx, original.ImportedTransactionID, r.id); err != nil {
+			return TransactionDetail{}, fmt.Errorf("return imported transaction %s to pending: %w",
+				original.ImportedTransactionID, err)
+		}
+	}
+
+	return t.detail(ctx, tx, r.reversal, recorded.State)
 }
 
 // ReverseOpeningBalance reverses the Account's Opening balance Transaction
@@ -257,6 +388,9 @@ func (t *Transactions) detail(ctx context.Context, tx *eventstore.Tx, id uuid.UU
 		ImportedTransactionID: s.ImportedTransactionID,
 		ReversalOf:            s.ReversalOf,
 		ReversedBy:            s.ReversedBy,
+		CounterpartAccountID:  s.CounterpartAccountID,
+		MatchID:               s.MatchID,
+		CreatedByTransfer:     s.CreatedByTransfer,
 	}
 
 	for _, p := range s.Postings {

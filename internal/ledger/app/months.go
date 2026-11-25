@@ -44,6 +44,15 @@ var (
 	// ErrTooManyDecimalPlaces is returned for a Statement balance with more
 	// decimal places than the Account currency has.
 	ErrTooManyDecimalPlaces = domain.ErrTooManyDecimalPlaces
+	// ErrCountedOnRequired is returned for closing a cash Account's month
+	// without the day its cash was counted.
+	ErrCountedOnRequired = domain.ErrCountedOnRequired
+	// ErrCountedOnNotForStatementAccount is returned for a Cash count's day
+	// sent to close a statement Account's month.
+	ErrCountedOnNotForStatementAccount = domain.ErrCountedOnNotForStatementAccount
+	// ErrInvalidCountDate is returned for a Cash count taken on or before
+	// the month's last day, or after today.
+	ErrInvalidCountDate = domain.ErrInvalidCountDate
 	// ErrStatementBalanceCurrency is returned for a Statement balance in
 	// another currency than the Account's.
 	ErrStatementBalanceCurrency = errors.New("statement balance isn't in the account currency")
@@ -72,6 +81,12 @@ type AccountMonth struct {
 	UncheckedImports []domain.UncheckedImport
 	// ReopenBlocked says a Reopen of the month would be refused now.
 	ReopenBlocked bool
+	// CountedOn is the day a closed cash month's Cash count was taken; zero
+	// otherwise.
+	CountedOn time.Time
+	// LegsInTransit counts the month's Transfer legs that are neither
+	// Matched nor reversed; they never stop a close.
+	LegsInTransit int
 }
 
 // The month states (ADR-0024).
@@ -81,17 +96,33 @@ const (
 	MonthNotOpenYet = "NOT_OPEN_YET"
 )
 
+// MonthReader reads, from the Ledger's lookup rows, what an Account's
+// months show beyond its fold.
+type MonthReader interface {
+	// LegsInTransit counts the Account's Transfer legs that are neither
+	// Matched nor reversed, per Booking month (MonthLayout); a month with
+	// none is absent.
+	LegsInTransit(ctx context.Context, tx *eventstore.Tx, account uuid.UUID) (map[string]int, error)
+	// MovedAfter locks the Account's fold row for update, then returns how
+	// much its Postings booked after the day after and up to and including
+	// the day through moved its balance. The lock keeps a Transaction from
+	// being booked in that window before the close is saved.
+	MovedAfter(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, after, through time.Time,
+	) (sharedkernel.Decimal, error)
+}
+
 // Months shows and closes Accounts' Booking months, reading what Ingestion
 // leaves unresolved through its port.
 type Months struct {
 	scope     HouseholdScope
 	accounts  AccountAggregate
 	ingestion Ingestion
+	reader    MonthReader
 }
 
 // NewMonths returns the Months service.
-func NewMonths(scope HouseholdScope, accounts AccountAggregate, ingestion Ingestion) *Months {
-	return &Months{scope: scope, accounts: accounts, ingestion: ingestion}
+func NewMonths(scope HouseholdScope, accounts AccountAggregate, ingestion Ingestion, reader MonthReader) *Months {
+	return &Months{scope: scope, accounts: accounts, ingestion: ingestion, reader: reader}
 }
 
 // Status returns the Account's Booking month, read from its fold and, for
@@ -117,7 +148,12 @@ func (m *Months) Status(ctx context.Context, household, account uuid.UUID, month
 			return err //nolint:wrapcheck // already wrapped by Ingestion
 		}
 
-		out = accountMonthOf(account, month, fold.State, imports)
+		inTransit, err := m.reader.LegsInTransit(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // already wrapped by the adapter
+		}
+
+		out = accountMonthOf(account, month, fold.State, imports, inTransit)
 
 		return nil
 	})
@@ -152,13 +188,18 @@ func (m *Months) List(ctx context.Context, household, account uuid.UUID) ([]Acco
 			return err //nolint:wrapcheck // already wrapped by Ingestion
 		}
 
+		inTransit, err := m.reader.LegsInTransit(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // already wrapped by the adapter
+		}
+
 		first := fold.State.StartDate.Format(domain.MonthLayout)
 		last := max(first, tx.Now().UTC().Format(domain.MonthLayout), imports.LatestMonth())
 
 		for key := last; key >= first; key = domain.PreviousMonth(key) {
 			// Every key is written with MonthLayout.
 			month, _ := time.Parse(domain.MonthLayout, key)
-			out = append(out, accountMonthOf(account, month, fold.State, imports.Month(key)))
+			out = append(out, accountMonthOf(account, month, fold.State, imports.Month(key), inTransit))
 		}
 
 		return nil
@@ -172,14 +213,18 @@ func (m *Months) List(ctx context.Context, household, account uuid.UUID) ([]Acco
 
 // Close closes the Account's Open month with the Statement balance, once
 // it has ended by the server's clock in UTC, and opens the month after it
-// (ADR-0024). It runs in one transaction: Ingestion's pending and Suspected duplicate Imported
+// (ADR-0024). A cash Account's month closes by a Cash count instead:
+// statementBalance is the amount counted on the day countedOn, compared with
+// the balance at the end of that day, which adds the Account Posting lookup
+// rows booked after the month to its closing balance (consistency map:
+// Close month (cash)). It runs in one transaction: Ingestion's pending and Suspected duplicate Imported
 // transactions and Balance checks are read through its port, holding the
 // Account's Statement imports, and the Account Decider checks every close
 // condition, refusing with all that fail as a *domain.MonthCloseRefusedError.
 // Nothing is ever booked to make the balances meet (ADR-0018; consistency
 // map: Close month).
 func (m *Months) Close(ctx context.Context, household, account uuid.UUID, month time.Time,
-	statementBalance sharedkernel.Decimal, currency string,
+	statementBalance sharedkernel.Decimal, currency string, countedOn *time.Time,
 ) (AccountMonth, error) {
 	var out AccountMonth
 
@@ -201,14 +246,30 @@ func (m *Months) Close(ctx context.Context, household, account uuid.UUID, month 
 			return err //nolint:wrapcheck // already wrapped by Ingestion
 		}
 
+		var moved sharedkernel.Decimal
+
+		if countedOn != nil && fold.State.IsCash() {
+			monthEnd := time.Date(month.Year(), month.Month()+1, 0, 0, 0, 0, 0, time.UTC)
+
+			if moved, err = m.reader.MovedAfter(ctx, tx, account, monthEnd, *countedOn); err != nil {
+				return err //nolint:wrapcheck // already wrapped by the adapter
+			}
+		}
+
 		res, err := m.accounts.Execute(ctx, tx, account, domain.CloseMonth{
 			Today: tx.Now(), Month: month, StatementBalance: statementBalance, Imports: imports,
+			CountedOn: countedOn, MovedByCountedOn: moved,
 		})
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}
 
-		out = accountMonthOf(account, month, res.State, imports)
+		inTransit, err := m.reader.LegsInTransit(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // already wrapped by the adapter
+		}
+
+		out = accountMonthOf(account, month, res.State, imports, inTransit)
 
 		return nil
 	})
@@ -221,9 +282,10 @@ func (m *Months) Close(ctx context.Context, household, account uuid.UUID, month 
 
 // Reopen takes back the Account's latest Month close while its Open month
 // has no Accepted Transactions that aren't reversed: the month is the Open
-// month again, and the month after it is not open yet (ADR-0024). The
-// Account Decider refuses with every failed condition together, as a
-// *domain.MonthReopenRefusedError (consistency map: Reopen month).
+// month again, and the month after it is not open yet (ADR-0024). A cash
+// Account skips that condition. The Account Decider refuses with every
+// failed condition together, as a *domain.MonthReopenRefusedError
+// (consistency map: Reopen month, Reopen month (cash)).
 func (m *Months) Reopen(ctx context.Context, household, account uuid.UUID, month time.Time) (AccountMonth, error) {
 	var out AccountMonth
 
@@ -247,7 +309,12 @@ func (m *Months) Reopen(ctx context.Context, household, account uuid.UUID, month
 			return err //nolint:wrapcheck // already wrapped by Ingestion
 		}
 
-		out = accountMonthOf(account, month, res.State, imports)
+		inTransit, err := m.reader.LegsInTransit(ctx, tx, account)
+		if err != nil {
+			return err //nolint:wrapcheck // already wrapped by the adapter
+		}
+
+		out = accountMonthOf(account, month, res.State, imports, inTransit)
 
 		return nil
 	})
@@ -258,7 +325,9 @@ func (m *Months) Reopen(ctx context.Context, household, account uuid.UUID, month
 	return out, nil
 }
 
-func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, imports domain.MonthImports) AccountMonth {
+func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, imports domain.MonthImports,
+	inTransit map[string]int,
+) AccountMonth {
 	key := month.Format(domain.MonthLayout)
 
 	out := AccountMonth{
@@ -270,6 +339,7 @@ func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, i
 		Uncategorised:       s.Uncategorised[key],
 		UncheckedImports:    imports.UncheckedImports,
 		ReopenBlocked:       s.ReopenRefusal(key) != nil,
+		LegsInTransit:       inTransit[key],
 	}
 
 	switch {
@@ -286,7 +356,7 @@ func accountMonthOf(account uuid.UUID, month time.Time, s domain.AccountState, i
 	}
 
 	if c, ok := s.Closed[key]; ok {
-		out.Closed, out.StatementBalance, out.ClosedAt = true, c.StatementBalance, c.ClosedAt
+		out.Closed, out.StatementBalance, out.ClosedAt, out.CountedOn = true, c.StatementBalance, c.ClosedAt, c.CountedOn
 	}
 
 	return out

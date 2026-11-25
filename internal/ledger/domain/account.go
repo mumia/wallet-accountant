@@ -378,7 +378,8 @@ func recordOpeningBalance(s AccountState, c RecordOpeningBalance) ([]AccountEven
 
 // bookTransaction moves the balance of an Account that has its Opening
 // balance, on or after its start date, in its Open month only: a closed
-// month is locked and a later one isn't open yet (ADR-0024).
+// month is locked and a later one isn't open yet (ADR-0024). A cash
+// Account, kept by hand, also takes any month after its Open month.
 func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) {
 	month := c.BookingDate.Format(MonthLayout)
 
@@ -394,7 +395,7 @@ func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) 
 			c.BookingDate.Format(DateLayout), s.StartDate.Format(DateLayout))
 	case month < s.OpenMonth:
 		return nil, s.lockedMonth(month, ErrMonthClosed)
-	case month > s.OpenMonth:
+	case month > s.OpenMonth && !s.IsCash():
 		return nil, &MonthError{Err: ErrMonthNotOpenYet, Month: month, OpenMonth: s.OpenMonth}
 	}
 
@@ -416,7 +417,8 @@ func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) 
 }
 
 // bookReversal moves the balance back by a reversal of a Transaction the
-// Account booked, unless its month is closed (ADR-0024).
+// Account booked, unless its month is closed (ADR-0024). Any month from the
+// Open month on takes it, which only a cash Account books in.
 func bookReversal(s AccountState, c BookReversal) ([]AccountEvent, error) {
 	switch {
 	case !s.Added:
@@ -535,9 +537,17 @@ func evolveAccount(s AccountState, e decider.Envelope[AccountEvent]) AccountStat
 	case MonthClosed:
 		// Kept to the microsecond, as the fold store and the event store
 		// keep times, so a stored fold equals a rebuilt one.
-		s.Closed = closed(s.Closed, ev.Month, MonthClose{
+		c := MonthClose{
 			StatementBalance: ev.StatementBalance, ClosedAt: e.Time.Truncate(time.Microsecond), ClosedBy: e.ActorID,
-		})
+		}
+
+		if ev.Count != nil {
+			// The event was written with DateLayout, so it always parses.
+			c.CountedOn, _ = time.Parse(DateLayout, ev.CountedOn)
+			c.Count = *ev.Count
+		}
+
+		s.Closed = closed(s.Closed, ev.Month, c)
 		s.OpenMonth = NextMonth(ev.Month)
 	case MonthReopened:
 		s.Closed = reopened(s.Closed, ev.Month)

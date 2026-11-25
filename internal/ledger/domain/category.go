@@ -30,18 +30,23 @@ const (
 	RoleOpeningBalance    InternalRole = "opening_balance"
 	RoleHouseholdTransfer InternalRole = "household_transfer"
 	RoleUncategorised     InternalRole = "uncategorised"
+	// RoleAccountTransfer is the other side of every Transfer leg: money
+	// moving between two of the Household's Accounts is neither spending
+	// nor income. It is reached only through a Transfer.
+	RoleAccountTransfer InternalRole = "account_transfer"
 )
 
 var internalNames = map[InternalRole]string{
 	RoleOpeningBalance:    "Opening balance",
 	RoleHouseholdTransfer: "Household transfer",
 	RoleUncategorised:     "Uncategorised",
+	RoleAccountTransfer:   "Account transfer",
 }
 
 // InternalRoles lists every Internal Category role, in the order they are
 // seeded.
 func InternalRoles() []InternalRole {
-	return []InternalRole{RoleOpeningBalance, RoleHouseholdTransfer, RoleUncategorised}
+	return []InternalRole{RoleOpeningBalance, RoleHouseholdTransfer, RoleUncategorised, RoleAccountTransfer}
 }
 
 var (

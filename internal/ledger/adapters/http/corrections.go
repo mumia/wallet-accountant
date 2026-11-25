@@ -22,6 +22,7 @@ const (
 	TransactionAlreadyReversedType = "/problems/transaction-already-reversed"
 	TransactionReversedType        = "/problems/transaction-reversed"
 	UncategorisedInClosedMonthType = "/problems/uncategorised-in-closed-month"
+	TransferLegType                = "/problems/transfer-leg"
 )
 
 // correction is how a refused correction is answered: 404, a 409 about a
@@ -45,7 +46,12 @@ func correctionRefusal(err error) (correction, bool) {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrTransactionNotFound):
 		return correction{notFound: true}, true
 	case errors.Is(err, app.ErrMonthClosed) && monthErr != nil:
-		return correction{month: httpapi.MonthClosed(monthErr.Month, monthErr.OpenMonth)}, true
+		p := httpapi.MonthClosed(monthErr.Month, monthErr.OpenMonth)
+		if a, ok := errors.AsType[*app.AccountError](err); ok {
+			p.AccountID = oas.NewOptUUID(a.Account)
+		}
+
+		return correction{month: p}, true
 	case errors.Is(err, app.ErrUncategorisedInClosedMonth) && monthErr != nil:
 		return refused(http.StatusUnprocessableEntity, UncategorisedInClosedMonthType, "Uncategorised in a closed month",
 			httpapi.MonthWords(monthErr.Month)+" is closed, so its Transactions can't go back to Uncategorised. "+
@@ -62,6 +68,9 @@ func correctionRefusal(err error) (correction, bool) {
 	case errors.Is(err, app.ErrTransactionIsAReversal):
 		return refused(http.StatusUnprocessableEntity, TransactionIsAReversalType, "Transaction is a reversal",
 			"A reversal can't be reversed or recategorised.")
+	case errors.Is(err, app.ErrTransferLeg):
+		return refused(http.StatusUnprocessableEntity, TransferLegType, "Transfer leg",
+			"A Transfer leg's other side is always the Account transfer Category.")
 	case errors.Is(err, app.ErrInternalCategory):
 		return refused(http.StatusUnprocessableEntity, InternalCategoryType, "Internal Category",
 			"Internal Categories belong to the system: only Uncategorised can be chosen.")
@@ -143,6 +152,9 @@ func transactionOut(d app.TransactionDetail) (*oas.Transaction, error) {
 		ImportedTransactionID:   optionalID(d.ImportedTransactionID),
 		ReversalOfTransactionID: optionalID(d.ReversalOf),
 		ReversedByTransactionID: optionalID(d.ReversedBy),
+		CounterpartAccountID:    optionalID(d.CounterpartAccountID),
+		MatchID:                 optionalID(d.MatchID),
+		CreatedByTransfer:       optionalTrue(d.CreatedByTransfer),
 	}
 
 	if !d.ValueDate.IsZero() {

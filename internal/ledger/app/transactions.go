@@ -22,6 +22,8 @@ const (
 	TransactionRecordedType    = "io.walletaccountant.ledger.transaction.recorded.v1"
 	TransactionReversedType    = "io.walletaccountant.ledger.transaction.reversed.v1"
 	TransactionCategorySetType = "io.walletaccountant.ledger.transaction.categoryset.v1"
+	TransactionMatchedType     = "io.walletaccountant.ledger.transaction.matched.v1"
+	TransactionUnmatchedType   = "io.walletaccountant.ledger.transaction.unmatched.v1"
 )
 
 // OpeningBalanceDescription describes every Opening balance Transaction.
@@ -66,6 +68,8 @@ func NewTransactionAggregate(folds eventstore.FoldStore[domain.TransactionState]
 	eventstore.Register[domain.TransactionEvent, domain.TransactionRecorded](codec, TransactionRecordedType)
 	eventstore.Register[domain.TransactionEvent, domain.TransactionReversed](codec, TransactionReversedType)
 	eventstore.Register[domain.TransactionEvent, domain.TransactionCategorySet](codec, TransactionCategorySetType)
+	eventstore.Register[domain.TransactionEvent, domain.TransactionMatched](codec, TransactionMatchedType)
+	eventstore.Register[domain.TransactionEvent, domain.TransactionUnmatched](codec, TransactionUnmatchedType)
 
 	return TransactionAggregate{
 		StreamType: TransactionStreamType,
@@ -74,7 +78,8 @@ func NewTransactionAggregate(folds eventstore.FoldStore[domain.TransactionState]
 		Folds:      folds,
 		// 2: the link to the Imported transaction an Accept booked.
 		// 3: the links between a reversed Transaction and its reversal.
-		FoldSchemaVersion: 3,
+		// 4: a Transfer leg's counterpart Account, automatic flag and Match.
+		FoldSchemaVersion: 4,
 	}
 }
 
@@ -100,14 +105,23 @@ type AccountTransaction struct {
 	// ImportedTransactionID is the Imported transaction whose Accept
 	// recorded this one; uuid.Nil for any other Transaction.
 	ImportedTransactionID uuid.UUID
+	// CounterpartAccountID is the other Account of a Transfer leg, MatchID
+	// its Match while it has one, and CreatedByTransfer says an Accept as
+	// Transfer recorded it; uuid.Nil and false for any other Transaction.
+	CounterpartAccountID uuid.UUID
+	MatchID              uuid.UUID
+	CreatedByTransfer    bool
 }
 
 // TransactionFilter picks a page of an Account's Transactions. Month is the
 // zero time for every Booking month; After is nil for the first page.
+// InTransit keeps only the Transfer legs that are neither Matched nor
+// reversed.
 type TransactionFilter struct {
-	Month time.Time
-	After *TransactionCursor
-	Limit int
+	Month     time.Time
+	After     *TransactionCursor
+	Limit     int
+	InTransit bool
 }
 
 // TransactionCursor is where a page of an Account's Transactions starts:
@@ -131,6 +145,11 @@ type TransactionReader interface {
 	// in the Household the transaction is set to, sorted by Booking date,
 	// Transaction ID and Posting.
 	AccountTransactions(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, filter TransactionFilter) ([]AccountTransaction, error)
+	// TransferSuggestions returns the IDs of the cash Account's Transfer
+	// legs that are neither Matched nor reversed, name the row's Account,
+	// have the opposite amount in its currency and a Transaction date within
+	// SuggestionWindow of the row's, closest date first.
+	TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q SuggestionQuery) ([]uuid.UUID, error)
 }
 
 // InternalCategories finds the Household's Internal Categories.
@@ -172,6 +191,7 @@ type Transactions struct {
 	accounts     AccountAggregate
 	transactions TransactionAggregate
 	categories   CategoryAggregate
+	matches      MatchAggregate
 	reader       TransactionReader
 	internal     InternalCategories
 	ingestion    Ingestion
@@ -179,11 +199,12 @@ type Transactions struct {
 
 // NewTransactions returns the Transactions service.
 func NewTransactions(scope HouseholdScope, accounts AccountAggregate, transactions TransactionAggregate,
-	categories CategoryAggregate, reader TransactionReader, internal InternalCategories, ingestion Ingestion,
+	categories CategoryAggregate, matches MatchAggregate, reader TransactionReader, internal InternalCategories,
+	ingestion Ingestion,
 ) *Transactions {
 	return &Transactions{
-		scope: scope, accounts: accounts, transactions: transactions, categories: categories, reader: reader,
-		internal: internal, ingestion: ingestion,
+		scope: scope, accounts: accounts, transactions: transactions, categories: categories, matches: matches,
+		reader: reader, internal: internal, ingestion: ingestion,
 	}
 }
 

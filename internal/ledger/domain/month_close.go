@@ -35,6 +35,16 @@ var (
 	// ErrMonthCloseRefused is returned, as a *MonthCloseRefusedError, for a
 	// month that can't close yet.
 	ErrMonthCloseRefused = errors.New("month close refused")
+	// ErrCountedOnRequired is returned for closing a cash Account's month
+	// without the day its Cash count was taken.
+	ErrCountedOnRequired = errors.New("a cash month closes with the day its cash was counted")
+	// ErrCountedOnNotForStatementAccount is returned for a Cash count's day
+	// sent to close a statement Account's month, which closes with its
+	// Statement balance.
+	ErrCountedOnNotForStatementAccount = errors.New("only a cash account's month closes by a count")
+	// ErrInvalidCountDate is returned for a Cash count taken on or before
+	// the month's last day, or after today (UTC).
+	ErrInvalidCountDate = errors.New("invalid count date")
 )
 
 // ImportCheck is the state of a Statement import's Balance check that
@@ -175,30 +185,48 @@ func (e *MonthError) Error() string {
 func (e *MonthError) Unwrap() error { return e.Err }
 
 // MonthClose is a closed Booking month: the Statement balance it closed
-// with, and when and by whom.
+// with, and when and by whom. A cash month also keeps its Cash count: the
+// amount Count counted on the day CountedOn, which are zero for a statement
+// Account's month.
 type MonthClose struct {
 	StatementBalance sharedkernel.Decimal
 	ClosedAt         time.Time
 	ClosedBy         sharedkernel.ID
+	CountedOn        time.Time
+	Count            sharedkernel.Decimal
 }
 
 // CloseMonth closes the Booking month Month (any day in it) with the
 // Statement balance, on the day Today. Imports is what Ingestion reported
 // about the month.
+//
+// A cash Account's month closes by a Cash count instead: StatementBalance is
+// the amount counted on the day CountedOn, which a cash Account requires and
+// a statement Account refuses. MovedByCountedOn is how much the Account's
+// Transactions booked after the month's last day, up to and including
+// CountedOn, moved its balance; the app reads it from the Account Posting
+// lookup rows.
 type CloseMonth struct {
 	Today            time.Time
 	Month            time.Time
 	StatementBalance sharedkernel.Decimal
 	Imports          MonthImports
+	CountedOn        *time.Time
+	MovedByCountedOn sharedkernel.Decimal
 }
 
 func (CloseMonth) isAccountCommand() {}
 
 // MonthClosed is recorded when a Booking month (MonthLayout) closes with
-// its Statement balance. When and by whom are the event's own.
+// its Statement balance. When and by whom are the event's own. A cash month
+// also records its Cash count: the amount Count, counted on CountedOn
+// (DateLayout); the Statement balance is then the month-end balance the
+// count proves.
 type MonthClosed struct {
-	Month            string               `json:"month"`
-	StatementBalance sharedkernel.Decimal `json:"statementbalance"`
+	Month            string                `json:"month"`
+	StatementBalance sharedkernel.Decimal  `json:"statementbalance"`
+	CountedOn        string                `json:"countedon,omitempty"`
+	Count            *sharedkernel.Decimal `json:"count,omitempty"`
 }
 
 func (MonthClosed) isAccountEvent() {}
@@ -245,15 +273,32 @@ func (s AccountState) ClosingBalance(month string) sharedkernel.Decimal {
 	return sum
 }
 
+// BalanceAt is the computed balance at the end of the day countedOn, after
+// the Booking month (MonthLayout): its closing balance plus moved, how much
+// the Transactions booked after it, up to and including countedOn, moved
+// the balance. The fold keeps no per-day sums, so the caller reads moved
+// from the Account Posting lookup rows.
+func (s AccountState) BalanceAt(month string, moved sharedkernel.Decimal) sharedkernel.Decimal {
+	return s.ClosingBalance(month).Add(moved)
+}
+
 // closeMonth closes only the Open month, once it has ended (ADR-0024). It
 // checks every close condition and refuses with all of those that fail
 // together. There is never a balancing entry (ADR-0018).
+//
+// A cash Account's month closes by a Cash count: the count is compared with
+// the balance at the end of the day it was counted, and the month-end
+// balance this proves is stored as the Statement balance, with the count.
 func closeMonth(s AccountState, c CloseMonth) ([]AccountEvent, error) {
 	month := c.Month.Format(MonthLayout)
 
 	switch {
 	case !s.Added:
 		return nil, ErrAccountNotAdded
+	case s.IsCash() && c.CountedOn == nil:
+		return nil, ErrCountedOnRequired
+	case !s.IsCash() && c.CountedOn != nil:
+		return nil, ErrCountedOnNotForStatementAccount
 	case s.AwaitingFirstStatementImport:
 		return nil, ErrAwaitingFirstStatementImport
 	case month < s.StartDate.Format(MonthLayout):
@@ -276,6 +321,16 @@ func closeMonth(s AccountState, c CloseMonth) ([]AccountEvent, error) {
 		return nil, fmt.Errorf("%w: %s %s", ErrTooManyDecimalPlaces, c.StatementBalance, currency.Code())
 	}
 
+	computed := s.ClosingBalance(month)
+
+	if c.CountedOn != nil {
+		if err := checkCountDate(*c.CountedOn, month, c.Today); err != nil {
+			return nil, err
+		}
+
+		computed = s.BalanceAt(month, c.MovedByCountedOn)
+	}
+
 	refused := &MonthCloseRefusedError{
 		Uncategorised:       s.Uncategorised[month],
 		Pending:             c.Imports.Pending,
@@ -283,7 +338,7 @@ func closeMonth(s AccountState, c CloseMonth) ([]AccountEvent, error) {
 		UncheckedImports:    c.Imports.UncheckedImports,
 	}
 
-	if computed := s.ClosingBalance(month); !computed.Equal(c.StatementBalance) {
+	if !computed.Equal(c.StatementBalance) {
 		refused.Mismatch = &BalanceMismatch{
 			Computed: computed, Statement: c.StatementBalance, Difference: c.StatementBalance.Sub(computed),
 		}
@@ -294,7 +349,31 @@ func closeMonth(s AccountState, c CloseMonth) ([]AccountEvent, error) {
 		return nil, refused
 	}
 
-	return []AccountEvent{MonthClosed{Month: month, StatementBalance: c.StatementBalance}}, nil
+	if c.CountedOn == nil {
+		return []AccountEvent{MonthClosed{Month: month, StatementBalance: c.StatementBalance}}, nil
+	}
+
+	return []AccountEvent{MonthClosed{
+		Month:            month,
+		StatementBalance: s.ClosingBalance(month),
+		CountedOn:        c.CountedOn.Format(DateLayout),
+		Count:            &c.StatementBalance,
+	}}, nil
+}
+
+// checkCountDate refuses a Cash count of the Booking month (MonthLayout)
+// taken on or before its last day, or after today in UTC.
+func checkCountDate(countedOn time.Time, month string, today time.Time) error {
+	day, now := countedOn.Format(DateLayout), today.UTC().Format(DateLayout)
+
+	switch {
+	case countedOn.Format(MonthLayout) <= month:
+		return fmt.Errorf("%w: %s isn't after the end of %s", ErrInvalidCountDate, day, month)
+	case day > now:
+		return fmt.Errorf("%w: %s is after %s", ErrInvalidCountDate, day, now)
+	}
+
+	return nil
 }
 
 // closed returns a copy of closes with month closed, so a fold never

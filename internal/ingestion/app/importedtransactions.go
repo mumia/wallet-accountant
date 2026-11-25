@@ -50,14 +50,34 @@ var (
 	// ErrMonthNotOpenYet is returned, as a *MonthError, for accepting or
 	// Discarding a pending row booked after the Open month (ADR-0024).
 	ErrMonthNotOpenYet = errors.New("month not open yet")
+	// ErrInvalidTransfer is returned, as a *TransferRefusedError, for an
+	// Accept as Transfer the Ledger refuses.
+	ErrInvalidTransfer = errors.New("invalid transfer")
 )
+
+// TransferRefusedError is a refused Accept as Transfer. Reason is the
+// contract's name for why (such as COUNTERPART_NOT_CASH).
+type TransferRefusedError struct {
+	Reason string
+	Err    error
+}
+
+func (e *TransferRefusedError) Error() string {
+	return fmt.Sprintf("%s (%s): %v", ErrInvalidTransfer, e.Reason, e.Err)
+}
+
+func (e *TransferRefusedError) Unwrap() []error { return []error{ErrInvalidTransfer, e.Err} }
 
 // MonthError is a refusal about the Booking month (YYYY-MM) of a row that
 // names it and its Account's Open month. Err is the refusal itself.
+// AccountID names the Account whose month it is when that isn't the row's
+// own, such as the cash Account of an Accept as Transfer; uuid.Nil
+// otherwise.
 type MonthError struct {
 	Err       error
 	Month     string
 	OpenMonth string
+	AccountID uuid.UUID
 }
 
 func (e *MonthError) Error() string {
@@ -155,18 +175,35 @@ func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Led
 	}
 }
 
+// Acceptance is how a row is Accepted: to Category (nil for
+// Uncategorised), or, with TransferAccount, as a Transfer to or from that
+// cash Account. MatchLeg is a leg the cash Account already has to Match
+// instead of recording a new one.
+type Acceptance struct {
+	Category        *uuid.UUID
+	TransferAccount *uuid.UUID
+	MatchLeg        *uuid.UUID
+}
+
 // Accept Accepts a pending Imported transaction booked in its Account's
 // Open month and, through the Ledger in the same database transaction,
 // books it with exactly its amount: to the Category, or to Uncategorised
-// when category is nil. A row in a closed month, then one in a month not
+// when it has none. Accepted as a Transfer, the Ledger books the row as
+// the bank leg, records the cash leg and Matches them (consistency map:
+// Accept as Transfer). A row in a closed month, then one in a month not
 // open yet, is refused before its own state is checked, and the Ledger
 // checks the month again as it books. The Imported transaction, the Ledger
 // Transaction and the Account each check their own version, and a conflict
 // retries the whole transaction with the same Transaction ID (ADR-0011,
 // ADR-0013, ADR-0024; consistency map: Accept imported transaction).
-func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, category *uuid.UUID,
+func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, a Acceptance,
 ) (ImportedTransaction, error) {
 	transaction, err := sharedkernel.NewID()
+	if err != nil {
+		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	cashLeg, err := sharedkernel.NewID()
 	if err != nil {
 		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
@@ -207,9 +244,17 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}
 
-		if err := s.ledger.BookAccepted(ctx, tx, Booking{
-			Transaction: transaction, ImportedTransaction: id, Category: category, Row: res.State,
-		}); err != nil {
+		booking := Booking{Transaction: transaction, ImportedTransaction: id, Category: a.Category, Row: res.State}
+
+		if a.TransferAccount != nil {
+			err = s.ledger.BookTransfer(ctx, tx, TransferBooking{
+				Booking: booking, CashAccount: *a.TransferAccount, CashLeg: cashLeg, MatchLeg: a.MatchLeg,
+			})
+		} else {
+			err = s.ledger.BookAccepted(ctx, tx, booking)
+		}
+
+		if err != nil {
 			return err //nolint:wrapcheck // the port's error
 		}
 
@@ -517,4 +562,51 @@ func ParseImportedCursor(s string) (ImportedCursor, error) {
 	}
 
 	return ImportedCursor{BookingDate: d, ID: u}, nil
+}
+
+// SuggestedLeg is a cash Transfer leg suggested as the other side of an
+// Imported transaction, as the Ledger records it.
+type SuggestedLeg struct {
+	TransactionID        uuid.UUID
+	AccountID            uuid.UUID
+	Amount               sharedkernel.Decimal
+	Currency             string
+	BookingDate          time.Time
+	TransactionDate      time.Time
+	Description          string
+	Payee                string
+	CategoryID           uuid.UUID
+	CategoryName         string
+	CounterpartAccountID uuid.UUID
+}
+
+// TransferSuggestions lists the cash Account's In transit legs that could
+// be the other side of the Imported transaction, read through the Ledger
+// port in one transaction: closest date first, within a week either side
+// of the row's Transaction date (consistency map: List transfer
+// suggestions). A cash Account the row can't be a Transfer with is a
+// *TransferRefusedError.
+func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, household, id, cash uuid.UUID,
+) ([]SuggestedLeg, error) {
+	var out []SuggestedLeg
+
+	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		fold, found, err := s.rows.Folds.Load(ctx, tx, id)
+		if err != nil {
+			return err //nolint:wrapcheck // the adapter's error
+		}
+
+		if !found {
+			return ErrImportedTransactionNotFound
+		}
+
+		out, err = s.ledger.TransferSuggestions(ctx, tx, fold.State, cash)
+
+		return err //nolint:wrapcheck // the port's error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("transfer suggestions for imported transaction %s: %w", id, err)
+	}
+
+	return out, nil
 }
