@@ -23,6 +23,11 @@ var (
 	// ErrInvalidHousehold is returned for a Household the domain refuses to
 	// create, for example with a blank name or an unknown Base currency.
 	ErrInvalidHousehold = errors.New("invalid household")
+	// ErrMemberNotFound is returned for removing a User who isn't a member
+	// of the Household.
+	ErrMemberNotFound = errors.New("member not found")
+	// ErrLastMember is returned for removing a Household's only member.
+	ErrLastMember = errors.New("the last member can't leave")
 	// errNoIdentity means the request was not authenticated; the HTTP
 	// adapter's security handler makes it impossible.
 	errNoIdentity = errors.New("request has no authenticated identity")
@@ -240,6 +245,26 @@ func (h *Households) Members(ctx context.Context, household uuid.UUID) ([]Member
 	})
 
 	return members, err
+}
+
+// RemoveMember removes a member from a Household the caller of ctx is a
+// member of, as the caller: removing themselves is leaving. Saving the fold
+// deletes both membership rows, so the removed User's next request is
+// refused. A User who isn't a member gets ErrMemberNotFound, and the only
+// member gets ErrLastMember.
+func (h *Households) RemoveMember(ctx context.Context, household, user uuid.UUID) error {
+	return h.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
+		_, err := h.households.Execute(ctx, tx, household, domain.RemoveMember{UserID: user})
+
+		switch {
+		case errors.Is(err, domain.ErrNotAMember):
+			return fmt.Errorf("%w: %w", ErrMemberNotFound, err)
+		case errors.Is(err, domain.ErrLastMember):
+			return fmt.Errorf("%w: %w", ErrLastMember, err)
+		}
+
+		return err //nolint:wrapcheck // already wrapped by the runtime
+	})
 }
 
 func (h *Households) resolve(ctx context.Context, tx *eventstore.Tx, id authn.Identity) (User, error) {
