@@ -48,6 +48,10 @@ func NewAccountHandler(accounts *app.Accounts) *AccountHandler {
 
 // AddAccount implements addAccount.
 func (h *AccountHandler) AddAccount(ctx context.Context, req *oas.AccountCreation, params oas.AddAccountParams) (oas.AddAccountRes, error) {
+	if cashAccountPending(req) {
+		return nil, httpapi.ErrNotImplemented
+	}
+
 	kind, ok := accountKindsIn[req.Kind]
 	if !ok {
 		// Not an API kind, so the domain must refuse it as unknown, even when

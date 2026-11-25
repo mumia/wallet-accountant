@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 
 	"github.com/google/uuid"
 
@@ -66,6 +65,10 @@ func monthRefusal(err error) *oas.MonthProblem {
 func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, req oas.OptImportedTransactionAcceptance,
 	params oas.AcceptImportedTransactionParams,
 ) (oas.AcceptImportedTransactionRes, error) {
+	if transferPending(req) {
+		return nil, httpapi.ErrNotImplemented
+	}
+
 	var category *uuid.UUID
 	if id, ok := req.Value.CategoryID.Get(); req.Set && ok {
 		category = &id
@@ -93,12 +96,11 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 			ImportedTransactionSuspectedDuplicateType, "Imported transaction is a Suspected duplicate",
 			"Keep the Suspected duplicate before accepting it, or Discard it.", "", ""), nil
 	case errors.Is(err, app.ErrInternalCategory):
-		return new(oas.AcceptImportedTransactionUnprocessableEntity(httpapi.Problem(http.StatusUnprocessableEntity,
-			InternalCategoryType, "Internal Category",
-			"Internal Categories belong to the system: only Uncategorised can be chosen when accepting."))), nil
+		return httpapi.Unprocessable(InternalCategoryType, "Internal Category",
+			"Internal Categories belong to the system: only Uncategorised can be chosen when accepting."), nil
 	case errors.Is(err, app.ErrCategoryNotFound):
-		return new(oas.AcceptImportedTransactionUnprocessableEntity(httpapi.Problem(http.StatusUnprocessableEntity,
-			InvalidCategoryType, "Invalid Category", "The category_id is not one of the Household's Categories."))), nil
+		return httpapi.Unprocessable(InvalidCategoryType, "Invalid Category",
+			"The category_id is not one of the Household's Categories."), nil
 	case err != nil:
 		return nil, fmt.Errorf("accept imported transaction: %w", err)
 	}

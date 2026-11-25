@@ -72,7 +72,7 @@ Ticket 01 writes these into `api/openapi.yaml`. Every other ticket implements pa
 **Changed schemas and operations**
 
 - **`AccountKind`** gains `CASH`. The "not supported yet" wording goes.
-- **`AccountCreation`** gains `opening_count` and `opening_count_confirmation`, both `DecimalAmount` strings in the Account currency.
+- **`AccountCreation`** gains `opening_count` and `opening_count_confirmation`, both `Money` in the Account currency.
   - Both are required for `CASH`. For any other kind they are refused with 422 `/problems/invalid-account`.
   - Two counts that differ get 422 `/problems/opening-count-mismatch`.
   - For `CASH`, `addAccount` answers with the Account's balance already set.
@@ -98,14 +98,16 @@ Ticket 01 writes these into `api/openapi.yaml`. Every other ticket implements pa
 - **`changeTransaction`** (Set Category) on a Transfer leg gets 422 `/problems/transfer-leg`.
 - **`reverseTransaction`**'s description is extended with the Transfer rules ("Ledger: Transfers").
 - **`listAccountTransactions`** gains the query parameter `in_transit=true`, which lists only the Account's unmatched, non-reversed Transfer legs.
-- **`Category`'s internal role** gains `ACCOUNT_TRANSFER`.
+- **Categories:** the contract has no internal role field, so Account transfer appears as an `INTERNAL` Category named "Account transfer" (decided in ticket 01).
+- **`TransferProblem`** (response `TransferRefused`) is the schema of every 422 of `acceptImportedTransaction`, `recordCashTransaction` and `listTransferSuggestions`: a Problem with an optional `reason` (`CATEGORY_AND_TRANSFER`, `MATCH_WITHOUT_TRANSFER`, `COUNTERPART_NOT_CASH`, `SAME_ACCOUNT`, `CURRENCY_MISMATCH`, `UNKNOWN_ACCOUNT`, `NOT_A_MATCHING_LEG`).
+- **`MonthProblem`** gains `account_id`.
 
 **New operations**
 
 - **`POST /households/{household_id}/accounts/{account_id}/transactions`** (`recordCashTransaction`)
   - Body: `{ date, amount, description, payee?, category_id?, counterpart_account_id? }`.
   - `category_id` and `counterpart_account_id` are exclusive. Neither means Uncategorised.
-  - Answers 201 with the `Transaction`, or with `{ transactions: [Transaction, Transaction], match_id }` for a cash ↔ cash Transfer. One response schema with an optional `counterpart_transaction` and `match_id` is acceptable instead; ticket 01 picks one and notes it.
+  - Answers 201 with the `Transaction` on this Account. For a cash ↔ cash Transfer that is this Account's leg, with its `match_id`; `getMatch` names the other leg (decided in ticket 01).
   - Takes an Idempotency-Key.
 - **`POST /households/{household_id}/accounts/{account_id}/opening-count`** (`recountOpening`)
   - Body: `{ opening_count, opening_count_confirmation }`. Answers 200 with the `Account`. Takes an Idempotency-Key.

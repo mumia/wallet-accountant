@@ -101,6 +101,10 @@ func (h *MonthHandler) ListAccountMonths(ctx context.Context, params oas.ListAcc
 // CloseAccountMonth implements closeAccountMonth.
 func (h *MonthHandler) CloseAccountMonth(ctx context.Context, req *oas.MonthClosing, params oas.CloseAccountMonthParams,
 ) (oas.CloseAccountMonthRes, error) {
+	if cashClosePending(req) {
+		return nil, httpapi.ErrNotImplemented
+	}
+
 	month, err := time.Parse(domain.MonthLayout, params.BookingMonth)
 	if err != nil {
 		return new(oas.CloseAccountMonthBadRequest(httpapi.Problem(http.StatusBadRequest, "", "",

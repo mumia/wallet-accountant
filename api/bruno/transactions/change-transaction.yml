@@ -1,7 +1,7 @@
 info:
   name: Set a Transaction's Category
   type: http
-  seq: 2
+  seq: 4
 http:
   method: PATCH
   url: '{{baseUrl}}/households/:household_id/transactions/:transaction_id'
@@ -34,6 +34,8 @@ docs: |-
   `/problems/transaction-is-a-reversal`, and the Opening balance
   Transaction 422 `/problems/opening-balance-transaction`. In a closed
   month the Category can still change, but not to Uncategorised: that
-  gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024).
+  gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024). A
+  Transfer leg's other side is always the Account transfer Category:
+  it gets 422 `/problems/transfer-leg`.
 
   Operation `changeTransaction`.

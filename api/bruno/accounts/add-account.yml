@@ -21,7 +21,15 @@ http:
         "name": "Main",
         "kind": "BANK_ACCOUNT",
         "currency": "EUR",
-        "start_date": "2026-01-01"
+        "start_date": "2026-01-01",
+        "opening_count": {
+          "amount": 1234.56,
+          "currency": "EUR"
+        },
+        "opening_count_confirmation": {
+          "amount": 1234.56,
+          "currency": "EUR"
+        }
       }
   auth: inherit
 runtime:
@@ -33,10 +41,17 @@ runtime:
         }
 docs: |-
   Adds an Account with a name, a kind, an Account currency and a start
-  date. The new Account awaits its first Statement import and has no
-  balance: its Opening balance is worked out from that import, never
-  typed (ADR-0018). Cash Accounts are not supported yet; a `CASH` or
-  unknown kind, an unknown currency or a blank name gets 422 with the
-  problem type `/problems/invalid-account`.
+  date. A statement Account (any kind but `CASH`) awaits its first
+  Statement import and has no balance: its Opening balance is worked
+  out from that import, never typed (ADR-0018). A cash Account is kept
+  entirely by hand: it takes `opening_count`, the cash counted on the
+  start date, and `opening_count_confirmation`, the same count typed
+  again. Its Opening balance is recorded from the count at once, so it
+  never awaits a Statement import and has a balance from the start. Two
+  counts that differ get 422 `/problems/opening-count-mismatch`. An
+  unknown kind, an unknown currency, a blank name, a cash Account
+  without both counts, a count in another currency than the Account's
+  or with more decimal places than it has, or a count sent for any
+  other kind gets 422 with the problem type `/problems/invalid-account`.
 
   Operation `addAccount`.

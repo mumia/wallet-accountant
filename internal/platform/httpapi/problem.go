@@ -66,6 +66,15 @@ func MonthConflict(typ, title, detail, bookingMonth, openMonth string) *oas.Mont
 	return out
 }
 
+// Unprocessable returns a 422 as a TransferProblem, the schema of every 422
+// of an operation that can refuse a Transfer. It has no reason; a refused
+// Transfer sets one.
+func Unprocessable(typ, title, detail string) *oas.TransferProblem {
+	p := Problem(http.StatusUnprocessableEntity, typ, title, detail)
+
+	return &oas.TransferProblem{Type: p.Type, Title: p.Title, Status: p.Status, Detail: p.Detail}
+}
+
 // Problem types about a month and the Account's Open month (ADR-0024).
 const (
 	MonthClosedType     = "/problems/month-closed"

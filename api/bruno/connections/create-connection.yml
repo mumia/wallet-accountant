@@ -97,6 +97,7 @@ docs: |-
   422 with the problem type `/problems/invalid-connection`; an empty or
   too long name gets 400. An invalid
   mapping gets 422 with `/problems/invalid-csv-mapping`, and nothing is
-  created.
+  created. A cash Account is kept by hand and takes no Connection: it
+  gets 422 `/problems/invalid-connection`.
 
   Operation `createConnection`.

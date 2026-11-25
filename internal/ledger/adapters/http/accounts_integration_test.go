@@ -163,7 +163,6 @@ func TestAddingAnAccountIsRefused(t *testing.T) {
 	valid := map[string]string{"name": "Main", "kind": "BANK_ACCOUNT", "currency": "EUR", "start_date": "2026-01-01"}
 
 	for name, change := range map[string]map[string]string{
-		"cash kind":        {"kind": "CASH"},
 		"unknown kind":     {"kind": "SAVINGS_JAR"},
 		"lower-case kind":  {"kind": "bank_account"},
 		"unknown currency": {"currency": "XYZ"},

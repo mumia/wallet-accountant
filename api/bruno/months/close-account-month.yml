@@ -29,7 +29,8 @@ http:
         "statement_balance": {
           "amount": 1234.56,
           "currency": "EUR"
-        }
+        },
+        "counted_on": "2026-12-03"
       }
   auth: inherit
 docs: |-
@@ -49,7 +50,18 @@ docs: |-
   don't count), or the computed closing balance differs from the
   Statement balance (both amounts and the difference are given). Nothing
   is ever booked to make the balances meet: a gap is closed by
-  correcting the entry that is wrong (ADR-0018). A month already closed
+  correcting the entry that is wrong (ADR-0018). A cash Account's month
+  closes by a Cash count instead: `statement_balance` is the amount
+  counted and `counted_on` the day it was counted, after the month's
+  last day and no later than today (UTC); otherwise 422
+  `/problems/invalid-count-date`. The count is compared with the
+  Opening balance plus every Transaction booked up to the end of
+  `counted_on` (a gap gives that `computed_balance`, the count as
+  `statement_balance` and the `difference`: record what really
+  happened, such as a loss against an Expense Category). The month-end
+  balance the count proves is stored as the month's Statement balance.
+  `counted_on` is required for a cash Account and refused with 400
+  `/problems/invalid-month-closing` for any other. A month already closed
   gets 409 `/problems/month-already-closed`, and an Account awaiting its
   first Statement import 409
   `/problems/account-awaiting-first-statement-import`. A Statement

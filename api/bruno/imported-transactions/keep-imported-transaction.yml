@@ -1,7 +1,7 @@
 info:
   name: Keep a Suspected duplicate
   type: http
-  seq: 3
+  seq: 4
 http:
   method: POST
   url: '{{baseUrl}}/households/:household_id/imported-transactions/:imported_transaction_id/keep'

@@ -59,6 +59,9 @@ request:
     - name: imported_transaction_id
       value: ""
       description: The Imported transaction's ID
+    - name: match_id
+      value: ""
+      description: The Match's ID
     - name: transaction_id
       value: ""
       description: The Transaction's ID
