@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -358,4 +359,23 @@ func (a *App) EventCount(t testing.TB) int {
 	}
 
 	return n
+}
+
+// EventActors returns the actor of each event of the type, oldest first,
+// so a test can check who recorded it.
+func (a *App) EventActors(t testing.TB, eventType string) []string {
+	t.Helper()
+
+	rows, err := a.reader.Query(t.Context(),
+		"SELECT actorid::text FROM event_store WHERE type = $1 ORDER BY time, id", eventType)
+	if err != nil {
+		t.Fatalf("read event actors: %v", err)
+	}
+
+	actors, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatalf("read event actors: %v", err)
+	}
+
+	return actors
 }

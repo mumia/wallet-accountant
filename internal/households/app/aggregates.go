@@ -20,9 +20,10 @@ const (
 	UserRegisteredType = "io.walletaccountant.households.user.registered.v1"
 	UserRenamedType    = "io.walletaccountant.households.user.renamed.v1"
 
-	HouseholdStreamType      = "households.household"
-	HouseholdCreatedType     = "io.walletaccountant.households.household.created.v1"
-	HouseholdMemberAddedType = "io.walletaccountant.households.household.memberadded.v1"
+	HouseholdStreamType        = "households.household"
+	HouseholdCreatedType       = "io.walletaccountant.households.household.created.v1"
+	HouseholdMemberAddedType   = "io.walletaccountant.households.household.memberadded.v1"
+	HouseholdMemberRemovedType = "io.walletaccountant.households.household.memberremoved.v1"
 
 	NotificationStreamType = "households.notification"
 	NotificationRaisedType = "io.walletaccountant.households.notification.raised.v1"
@@ -93,6 +94,7 @@ func NewHouseholdAggregate(folds eventstore.FoldStore[domain.HouseholdState]) Ho
 	codec := eventstore.NewCodec[domain.HouseholdEvent](Source)
 	eventstore.Register[domain.HouseholdEvent, domain.HouseholdCreated](codec, HouseholdCreatedType)
 	eventstore.Register[domain.HouseholdEvent, domain.HouseholdMemberAdded](codec, HouseholdMemberAddedType)
+	eventstore.Register[domain.HouseholdEvent, domain.HouseholdMemberRemoved](codec, HouseholdMemberRemovedType)
 
 	return HouseholdAggregate{
 		StreamType:        HouseholdStreamType,
