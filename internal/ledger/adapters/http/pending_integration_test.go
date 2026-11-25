@@ -32,11 +32,6 @@ func TestCashAndTransferOperationsAnswerNotImplementedYet(t *testing.T) {
 				"date": "2026-01-05", "amount": eur, "description": "ATM", "counterpart_account_id": anID,
 			})
 		},
-		"Accept as Transfer (06)": func() *apitest.Response {
-			return app.Post(t, base+"/imported-transactions/"+anID+"/accept", token, map[string]any{
-				"transfer_account_id": anID,
-			})
-		},
 		"Accept matching a leg (07)": func() *apitest.Response {
 			return app.Post(t, base+"/imported-transactions/"+anID+"/accept", token, map[string]any{
 				"transfer_account_id": anID, "match_transaction_id": anID,

@@ -36,10 +36,11 @@ type TransferReason string
 
 // The reasons a Transfer is refused (the contract's TransferProblem).
 const (
-	TransferSameAccount     TransferReason = "SAME_ACCOUNT"
-	TransferCurrencyMatch   TransferReason = "CURRENCY_MISMATCH"
-	TransferUnknownAccount  TransferReason = "UNKNOWN_ACCOUNT"
-	TransferNotAMatchingLeg TransferReason = "NOT_A_MATCHING_LEG"
+	TransferSameAccount        TransferReason = "SAME_ACCOUNT"
+	TransferCounterpartNotCash TransferReason = "COUNTERPART_NOT_CASH"
+	TransferCurrencyMatch      TransferReason = "CURRENCY_MISMATCH"
+	TransferUnknownAccount     TransferReason = "UNKNOWN_ACCOUNT"
+	TransferNotAMatchingLeg    TransferReason = "NOT_A_MATCHING_LEG"
 )
 
 // TransferRefusedError is a refused Transfer and why.
@@ -53,6 +54,18 @@ func (e *TransferRefusedError) Error() string {
 }
 
 func (e *TransferRefusedError) Unwrap() []error { return []error{ErrInvalidTransfer, e.Err} }
+
+// AccountError is a refusal by the Account Account's Decider, such as a
+// closed month, when a command books on more than one Account: it says
+// which one refused.
+type AccountError struct {
+	Account uuid.UUID
+	Err     error
+}
+
+func (e *AccountError) Error() string { return fmt.Sprintf("account %s: %v", e.Account, e.Err) }
+
+func (e *AccountError) Unwrap() error { return e.Err }
 
 // MatchAggregate is the Match Decider wired to the runtime.
 type MatchAggregate = eventstore.Aggregate[domain.MatchState, domain.MatchCommand, domain.MatchEvent]
@@ -132,6 +145,18 @@ type TransferLegBooking struct {
 // transfer) is recorded with its Account Posting lookup row. It is In
 // transit until a Match links it (spec "Ledger: Transfers").
 func (t *Transactions) RecordTransferLeg(ctx context.Context, tx *eventstore.Tx, b TransferLegBooking) error {
+	own, found, err := t.accounts.Folds.Load(ctx, tx, b.Account)
+	if err != nil {
+		return fmt.Errorf("load account %s: %w", b.Account, err)
+	}
+
+	switch {
+	case !found:
+		return ErrAccountNotFound
+	case own.State.Currency != b.Currency:
+		return fmt.Errorf("%w: %s, not %s", ErrCurrencyMismatch, b.Currency, own.State.Currency)
+	}
+
 	if err := t.checkCounterpart(ctx, tx, b.Account, b.Counterpart, b.Currency); err != nil {
 		return err
 	}
@@ -144,7 +169,7 @@ func (t *Transactions) RecordTransferLeg(ctx context.Context, tx *eventstore.Tx,
 	if _, err := t.accounts.Execute(ctx, tx, b.Account, domain.BookTransaction{
 		TransactionID: b.Transaction, BookingDate: b.BookingDate, Amount: b.Amount,
 	}); err != nil {
-		return fmt.Errorf("book transfer leg on account %s: %w", b.Account, err)
+		return &AccountError{Account: b.Account, Err: fmt.Errorf("book transfer leg: %w", err)}
 	}
 
 	if _, err := t.transactions.Execute(ctx, tx, b.Transaction, domain.RecordTransaction{
@@ -246,4 +271,75 @@ func (t *Transactions) ConfirmTransfer(ctx context.Context, tx *eventstore.Tx, f
 	}
 
 	return id, nil
+}
+
+// ImportedTransfer is an Imported transaction Accepted as a Transfer to or
+// from a cash Account: the row as ImportedBooking carries it (its Category
+// is ignored), the cash Account, and the ID of the cash leg to record.
+type ImportedTransfer struct {
+	Row         ImportedBooking
+	CashAccount uuid.UUID
+	CashLeg     uuid.UUID
+}
+
+// BookTransfer books an Imported transaction Accepted as a Transfer, in the
+// caller's transaction (spec "Accept as Transfer"):
+//   - the cash Account is checked: another of the Household's Accounts, a
+//     cash one, in the row's currency (otherwise a *TransferRefusedError);
+//   - the bank leg is recorded exactly as an Accept records the row, linked
+//     to it, against Account transfer, naming the cash Account;
+//   - the cash leg is recorded with the opposite amount, the row's
+//     description and payee, on the row's Transaction date, flagged as
+//     created by the Transfer; a closed month of the cash Account is
+//     refused as an *AccountError naming it;
+//   - the two legs are Matched, the caller confirming it.
+//
+// The legs are booked in Account ID order, so two Transfers between the
+// same Accounts write their folds in the same order and can't deadlock.
+// It returns the Match (consistency map: Accept as Transfer).
+func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b ImportedTransfer) (uuid.UUID, error) {
+	r := b.Row
+
+	if b.CashAccount == r.Account {
+		return uuid.Nil, &TransferRefusedError{Reason: TransferSameAccount, Err: domain.ErrCounterpartIsItself}
+	}
+
+	cash, found, err := t.accounts.Folds.Load(ctx, tx, b.CashAccount)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("load account %s: %w", b.CashAccount, err)
+	}
+
+	switch {
+	case !found:
+		return uuid.Nil, &TransferRefusedError{Reason: TransferUnknownAccount, Err: ErrAccountNotFound}
+	case !cash.State.IsCash():
+		return uuid.Nil, &TransferRefusedError{Reason: TransferCounterpartNotCash, Err: ErrNotACashAccount}
+	case cash.State.Currency != r.Currency:
+		return uuid.Nil, &TransferRefusedError{Reason: TransferCurrencyMatch, Err: fmt.Errorf("%w: %s, not %s",
+			ErrCurrencyMismatch, cash.State.Currency, r.Currency)}
+	}
+
+	bank := TransferLegBooking{
+		Account: r.Account, Counterpart: b.CashAccount, Transaction: r.Transaction, ImportedTx: r.ImportedTransaction,
+		BookingDate: r.BookingDate, TransactionDate: r.TransactionDate, ValueDate: r.ValueDate,
+		Amount: r.Amount, Currency: r.Currency, Description: r.Description, Payee: r.Payee,
+	}
+	cashLeg := TransferLegBooking{
+		Account: b.CashAccount, Counterpart: r.Account, Transaction: b.CashLeg, CreatedByTransfer: true,
+		BookingDate: r.TransactionDate, TransactionDate: r.TransactionDate,
+		Amount: r.Amount.Neg(), Currency: r.Currency, Description: r.Description, Payee: r.Payee,
+	}
+
+	legs := []TransferLegBooking{bank, cashLeg}
+	if cashLeg.Account.String() < bank.Account.String() {
+		legs = []TransferLegBooking{cashLeg, bank}
+	}
+
+	for _, leg := range legs {
+		if err := t.RecordTransferLeg(ctx, tx, leg); err != nil {
+			return uuid.Nil, err
+		}
+	}
+
+	return t.ConfirmTransfer(ctx, tx, bank.Transaction, cashLeg.Transaction)
 }

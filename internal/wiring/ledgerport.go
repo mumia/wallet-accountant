@@ -75,6 +75,10 @@ func monthError(err error) error {
 
 	out := &ingestionapp.MonthError{Month: e.Month, OpenMonth: e.OpenMonth}
 
+	if a, ok := errors.AsType[*ledgerapp.AccountError](err); ok {
+		out.AccountID = a.Account
+	}
+
 	switch {
 	case errors.Is(e.Err, ledgerdomain.ErrMonthClosed):
 		out.Err = ingestionapp.ErrMonthClosed
@@ -103,11 +107,11 @@ func (l ingestionLedger) RecordOpeningBalance(ctx context.Context, tx *eventstor
 	}
 }
 
-// BookAccepted implements ingestionapp.Ledger.
-func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b ingestionapp.Booking) error {
+// importedBooking is the Booking in the Ledger's terms.
+func importedBooking(b ingestionapp.Booking) ledgerapp.ImportedBooking {
 	r := b.Row
 
-	err := l.transactions.RecordImported(ctx, tx, ledgerapp.ImportedBooking{
+	return ledgerapp.ImportedBooking{
 		Account:             r.AccountID,
 		Transaction:         b.Transaction,
 		ImportedTransaction: b.ImportedTransaction,
@@ -119,7 +123,33 @@ func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b 
 		Currency:            r.Currency,
 		Description:         r.Description,
 		Payee:               r.Payee,
+	}
+}
+
+// BookTransfer implements ingestionapp.Ledger.
+func (l ingestionLedger) BookTransfer(ctx context.Context, tx *eventstore.Tx, b ingestionapp.TransferBooking) error {
+	_, err := l.transactions.BookTransfer(ctx, tx, ledgerapp.ImportedTransfer{
+		Row: importedBooking(b.Booking), CashAccount: b.CashAccount, CashLeg: b.CashLeg,
 	})
+
+	if m := monthError(err); m != nil {
+		return m
+	}
+
+	if refused, ok := errors.AsType[*ledgerapp.TransferRefusedError](err); ok {
+		return &ingestionapp.TransferRefusedError{Reason: string(refused.Reason), Err: err}
+	}
+
+	if errors.Is(err, ledgerapp.ErrAccountNotFound) {
+		return ingestionapp.ErrAccountNotFound
+	}
+
+	return err //nolint:wrapcheck // already wrapped by the Ledger
+}
+
+// BookAccepted implements ingestionapp.Ledger.
+func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b ingestionapp.Booking) error {
+	err := l.transactions.RecordImported(ctx, tx, importedBooking(b))
 
 	if m := monthError(err); m != nil {
 		// Ingestion checked the month first; this is a Close that ran

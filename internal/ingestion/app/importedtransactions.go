@@ -50,14 +50,34 @@ var (
 	// ErrMonthNotOpenYet is returned, as a *MonthError, for accepting or
 	// Discarding a pending row booked after the Open month (ADR-0024).
 	ErrMonthNotOpenYet = errors.New("month not open yet")
+	// ErrInvalidTransfer is returned, as a *TransferRefusedError, for an
+	// Accept as Transfer the Ledger refuses.
+	ErrInvalidTransfer = errors.New("invalid transfer")
 )
+
+// TransferRefusedError is a refused Accept as Transfer. Reason is the
+// contract's name for why (such as COUNTERPART_NOT_CASH).
+type TransferRefusedError struct {
+	Reason string
+	Err    error
+}
+
+func (e *TransferRefusedError) Error() string {
+	return fmt.Sprintf("%s (%s): %v", ErrInvalidTransfer, e.Reason, e.Err)
+}
+
+func (e *TransferRefusedError) Unwrap() []error { return []error{ErrInvalidTransfer, e.Err} }
 
 // MonthError is a refusal about the Booking month (YYYY-MM) of a row that
 // names it and its Account's Open month. Err is the refusal itself.
+// AccountID names the Account whose month it is when that isn't the row's
+// own, such as the cash Account of an Accept as Transfer; uuid.Nil
+// otherwise.
 type MonthError struct {
 	Err       error
 	Month     string
 	OpenMonth string
+	AccountID uuid.UUID
 }
 
 func (e *MonthError) Error() string {
@@ -155,18 +175,33 @@ func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Led
 	}
 }
 
+// Acceptance is how a row is Accepted: to Category (nil for
+// Uncategorised), or, with TransferAccount, as a Transfer to or from that
+// cash Account.
+type Acceptance struct {
+	Category        *uuid.UUID
+	TransferAccount *uuid.UUID
+}
+
 // Accept Accepts a pending Imported transaction booked in its Account's
 // Open month and, through the Ledger in the same database transaction,
 // books it with exactly its amount: to the Category, or to Uncategorised
-// when category is nil. A row in a closed month, then one in a month not
+// when it has none. Accepted as a Transfer, the Ledger books the row as
+// the bank leg, records the cash leg and Matches them (consistency map:
+// Accept as Transfer). A row in a closed month, then one in a month not
 // open yet, is refused before its own state is checked, and the Ledger
 // checks the month again as it books. The Imported transaction, the Ledger
 // Transaction and the Account each check their own version, and a conflict
 // retries the whole transaction with the same Transaction ID (ADR-0011,
 // ADR-0013, ADR-0024; consistency map: Accept imported transaction).
-func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, category *uuid.UUID,
+func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, a Acceptance,
 ) (ImportedTransaction, error) {
 	transaction, err := sharedkernel.NewID()
+	if err != nil {
+		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
+	}
+
+	cashLeg, err := sharedkernel.NewID()
 	if err != nil {
 		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
@@ -207,9 +242,17 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}
 
-		if err := s.ledger.BookAccepted(ctx, tx, Booking{
-			Transaction: transaction, ImportedTransaction: id, Category: category, Row: res.State,
-		}); err != nil {
+		booking := Booking{Transaction: transaction, ImportedTransaction: id, Category: a.Category, Row: res.State}
+
+		if a.TransferAccount != nil {
+			err = s.ledger.BookTransfer(ctx, tx, TransferBooking{
+				Booking: booking, CashAccount: *a.TransferAccount, CashLeg: cashLeg,
+			})
+		} else {
+			err = s.ledger.BookAccepted(ctx, tx, booking)
+		}
+
+		if err != nil {
 			return err //nolint:wrapcheck // the port's error
 		}
 

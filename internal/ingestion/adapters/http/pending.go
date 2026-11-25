@@ -17,8 +17,8 @@ func (h *StatementImportHandler) ListTransferSuggestions(context.Context, oas.Li
 	return nil, httpapi.ErrNotImplemented
 }
 
-// transferPending reports whether an Accept asks for a Transfer (tickets 06
-// and 07).
-func transferPending(req oas.OptImportedTransactionAcceptance) bool {
-	return req.Set && (req.Value.TransferAccountID.Set || req.Value.MatchTransactionID.Set)
+// matchPending reports whether an Accept asks to Match a leg the cash
+// Account already has (ticket 07).
+func matchPending(req oas.ImportedTransactionAcceptance) bool {
+	return req.MatchTransactionID.Set
 }
