@@ -57,7 +57,6 @@ func TestAddingAnAccountRefusals(t *testing.T) {
 		want   error
 	}{
 		"blank name":       {func(c *domain.AddAccount) { c.Name = "  " }, domain.ErrAccountNameRequired},
-		"cash kind":        {func(c *domain.AddAccount) { c.Kind = "cash" }, domain.ErrCashAccountsNotSupported},
 		"unknown kind":     {func(c *domain.AddAccount) { c.Kind = "savings_jar" }, domain.ErrUnknownAccountKind},
 		"unknown currency": {func(c *domain.AddAccount) { c.Currency = "XYZ" }, sharedkernel.ErrUnknownCurrency},
 		"no start date":    {func(c *domain.AddAccount) { c.StartDate = time.Time{} }, domain.ErrStartDateRequired},

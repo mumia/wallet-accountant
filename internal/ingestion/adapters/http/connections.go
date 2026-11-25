@@ -111,6 +111,9 @@ func (h *ConnectionHandler) CreateConnection(ctx context.Context, req *oas.Conne
 		return invalid(InvalidConnectionType, "Invalid Connection", "Bank feed Connections are not supported yet.")
 	case errors.Is(err, domain.ErrUnknownConnectionKind):
 		return invalid(InvalidConnectionType, "Invalid Connection", "The kind must be STATEMENT_FILE_IMPORT.")
+	case errors.Is(err, app.ErrCashAccountConnection):
+		return invalid(InvalidConnectionType, "Invalid Connection",
+			"A cash Account is kept by hand and takes no Connection: record its Transactions directly.")
 	case errors.Is(err, domain.ErrInvalidCSVMapping):
 		return invalid(InvalidCSVMappingType, "Invalid CSV mapping", mappingDetail(err))
 	case err != nil:

@@ -27,23 +27,6 @@ func TestCashAndTransferOperationsAnswerNotImplementedYet(t *testing.T) {
 	anID := uuid.NewString()
 
 	for name, send := range map[string]func() *apitest.Response{
-		"cash Account (02)": func() *apitest.Response {
-			return app.Post(t, base+"/accounts", token, map[string]any{
-				"name": "Wallet", "kind": "CASH", "currency": "EUR", "start_date": "2026-01-01",
-				"opening_count": eur, "opening_count_confirmation": eur,
-			})
-		},
-		"Opening count on a statement Account (02)": func() *apitest.Response {
-			return app.Post(t, base+"/accounts", token, map[string]any{
-				"name": "Other", "kind": "BANK_ACCOUNT", "currency": "EUR", "start_date": "2026-01-01",
-				"opening_count": eur,
-			})
-		},
-		"recountOpening (02)": func() *apitest.Response {
-			return app.Post(t, base+"/accounts/"+main.AccountID+"/opening-count", token, map[string]any{
-				"opening_count": eur, "opening_count_confirmation": eur,
-			})
-		},
 		"recordCashTransaction (03)": func() *apitest.Response {
 			return app.Post(t, base+"/accounts/"+main.AccountID+"/transactions", token, map[string]any{
 				"date": "2026-01-05", "amount": eur, "description": "Coffee",

@@ -14,20 +14,22 @@ import (
 // AccountKind is what sort of place an Account is.
 type AccountKind string
 
-// The Account kinds this slice supports. Cash Accounts are refused until a
-// later slice decides how they get an Opening balance (spec "Out of Scope").
+// The Account kinds. Every kind but cash is a statement Account, which takes
+// Transactions only from its statements; a cash Account is kept entirely by
+// hand, and its Opening balance comes from its Opening count (ADR-0018).
 const (
 	AccountKindBankAccount  AccountKind = "bank_account"
 	AccountKindCreditCard   AccountKind = "credit_card"
 	AccountKindLoan         AccountKind = "loan"
 	AccountKindCryptoWallet AccountKind = "crypto_wallet"
-
-	accountKindCash AccountKind = "cash"
+	AccountKindCash         AccountKind = "cash"
 )
 
 // AccountKinds lists every Account kind that can be added.
 func AccountKinds() []AccountKind {
-	return []AccountKind{AccountKindBankAccount, AccountKindCreditCard, AccountKindLoan, AccountKindCryptoWallet}
+	return []AccountKind{
+		AccountKindBankAccount, AccountKindCreditCard, AccountKindLoan, AccountKindCryptoWallet, AccountKindCash,
+	}
 }
 
 // DateLayout is how events write a calendar date.
@@ -40,8 +42,6 @@ var (
 	ErrAccountNameRequired = errors.New("account name required")
 	// ErrUnknownAccountKind is returned for a kind that is not an Account kind.
 	ErrUnknownAccountKind = errors.New("unknown account kind")
-	// ErrCashAccountsNotSupported is returned for adding a cash Account.
-	ErrCashAccountsNotSupported = errors.New("cash accounts are not supported yet")
 	// ErrStartDateRequired is returned for an Account without a start date.
 	ErrStartDateRequired = errors.New("account start date required")
 	// ErrAccountNotAdded is returned for a command to an Account that
@@ -116,13 +116,16 @@ type (
 	AccountCommand interface{ isAccountCommand() }
 
 	// AddAccount adds an Account with a name, a kind, an Account currency
-	// and a start date. It takes no Opening balance: only the first
-	// Statement import records one.
+	// and a start date. It records no Opening balance: a statement
+	// Account's first Statement import records one, and a cash Account's
+	// is recorded right after from OpeningCount, which a cash Account
+	// requires and any other kind refuses (ADR-0018).
 	AddAccount struct {
-		Name      string
-		Kind      AccountKind
-		Currency  string
-		StartDate time.Time
+		Name         string
+		Kind         AccountKind
+		Currency     string
+		StartDate    time.Time
+		OpeningCount *sharedkernel.Decimal
 	}
 
 	// RecordOpeningBalance records the Opening balance the first Statement
@@ -289,6 +292,8 @@ func decideAccount(s AccountState, c AccountCommand) ([]AccountEvent, error) {
 		return reopenMonth(s, c)
 	case RenameAccount:
 		return renameAccount(s, c)
+	case RecountOpening:
+		return recountOpening(s, c)
 	default:
 		return nil, nil
 	}
@@ -304,10 +309,7 @@ func addAccount(s AccountState, c AddAccount) ([]AccountEvent, error) {
 		return nil, ErrAccountNameRequired
 	}
 
-	switch {
-	case c.Kind == accountKindCash:
-		return nil, ErrCashAccountsNotSupported
-	case !slices.Contains(AccountKinds(), c.Kind):
+	if !slices.Contains(AccountKinds(), c.Kind) {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownAccountKind, c.Kind)
 	}
 
@@ -318,6 +320,10 @@ func addAccount(s AccountState, c AddAccount) ([]AccountEvent, error) {
 
 	if c.StartDate.IsZero() {
 		return nil, ErrStartDateRequired
+	}
+
+	if err := checkOpeningCount(c.Kind, c.OpeningCount, currency); err != nil {
+		return nil, err
 	}
 
 	return []AccountEvent{AccountAdded{

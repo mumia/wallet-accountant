@@ -11,12 +11,6 @@ import (
 // yet: each answers 501 until its ticket in .scratch/cash-accounts-and-transfers
 // lands.
 
-// RecountOpening implements recountOpening (ticket 02).
-func (h *AccountHandler) RecountOpening(context.Context, *oas.OpeningRecount, oas.RecountOpeningParams,
-) (oas.RecountOpeningRes, error) {
-	return nil, httpapi.ErrNotImplemented
-}
-
 // RecordCashTransaction implements recordCashTransaction (tickets 03, 07
 // and 09).
 func (h *TransactionHandler) RecordCashTransaction(context.Context, *oas.CashTransactionCreation,
@@ -28,12 +22,6 @@ func (h *TransactionHandler) RecordCashTransaction(context.Context, *oas.CashTra
 // GetMatch implements getMatch (ticket 05).
 func (h *TransactionHandler) GetMatch(context.Context, oas.GetMatchParams) (oas.GetMatchRes, error) {
 	return nil, httpapi.ErrNotImplemented
-}
-
-// cashAccountPending reports whether an Account creation asks for a cash
-// Account or sends an Opening count (ticket 02).
-func cashAccountPending(req *oas.AccountCreation) bool {
-	return req.Kind == "CASH" || req.OpeningCount.Set || req.OpeningCountConfirmation.Set
 }
 
 // cashClosePending reports whether a Month close sends a Cash count's date

@@ -44,6 +44,7 @@ func (l ingestionLedger) ImportAccount(ctx context.Context, tx *eventstore.Tx, a
 	}
 
 	return ingestionapp.ImportAccount{
+		Cash:     a.Kind == ledgerdomain.AccountKindCash,
 		Currency: currency, StartDate: a.StartDate, AwaitingFirstStatementImport: a.AwaitingFirstStatementImport,
 		OpenMonth: a.OpenMonth,
 	}, nil
