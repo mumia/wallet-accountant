@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -155,6 +156,12 @@ func (l ingestionLedger) BookAccepted(ctx context.Context, tx *eventstore.Tx, b 
 		// Ingestion checked the month first; this is a Close that ran
 		// meanwhile.
 		return m
+	}
+
+	if refused, ok := errors.AsType[*ledgerdomain.DirectionError](err); ok {
+		return &ingestionapp.CategoryDirectionError{
+			Kind: strings.ToUpper(string(refused.Kind)), Direction: strings.ToUpper(string(refused.Direction)), Err: err,
+		}
 	}
 
 	switch {

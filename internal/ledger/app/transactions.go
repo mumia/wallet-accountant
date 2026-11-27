@@ -38,6 +38,10 @@ var (
 	// ErrInternalCategory is returned for booking an Imported transaction to
 	// an Internal Category other than Uncategorised.
 	ErrInternalCategory = domain.ErrInternalCategory
+	// ErrCategoryDirection is returned, as a *domain.DirectionError, for
+	// choosing an Expense Category for money in or an Income Category for
+	// money out.
+	ErrCategoryDirection = domain.ErrCategoryDirection
 	// ErrCurrencyMismatch is returned for booking an amount in another
 	// currency than the Account's.
 	ErrCurrencyMismatch = errors.New("amount isn't in the account currency")
@@ -230,13 +234,19 @@ type ImportedBooking struct {
 // the row's amount, dates, description and payee and linked to it, and the
 // Account's balance and Uncategorised count for the Booking month. No
 // Category, or Uncategorised, books the other side to Uncategorised; any
-// other Internal Category is ErrInternalCategory, and a Category not in the
-// Household ErrCategoryNotFound. Ingestion calls it when a User Accepts
+// other Internal Category is ErrInternalCategory, a Category not in the
+// Household ErrCategoryNotFound, and an Expense Category on money in or an
+// Income Category on money out ErrCategoryDirection, as a
+// *domain.DirectionError. Ingestion calls it when a User Accepts
 // (consistency map: Accept imported transaction).
 func (t *Transactions) RecordImported(ctx context.Context, tx *eventstore.Tx, b ImportedBooking) error {
-	category, uncategorised, err := t.chooseCategory(ctx, tx, b.Category)
+	category, uncategorised, kind, err := t.chooseCategory(ctx, tx, b.Category)
 	if err != nil {
 		return err
+	}
+
+	if err := domain.FitsDirection(kind, b.Amount); err != nil {
+		return err //nolint:wrapcheck // the domain's refusal, as a *domain.DirectionError
 	}
 
 	fold, found, err := t.accounts.Folds.Load(ctx, tx, b.Account)

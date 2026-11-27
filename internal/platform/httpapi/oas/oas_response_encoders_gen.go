@@ -640,7 +640,7 @@ func encodeChangeTransactionResponse(response ChangeTransactionRes, w http.Respo
 
 		return nil
 
-	case *ChangeTransactionUnprocessableEntity:
+	case *TransferProblem:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err

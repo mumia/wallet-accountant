@@ -100,7 +100,8 @@ func TestReopenBlockedFlipsWithAnAcceptInTheOpenMonth(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t, tenthOfMarch()), "alice")
 	housing := f.createCategory(t, "Housing", "EXPENSE")
-	f.acceptAll(t, housing, "Rent", "Salary")
+	f.acceptAll(t, housing, "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 	f.closed(t, "2026-01", "2510.50")
 
 	months := f.assertMonths(t, "2026-03 NOT_OPEN_YET", "2026-02 OPEN", "2026-01 CLOSED")

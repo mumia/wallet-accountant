@@ -36,6 +36,10 @@ docs: |-
   month the Category can still change, but not to Uncategorised: that
   gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024). A
   Transfer leg's other side is always the Account transfer Category:
-  it gets 422 `/problems/transfer-leg`.
+  it gets 422 `/problems/transfer-leg`. Only then is the Category's
+  kind checked against the amount's sign, in closed months too: an
+  Expense Category on money in, or an Income Category on money out,
+  gets 422 `/problems/category-direction`, naming `category_id`,
+  `category_kind` and the amount's `direction`.
 
   Operation `changeTransaction`.

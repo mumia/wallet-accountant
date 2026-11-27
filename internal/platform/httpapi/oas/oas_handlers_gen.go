@@ -43,9 +43,13 @@ func (c *codeRecorder) Unwrap() http.ResponseWriter {
 // Discarded one 409 `/problems/imported-transaction-discarded`; a Suspected duplicate, not yet kept,
 // gets 409 `/problems/imported-transaction-suspected-duplicate`; any other Internal Category gets 422
 // `/problems/internal-category`, and a Category that isn't one of the Household's gets 422
-// `/problems/invalid-category`. A row booked in a closed month gets 409 `/problems/month-closed`, and
-// one booked in a month that isn't open yet 409 `/problems/month-not-open-yet` (ADR-0024); both name
-// the `booking_month`, and the second also the Account's `open_month`.
+// `/problems/invalid-category`. An Expense Category takes only money out (a negative amount) and an
+// Income Category only money in (a positive one); Uncategorised and a zero amount take either. A
+// Category of the wrong kind gets 422 `/problems/category-direction`, naming `category_id`,
+// `category_kind` and the amount's `direction`, and nothing is booked. A row booked in a closed month
+// gets 409 `/problems/month-closed`, and one booked in a month that isn't open yet 409
+// `/problems/month-not-open-yet` (ADR-0024); both name the `booking_month`, and the second also the
+// Account's `open_month`.
 //
 // With `transfer_account_id` instead of `category_id`, the row is Accepted as a Transfer to or from
 // that cash Account: the Transaction recorded is the row's Transfer leg, against the Account transfer
@@ -1397,7 +1401,10 @@ func (s *Server) handleChangeMeRequest(args [0]string, argsEscaped bool, w http.
 // reversal gets 422 `/problems/transaction-is-a-reversal`, and the Opening balance Transaction 422
 // `/problems/opening-balance-transaction`. In a closed month the Category can still change, but not to
 // Uncategorised: that gets 422 `/problems/uncategorised-in-closed-month` (ADR-0024). A Transfer leg's
-// other side is always the Account transfer Category: it gets 422 `/problems/transfer-leg`.
+// other side is always the Account transfer Category: it gets 422 `/problems/transfer-leg`. Only then
+// is the Category's kind checked against the amount's sign, in closed months too: an Expense Category
+// on money in, or an Income Category on money out, gets 422 `/problems/category-direction`, naming
+// `category_id`, `category_kind` and the amount's `direction`.
 //
 // PATCH /households/{household_id}/transactions/{transaction_id}
 func (s *Server) handleChangeTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -7749,19 +7756,21 @@ func (s *Server) handlePreviewStatementImportRequest(args [2]string, argsEscaped
 // currency. The other side is `category_id`, with the Category rules of Accept (absent, or the
 // Uncategorised Category, leaves it in Uncategorised; any other Internal Category gets 422
 // `/problems/internal-category`; a Category that isn't one of the Household's 422
-// `/problems/invalid-category`), or `counterpart_account_id`, which makes it a Transfer leg against
-// the Account transfer Category. A leg whose counterpart is a statement Account stays In transit until
-// that Account's row is Accepted as a Transfer and Matched to it. A leg whose counterpart is another
-// cash Account records that Account's leg too, with the opposite amount and the same date, description
-// and payee, and confirms the Match between them: the response is this Account's leg, with its
-// `match_id`. Both `category_id` and `counterpart_account_id`, a counterpart that is the Account
-// itself, isn't one of the Household's, or has another Account currency get 422
-// `/problems/invalid-transfer` with a `reason`. An Account that isn't cash gets 422
-// `/problems/not-a-cash-account`: statement Accounts take Transactions only from their statements. A
-// zero amount, one in another currency or with more decimal places than the Account's, a date after
-// today (UTC) or before the Account's start date gets 422 `/problems/invalid-transaction`. A date in a
-// closed month of either Account gets 409 `/problems/month-closed`, naming the Account in
-// `account_id`; months after the open month are fine for a cash Account (ADR-0024).
+// `/problems/invalid-category`; an Expense Category on money in, or an Income Category on money out,
+// 422 `/problems/category-direction`, naming `category_id`, `category_kind` and the amount's
+// `direction`), or `counterpart_account_id`, which makes it a Transfer leg against the Account
+// transfer Category. A leg whose counterpart is a statement Account stays In transit until that
+// Account's row is Accepted as a Transfer and Matched to it. A leg whose counterpart is another cash
+// Account records that Account's leg too, with the opposite amount and the same date, description and
+// payee, and confirms the Match between them: the response is this Account's leg, with its `match_id`.
+// Both `category_id` and `counterpart_account_id`, a counterpart that is the Account itself, isn't one
+// of the Household's, or has another Account currency get 422 `/problems/invalid-transfer` with a
+// `reason`. An Account that isn't cash gets 422 `/problems/not-a-cash-account`: statement Accounts
+// take Transactions only from their statements. A zero amount, one in another currency or with more
+// decimal places than the Account's, a date after today (UTC) or before the Account's start date gets
+// 422 `/problems/invalid-transaction`. A date in a closed month of either Account gets 409
+// `/problems/month-closed`, naming the Account in `account_id`; months after the open month are fine
+// for a cash Account (ADR-0024).
 //
 // POST /households/{household_id}/accounts/{account_id}/transactions
 func (s *Server) handleRecordCashTransactionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {

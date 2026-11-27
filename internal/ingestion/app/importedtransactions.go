@@ -53,7 +53,26 @@ var (
 	// ErrInvalidTransfer is returned, as a *TransferRefusedError, for an
 	// Accept as Transfer the Ledger refuses.
 	ErrInvalidTransfer = errors.New("invalid transfer")
+	// ErrCategoryDirection is returned, as a *CategoryDirectionError, for
+	// accepting with an Expense Category a row that is money in, or with an
+	// Income Category one that is money out.
+	ErrCategoryDirection = errors.New("the category's kind doesn't fit the amount's direction")
 )
+
+// CategoryDirectionError is a Category the Ledger refused because its kind
+// doesn't fit the row's direction. Kind (INCOME or EXPENSE) and Direction
+// (IN or OUT) are the contract's names.
+type CategoryDirectionError struct {
+	Kind      string
+	Direction string
+	Err       error
+}
+
+func (e *CategoryDirectionError) Error() string {
+	return fmt.Sprintf("%s (%s, %s): %v", ErrCategoryDirection, e.Kind, e.Direction, e.Err)
+}
+
+func (e *CategoryDirectionError) Unwrap() []error { return []error{ErrCategoryDirection, e.Err} }
 
 // TransferRefusedError is a refused Accept as Transfer. Reason is the
 // contract's name for why (such as COUNTERPART_NOT_CASH).

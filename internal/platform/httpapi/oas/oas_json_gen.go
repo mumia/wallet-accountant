@@ -3134,44 +3134,6 @@ func (s *ChangeTransactionUnauthorized) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
-// Encode encodes ChangeTransactionUnprocessableEntity as json.
-func (s *ChangeTransactionUnprocessableEntity) Encode(e *jx.Encoder) {
-	unwrapped := (*Problem)(s)
-
-	unwrapped.Encode(e)
-}
-
-// Decode decodes ChangeTransactionUnprocessableEntity from json.
-func (s *ChangeTransactionUnprocessableEntity) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode ChangeTransactionUnprocessableEntity to nil")
-	}
-	var unwrapped Problem
-	if err := func() error {
-		if err := unwrapped.Decode(d); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return errors.Wrap(err, "alias")
-	}
-	*s = ChangeTransactionUnprocessableEntity(unwrapped)
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *ChangeTransactionUnprocessableEntity) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *ChangeTransactionUnprocessableEntity) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
 // Encode encodes CloseAccountMonthBadRequest as json.
 func (s *CloseAccountMonthBadRequest) Encode(e *jx.Encoder) {
 	unwrapped := (*Problem)(s)
@@ -15078,14 +15040,35 @@ func (s *TransferProblem) encodeFields(e *jx.Encoder) {
 			s.Reason.Encode(e)
 		}
 	}
+	{
+		if s.CategoryID.Set {
+			e.FieldStart("category_id")
+			s.CategoryID.Encode(e)
+		}
+	}
+	{
+		if s.CategoryKind.Set {
+			e.FieldStart("category_kind")
+			s.CategoryKind.Encode(e)
+		}
+	}
+	{
+		if s.Direction.Set {
+			e.FieldStart("direction")
+			s.Direction.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfTransferProblem = [5]string{
+var jsonFieldsNameOfTransferProblem = [8]string{
 	0: "type",
 	1: "title",
 	2: "status",
 	3: "detail",
 	4: "reason",
+	5: "category_id",
+	6: "category_kind",
+	7: "direction",
 }
 
 // Decode decodes TransferProblem from json.
@@ -15152,6 +15135,36 @@ func (s *TransferProblem) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"reason\"")
+			}
+		case "category_id":
+			if err := func() error {
+				s.CategoryID.Reset()
+				if err := s.CategoryID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"category_id\"")
+			}
+		case "category_kind":
+			if err := func() error {
+				s.CategoryKind.Reset()
+				if err := s.CategoryKind.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"category_kind\"")
+			}
+		case "direction":
+			if err := func() error {
+				s.Direction.Reset()
+				if err := s.Direction.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"direction\"")
 			}
 		default:
 			return d.Skip()

@@ -31,7 +31,7 @@ _Avoid_: Initial cash, starting cash
 ## Categories
 
 **Category**:
-What money was received for or spent on. A Category belongs to a Household, has one kind (Income, Expense or Internal), and can be nested to any depth, for example Food › Eating out › Coffee.
+What money was received for or spent on. A Category belongs to a Household, has one kind (Income, Expense or Internal), and can be nested to any depth, for example Food › Eating out › Coffee. An Income Category takes only money in and an Expense Category only money out, judged by the amount on the Account; Internal Categories and a zero amount take either (ADR-0004). A refund is money in, so it goes to an Income Category.
 _Avoid_: Tag, type, bucket, expense account
 
 **Internal Category**:

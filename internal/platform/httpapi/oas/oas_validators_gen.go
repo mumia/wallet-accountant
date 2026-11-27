@@ -759,14 +759,6 @@ func (s *ChangeTransactionUnauthorized) Validate() error {
 	return nil
 }
 
-func (s *ChangeTransactionUnprocessableEntity) Validate() error {
-	alias := (*Problem)(s)
-	if err := alias.Validate(); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (s *CloseAccountMonthBadRequest) Validate() error {
 	alias := (*Problem)(s)
 	if err := alias.Validate(); err != nil {

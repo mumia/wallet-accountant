@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/ogen-go/ogen/ogenerrors"
 	"github.com/ogen-go/ogen/validate"
 
@@ -73,6 +74,28 @@ func Unprocessable(typ, title, detail string) *oas.TransferProblem {
 	p := Problem(http.StatusUnprocessableEntity, typ, title, detail)
 
 	return &oas.TransferProblem{Type: p.Type, Title: p.Title, Status: p.Status, Detail: p.Detail}
+}
+
+// CategoryDirectionType is the problem type of a Category whose kind
+// doesn't fit the direction of the amount.
+const CategoryDirectionType = "/problems/category-direction"
+
+// CategoryDirection is the 422 of a Category refused because its kind,
+// INCOME or EXPENSE, doesn't fit the amount's direction, IN or OUT.
+func CategoryDirection(category uuid.UUID, kind, direction string) *oas.TransferProblem {
+	detail := "An Expense Category takes only money out, and this amount is money in. " +
+		"Choose an Income Category, or Uncategorised."
+	if kind == "INCOME" {
+		detail = "An Income Category takes only money in, and this amount is money out. " +
+			"Choose an Expense Category, or Uncategorised."
+	}
+
+	p := Unprocessable(CategoryDirectionType, "Category doesn't fit the amount", detail)
+	p.CategoryID = oas.NewOptUUID(category)
+	p.CategoryKind = oas.NewOptString(kind)
+	p.Direction = oas.NewOptString(direction)
+
+	return p
 }
 
 // Problem types about a month and the Account's Open month (ADR-0024).

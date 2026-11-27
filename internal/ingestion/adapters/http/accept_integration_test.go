@@ -363,7 +363,8 @@ func TestTheTransactionListPagesThroughAcceptedTransactions(t *testing.T) {
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
 
 	// February's coffee is Accepted once January is closed.
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Salary", "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
 	f.closed(t, "2026-01", "2510.50")
 	f.accepted(t, "Coffee", nil)
 

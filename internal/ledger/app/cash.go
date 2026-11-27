@@ -255,9 +255,13 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 			return t.recordCashLeg(ctx, tx, [2]uuid.UUID{id, otherLeg}, c, &out)
 		}
 
-		category, uncategorised, err := t.chooseCategory(ctx, tx, c.Category)
+		category, uncategorised, kind, err := t.chooseCategory(ctx, tx, c.Category)
 		if err != nil {
 			return err
+		}
+
+		if err := domain.FitsDirection(kind, c.Amount); err != nil {
+			return err //nolint:wrapcheck // the domain's refusal, as a *domain.DirectionError
 		}
 
 		if _, err := t.accounts.Execute(ctx, tx, c.Account, domain.BookTransaction{
