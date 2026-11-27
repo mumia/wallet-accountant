@@ -5,6 +5,7 @@ package http_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/mumia/wallet-accountant/internal/apitest"
@@ -154,5 +155,67 @@ func TestMovingCashIntoAClosedMonthIsRefused(t *testing.T) {
 
 	if n := len(legsOn(t, app, token, household, wallet.AccountID)); n != 0 {
 		t.Errorf("%d wallet legs, want none", n)
+	}
+}
+
+// Moving cash on a date before the counterpart's start date is refused as
+// a Transfer, naming the counterpart: it didn't exist yet. A date before
+// the Account's own start date stays an invalid Transaction.
+func TestMovingCashBeforeTheCounterpartsStartDateIsRefused(t *testing.T) {
+	t.Parallel()
+	app := apitest.Start(t, apitest.WithClock(march10))
+	token := app.Register(t, "https://issuer.example", "alice")
+	household := newHousehold(t, app, token)
+	wallet := addWallet(t, app, token, household, "40.00")
+
+	var purse account
+	app.Post(t, "/api/households/"+household+"/accounts", token, map[string]any{
+		"name": "Purse", "kind": "CASH", "currency": "EUR", "start_date": "2026-02-01",
+		"opening_count": eur("10.00"), "opening_count_confirmation": eur("10.00"),
+	}).AssertJSON(t, http.StatusCreated, &purse)
+
+	res := recordCash(t, app, token, household, wallet.AccountID, map[string]any{
+		"date": "2026-01-20", "amount": eur("-15.00"), "description": "To the purse",
+		"counterpart_account_id": purse.AccountID,
+	})
+	res.AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-transfer")
+
+	var p struct {
+		Reason    string `json:"reason"`
+		AccountID string `json:"account_id"`
+		Detail    string `json:"detail"`
+	}
+
+	if err := json.Unmarshal(res.Body, &p); err != nil {
+		t.Fatal(err)
+	}
+
+	if p.Reason != "BEFORE_START_DATE" || p.AccountID != purse.AccountID ||
+		!strings.Contains(p.Detail, "2026-01-20") || !strings.Contains(p.Detail, "2026-02-01") {
+		t.Errorf("problem = %s, want BEFORE_START_DATE naming the purse and both dates", res.Body)
+	}
+
+	if b := walletBalance(t, app, token, household, wallet.AccountID); b != "40.00" {
+		t.Errorf("wallet balance = %s, want 40.00: nothing recorded", b)
+	}
+
+	if b := walletBalance(t, app, token, household, purse.AccountID); b != "10.00" {
+		t.Errorf("purse balance = %s, want 10.00: nothing recorded", b)
+	}
+
+	// From the purse, the same date is before its own start date.
+	recordCash(t, app, token, household, purse.AccountID, map[string]any{
+		"date": "2026-01-20", "amount": eur("-5.00"), "description": "To the wallet",
+		"counterpart_account_id": wallet.AccountID,
+	}).AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-transaction")
+
+	// On the purse's start date, both legs are recorded.
+	recordCash(t, app, token, household, wallet.AccountID, map[string]any{
+		"date": "2026-02-01", "amount": eur("-15.00"), "description": "To the purse",
+		"counterpart_account_id": purse.AccountID,
+	}).AssertJSON(t, http.StatusCreated, &cashLeg{})
+
+	if b := walletBalance(t, app, token, household, purse.AccountID); b != "25.00" {
+		t.Errorf("purse balance = %s, want 25.00", b)
 	}
 }

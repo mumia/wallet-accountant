@@ -5307,8 +5307,9 @@ func (s *TransactionList) SetItems(val []Transaction) {
 func (*TransactionList) listTransferSuggestionsRes() {}
 
 // Problem details (RFC 9457) of a request that can't be carried out. A refused Transfer
-// (`/problems/invalid-transfer`) gives its `reason`. A Category whose kind doesn't fit the amount's
-// sign (`/problems/category-direction`) gives `category_id`, `category_kind` and `direction`.
+// (`/problems/invalid-transfer`) gives its `reason`, and for `BEFORE_START_DATE` the cash Account in
+// `account_id`. A Category whose kind doesn't fit the amount's sign (`/problems/category-direction`)
+// gives `category_id`, `category_kind` and `direction`.
 // Ref: #/components/schemas/TransferProblem
 type TransferProblem struct {
 	// Identifies the problem type.
@@ -5321,6 +5322,9 @@ type TransferProblem struct {
 	Detail OptString `json:"detail"`
 	// Why the Transfer is refused.
 	Reason OptString `json:"reason"`
+	// The cash Account the Transfer is refused for: for `BEFORE_START_DATE`, the one whose start date is
+	// after the leg's date.
+	AccountID OptUUID `json:"account_id"`
 	// The Category refused for its kind.
 	CategoryID OptUUID `json:"category_id"`
 	// The refused Category's kind: an Income Category takes only money in, an Expense Category only money
@@ -5353,6 +5357,11 @@ func (s *TransferProblem) GetDetail() OptString {
 // GetReason returns the value of Reason.
 func (s *TransferProblem) GetReason() OptString {
 	return s.Reason
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *TransferProblem) GetAccountID() OptUUID {
+	return s.AccountID
 }
 
 // GetCategoryID returns the value of CategoryID.
@@ -5393,6 +5402,11 @@ func (s *TransferProblem) SetDetail(val OptString) {
 // SetReason sets the value of Reason.
 func (s *TransferProblem) SetReason(val OptString) {
 	s.Reason = val
+}
+
+// SetAccountID sets the value of AccountID.
+func (s *TransferProblem) SetAccountID(val OptUUID) {
+	s.AccountID = val
 }
 
 // SetCategoryID sets the value of CategoryID.

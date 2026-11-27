@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -117,6 +118,13 @@ func TestBookingATransactionRefusals(t *testing.T) {
 	early := book
 	early.BookingDate = time.Date(2026, time.January, 14, 0, 0, 0, 0, time.UTC)
 	decidertest.Given(t, domain.Account, opened()...).When(early).ThenError(domain.ErrBookedBeforeStartDate)
+
+	// The refusal names both dates, so it can say when the history begins.
+	_, err := domain.Account.Decide(decidertest.Given(t, domain.Account, opened()...).State(), early)
+	if e, ok := errors.AsType[*domain.StartDateError](err); !ok ||
+		e.BookingDate.Format(domain.DateLayout) != "2026-01-14" || e.StartDate.Format(domain.DateLayout) != "2026-01-15" {
+		t.Errorf("err = %v, want a *StartDateError for 2026-01-14 before 2026-01-15", err)
+	}
 
 	noDate := book
 	noDate.BookingDate = time.Time{}

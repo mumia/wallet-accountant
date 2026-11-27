@@ -33,12 +33,26 @@ var transferDetails = map[app.TransferReason]string{
 	app.TransferUnknownAccount:     "The counterpart is not one of the Household's Accounts.",
 	app.TransferNotAMatchingLeg:    "The legs aren't the two sides of one Transfer.",
 	app.TransferCounterpartNotCash: "Transfers between statement Accounts come later.",
+	app.TransferBeforeStartDate:    "The date is before the counterpart cash Account's start date.",
 }
 
-// transferRefused is the 422 of a refused Transfer.
+// transferRefused is the 422 of a refused Transfer. A leg before the
+// counterpart's start date names that Account and both dates.
 func transferRefused(e *app.TransferRefusedError) *oas.TransferProblem {
-	p := httpapi.Unprocessable(InvalidTransferType, "Invalid Transfer", transferDetails[e.Reason])
+	detail := transferDetails[e.Reason]
+
+	if d, ok := errors.AsType[*domain.StartDateError](e); ok {
+		detail = fmt.Sprintf("The date, %s, is before the counterpart cash Account's start date, %s: it didn't exist "+
+			"yet. Record the Transaction against a Category, or as a Transfer with a cash Account that started on or "+
+			"before that date.", d.BookingDate.Format(domain.DateLayout), d.StartDate.Format(domain.DateLayout))
+	}
+
+	p := httpapi.Unprocessable(InvalidTransferType, "Invalid Transfer", detail)
 	p.Reason = oas.NewOptString(string(e.Reason))
+
+	if a, ok := errors.AsType[*app.AccountError](e); ok {
+		p.AccountID = oas.NewOptUUID(a.Account)
+	}
 
 	return p
 }

@@ -75,10 +75,16 @@ func (e *CategoryDirectionError) Error() string {
 func (e *CategoryDirectionError) Unwrap() []error { return []error{ErrCategoryDirection, e.Err} }
 
 // TransferRefusedError is a refused Accept as Transfer. Reason is the
-// contract's name for why (such as COUNTERPART_NOT_CASH).
+// contract's name for why (such as COUNTERPART_NOT_CASH). For a row dated
+// before the cash Account's start date (BEFORE_START_DATE), AccountID
+// names the cash Account, and Date and StartDate the two dates; otherwise
+// they are zero.
 type TransferRefusedError struct {
-	Reason string
-	Err    error
+	Reason    string
+	AccountID uuid.UUID
+	Date      time.Time
+	StartDate time.Time
+	Err       error
 }
 
 func (e *TransferRefusedError) Error() string {

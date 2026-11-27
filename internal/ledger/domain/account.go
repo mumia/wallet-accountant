@@ -61,6 +61,21 @@ var (
 	ErrBookedBeforeStartDate = errors.New("booked before the account's start date")
 )
 
+// StartDateError is a booking refused because its date is before the
+// Account's start date (ErrBookedBeforeStartDate). It names both dates, so
+// the refusal can say when the Account's history begins.
+type StartDateError struct {
+	BookingDate time.Time
+	StartDate   time.Time
+}
+
+func (e *StartDateError) Error() string {
+	return fmt.Sprintf("%s: %s is before %s", ErrBookedBeforeStartDate, e.BookingDate.Format(DateLayout),
+		e.StartDate.Format(DateLayout))
+}
+
+func (e *StartDateError) Unwrap() error { return ErrBookedBeforeStartDate }
+
 // MonthLayout is how a Booking month is written.
 const MonthLayout = "2006-01"
 
@@ -391,8 +406,7 @@ func bookTransaction(s AccountState, c BookTransaction) ([]AccountEvent, error) 
 	case c.BookingDate.IsZero():
 		return nil, ErrBookingDateRequired
 	case c.BookingDate.Before(s.StartDate):
-		return nil, fmt.Errorf("%w: %s is before %s", ErrBookedBeforeStartDate,
-			c.BookingDate.Format(DateLayout), s.StartDate.Format(DateLayout))
+		return nil, &StartDateError{BookingDate: c.BookingDate, StartDate: s.StartDate}
 	case month < s.OpenMonth:
 		return nil, s.lockedMonth(month, ErrMonthClosed)
 	case month > s.OpenMonth && !s.IsCash():
