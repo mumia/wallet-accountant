@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -45,12 +46,34 @@ var transferDetails = map[string]string{
 	"SAME_ACCOUNT":      "transfer_account_id is the row's own Account.",
 	"CURRENCY_MISMATCH": "transfer_account_id has another Account currency than the row.",
 	"UNKNOWN_ACCOUNT":   "transfer_account_id is not one of the Household's Accounts.",
+	"BEFORE_START_DATE": "The row's date is before the cash Account's start date: the cash Account didn't exist " +
+		"yet.",
 }
 
 // transferRefused is the 422 of a refused Accept as Transfer.
 func transferRefused(reason string) *oas.TransferProblem {
 	p := httpapi.Unprocessable(InvalidTransferType, "Invalid Transfer", transferDetails[reason])
 	p.Reason = oas.NewOptString(reason)
+
+	return p
+}
+
+// refusedTransfer is the 422 of an Accept as Transfer the Ledger refused.
+// A row before the cash Account's start date names that Account and both
+// dates.
+func refusedTransfer(e *app.TransferRefusedError) *oas.TransferProblem {
+	p := transferRefused(e.Reason)
+
+	if !e.StartDate.IsZero() {
+		p.Detail = oas.NewOptString(fmt.Sprintf("The row's date, %s, is before the cash Account's start date, %s: "+
+			"the cash Account didn't exist yet. Accept the row against an Expense Category, such as cash spending, "+
+			"or as a Transfer to a cash Account that started on or before the row's date.",
+			e.Date.Format(time.DateOnly), e.StartDate.Format(time.DateOnly)))
+	}
+
+	if e.AccountID != uuid.Nil {
+		p.AccountID = oas.NewOptUUID(e.AccountID)
+	}
 
 	return p
 }
@@ -127,7 +150,7 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 	}
 
 	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
-		return transferRefused(refused.Reason), nil
+		return refusedTransfer(refused), nil
 	}
 
 	if refused, ok := errors.AsType[*app.CategoryDirectionError](err); ok && a.Category != nil {

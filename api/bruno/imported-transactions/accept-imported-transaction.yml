@@ -68,9 +68,12 @@ docs: |-
   (`COUNTERPART_NOT_CASH`; Transfers between statement Accounts come
   later), the row's own Account (`SAME_ACCOUNT`), another Account
   currency (`CURRENCY_MISMATCH`), an Account that isn't the
-  Household's (`UNKNOWN_ACCOUNT`), or a leg to match that isn't an In
+  Household's (`UNKNOWN_ACCOUNT`), a leg to match that isn't an In
   transit leg on the cash Account naming this row's Account with the
-  opposite amount (`NOT_A_MATCHING_LEG`).
+  opposite amount (`NOT_A_MATCHING_LEG`), or a row dated before the
+  cash Account's start date, when the cash Account didn't exist yet
+  (`BEFORE_START_DATE`, naming the cash Account in `account_id`).
+  Nothing is booked, and the row stays pending.
 
   Retrying with the same Idempotency-Key and body returns the original
   result and never books twice.

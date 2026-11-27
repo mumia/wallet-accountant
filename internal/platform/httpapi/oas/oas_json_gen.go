@@ -15041,6 +15041,12 @@ func (s *TransferProblem) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.AccountID.Set {
+			e.FieldStart("account_id")
+			s.AccountID.Encode(e)
+		}
+	}
+	{
 		if s.CategoryID.Set {
 			e.FieldStart("category_id")
 			s.CategoryID.Encode(e)
@@ -15060,15 +15066,16 @@ func (s *TransferProblem) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfTransferProblem = [8]string{
+var jsonFieldsNameOfTransferProblem = [9]string{
 	0: "type",
 	1: "title",
 	2: "status",
 	3: "detail",
 	4: "reason",
-	5: "category_id",
-	6: "category_kind",
-	7: "direction",
+	5: "account_id",
+	6: "category_id",
+	7: "category_kind",
+	8: "direction",
 }
 
 // Decode decodes TransferProblem from json.
@@ -15076,7 +15083,7 @@ func (s *TransferProblem) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode TransferProblem to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -15136,6 +15143,16 @@ func (s *TransferProblem) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"reason\"")
 			}
+		case "account_id":
+			if err := func() error {
+				s.AccountID.Reset()
+				if err := s.AccountID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"account_id\"")
+			}
 		case "category_id":
 			if err := func() error {
 				s.CategoryID.Reset()
@@ -15175,8 +15192,9 @@ func (s *TransferProblem) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b00000111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

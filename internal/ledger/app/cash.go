@@ -252,7 +252,7 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 		}
 
 		if c.Counterpart != nil {
-			return t.recordCashLeg(ctx, tx, [2]uuid.UUID{id, otherLeg}, c, &out)
+			return t.recordCashLeg(ctx, tx, [2]uuid.UUID{id, otherLeg}, c, fold.State.StartDate, &out)
 		}
 
 		category, uncategorised, kind, err := t.chooseCategory(ctx, tx, c.Category)
@@ -303,10 +303,17 @@ func (t *Transactions) RecordCash(ctx context.Context, household uuid.UUID, c Ca
 //     ids[1], on the same date with the same description and payee, both
 //     booked in Account ID order, and the two are Matched at once. Both
 //     Accounts must take the date: a closed month of either refuses it,
-//     naming that Account.
+//     naming that Account, and a date before the counterpart's start date
+//     is a *TransferRefusedError (BEFORE_START_DATE). A date before the
+//     Account's own start date, start, is refused first, as for any cash
+//     Transaction.
 func (t *Transactions) recordCashLeg(ctx context.Context, tx *eventstore.Tx, ids [2]uuid.UUID, c CashTransaction,
-	out *TransactionDetail,
+	start time.Time, out *TransactionDetail,
 ) error {
+	if c.Date.Before(start) {
+		return &domain.StartDateError{BookingDate: c.Date, StartDate: start}
+	}
+
 	other, found, err := t.accounts.Folds.Load(ctx, tx, *c.Counterpart)
 	if err != nil {
 		return fmt.Errorf("load account %s: %w", *c.Counterpart, err)
@@ -332,7 +339,12 @@ func (t *Transactions) recordCashLeg(ctx context.Context, tx *eventstore.Tx, ids
 	}
 
 	for _, leg := range legs {
-		if err := t.RecordTransferLeg(ctx, tx, leg); err != nil {
+		err := t.RecordTransferLeg(ctx, tx, leg)
+		if err != nil && leg.Account != c.Account {
+			return counterpartLeg(err)
+		}
+
+		if err != nil {
 			return err
 		}
 	}

@@ -41,6 +41,7 @@ const (
 	TransferCurrencyMatch      TransferReason = "CURRENCY_MISMATCH"
 	TransferUnknownAccount     TransferReason = "UNKNOWN_ACCOUNT"
 	TransferNotAMatchingLeg    TransferReason = "NOT_A_MATCHING_LEG"
+	TransferBeforeStartDate    TransferReason = "BEFORE_START_DATE"
 )
 
 // TransferRefusedError is a refused Transfer and why.
@@ -66,6 +67,19 @@ type AccountError struct {
 func (e *AccountError) Error() string { return fmt.Sprintf("account %s: %v", e.Account, e.Err) }
 
 func (e *AccountError) Unwrap() error { return e.Err }
+
+// counterpartLeg turns the counterpart cash Account's refusal of a leg
+// dated before its start date into a refused Transfer
+// (BEFORE_START_DATE): that Account didn't exist yet on the leg's date.
+// The *AccountError stays in the chain, naming the Account. Any other
+// error is returned as it is.
+func counterpartLeg(err error) error {
+	if errors.Is(err, domain.ErrBookedBeforeStartDate) {
+		return &TransferRefusedError{Reason: TransferBeforeStartDate, Err: err}
+	}
+
+	return err
+}
 
 // MatchAggregate is the Match Decider wired to the runtime.
 type MatchAggregate = eventstore.Aggregate[domain.MatchState, domain.MatchCommand, domain.MatchEvent]
@@ -346,7 +360,8 @@ func (t *Transactions) matchingLeg(ctx context.Context, tx *eventstore.Tx, leg u
 //   - the cash leg is recorded with the opposite amount, the row's
 //     description and payee, on the row's Transaction date, flagged as
 //     created by the Transfer; a closed month of the cash Account is
-//     refused as an *AccountError naming it;
+//     refused as an *AccountError naming it, and a date before its start
+//     date as a *TransferRefusedError (BEFORE_START_DATE);
 //   - the two legs are Matched, the caller confirming it.
 //
 // The legs are booked in Account ID order, so two Transfers between the
@@ -390,7 +405,12 @@ func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b Im
 	}
 
 	for _, leg := range legs {
-		if err := t.RecordTransferLeg(ctx, tx, leg); err != nil {
+		err := t.RecordTransferLeg(ctx, tx, leg)
+		if err != nil && leg.Account == cashLeg.Account {
+			return uuid.Nil, counterpartLeg(err)
+		}
+
+		if err != nil {
 			return uuid.Nil, err
 		}
 	}

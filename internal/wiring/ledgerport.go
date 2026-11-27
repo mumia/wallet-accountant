@@ -288,7 +288,17 @@ func uncheckedImport(u ingestionapp.UncheckedImport) ledgerdomain.UncheckedImpor
 // nil when err isn't one.
 func transferRefusal(err error) error {
 	if refused, ok := errors.AsType[*ledgerapp.TransferRefusedError](err); ok {
-		return &ingestionapp.TransferRefusedError{Reason: string(refused.Reason), Err: err}
+		out := &ingestionapp.TransferRefusedError{Reason: string(refused.Reason), Err: err}
+
+		if a, ok := errors.AsType[*ledgerapp.AccountError](err); ok {
+			out.AccountID = a.Account
+		}
+
+		if d, ok := errors.AsType[*ledgerdomain.StartDateError](err); ok {
+			out.Date, out.StartDate = d.BookingDate, d.StartDate
+		}
+
+		return out
 	}
 
 	return nil

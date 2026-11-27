@@ -5,6 +5,7 @@ package http_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/mumia/wallet-accountant/internal/apitest"
@@ -240,5 +241,61 @@ func TestAcceptingAsATransferIntoAClosedCashMonthIsRefused(t *testing.T) {
 
 	if f.pending["Rent"].ImportedTransactionID == "" || len(f.imported(t, "?state=PENDING").Items) != 3 {
 		t.Error("the row should still be pending")
+	}
+}
+
+// A row dated before the cash Account's start date can't be Accepted as a
+// Transfer to it: the cash Account didn't exist yet. The refusal names the
+// cash Account and nothing is booked. A row dated on the start date is
+// Accepted.
+func TestAcceptingAsATransferBeforeTheCashStartDateIsRefused(t *testing.T) {
+	t.Parallel()
+	f := newAcceptFixture(t, apitest.Start(t), "alice")
+
+	count := map[string]any{"amount": json.Number("20.00"), "currency": "EUR"}
+
+	var wallet struct {
+		AccountID string `json:"account_id"`
+	}
+
+	f.app.Post(t, "/api/households/"+f.household+"/accounts", f.token, map[string]any{
+		"name": "Wallet", "kind": "CASH", "currency": "EUR", "start_date": "2026-01-15",
+		"opening_count": count, "opening_count_confirmation": count,
+	}).AssertJSON(t, http.StatusCreated, &wallet)
+
+	// Rent is dated 2026-01-01, before the wallet's start date.
+	res := f.accept(t, "Rent", map[string]any{"transfer_account_id": wallet.AccountID})
+	res.AssertProblem(t, http.StatusUnprocessableEntity, "/problems/invalid-transfer")
+
+	var p struct {
+		Reason    string `json:"reason"`
+		AccountID string `json:"account_id"`
+		Detail    string `json:"detail"`
+	}
+
+	if err := json.Unmarshal(res.Body, &p); err != nil {
+		t.Fatal(err)
+	}
+
+	if p.Reason != "BEFORE_START_DATE" || p.AccountID != wallet.AccountID ||
+		!strings.Contains(p.Detail, "2026-01-01") || !strings.Contains(p.Detail, "2026-01-15") {
+		t.Errorf("problem = %s, want BEFORE_START_DATE naming the wallet and both dates", res.Body)
+	}
+
+	if len(f.imported(t, "?state=PENDING").Items) != 3 {
+		t.Error("the row should still be pending")
+	}
+
+	if b := f.balanceOf(t, f.account); b != "510.50" {
+		t.Errorf("bank balance = %s, want 510.50, nothing booked", b)
+	}
+
+	if b := f.balanceOf(t, wallet.AccountID); b != "20.00" {
+		t.Errorf("wallet balance = %s, want 20.00, nothing booked", b)
+	}
+
+	// Salary is dated 2026-01-15, the wallet's start date.
+	if a := f.accepted(t, "Salary", map[string]any{"transfer_account_id": wallet.AccountID}); a.State != "ACCEPTED" {
+		t.Errorf("accepted = %+v, want ACCEPTED on the start date", a)
 	}
 }

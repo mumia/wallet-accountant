@@ -99,7 +99,7 @@ Ticket 01 writes these into `api/openapi.yaml`. Every other ticket implements pa
 - **`reverseTransaction`**'s description is extended with the Transfer rules ("Ledger: Transfers").
 - **`listAccountTransactions`** gains the query parameter `in_transit=true`, which lists only the Account's unmatched, non-reversed Transfer legs.
 - **Categories:** the contract has no internal role field, so Account transfer appears as an `INTERNAL` Category named "Account transfer" (decided in ticket 01).
-- **`TransferProblem`** (response `TransferRefused`) is the schema of every 422 of `acceptImportedTransaction`, `recordCashTransaction` and `listTransferSuggestions`: a Problem with an optional `reason` (`CATEGORY_AND_TRANSFER`, `MATCH_WITHOUT_TRANSFER`, `COUNTERPART_NOT_CASH`, `SAME_ACCOUNT`, `CURRENCY_MISMATCH`, `UNKNOWN_ACCOUNT`, `NOT_A_MATCHING_LEG`).
+- **`TransferProblem`** (response `TransferRefused`) is the schema of every 422 of `acceptImportedTransaction`, `recordCashTransaction` and `listTransferSuggestions`: a Problem with an optional `reason` (`CATEGORY_AND_TRANSFER`, `MATCH_WITHOUT_TRANSFER`, `COUNTERPART_NOT_CASH`, `SAME_ACCOUNT`, `CURRENCY_MISMATCH`, `UNKNOWN_ACCOUNT`, `NOT_A_MATCHING_LEG`, `BEFORE_START_DATE`), and for `BEFORE_START_DATE` an optional `account_id` naming the cash Account.
 - **`MonthProblem`** gains `account_id`.
 
 **New operations**
@@ -196,6 +196,7 @@ The Imported transaction's own checks are unchanged. The bank row's Account must
    - It is recorded on the cash Account with the opposite amount and the row's description and payee, and `createdbytransfer` set.
    - Its Booking and Transaction date are **the row's Transaction date**.
    - A date in a closed month of the cash Account is refused with `month-closed`, naming the cash Account. A later month is fine.
+   - A date before the cash Account's start date is refused with `invalid-transfer`, reason `BEFORE_START_DATE`, naming the cash Account in `account_id`: the cash Account didn't exist yet. Nothing is booked and the row stays pending. (Added 2026-11-27, `transfer-before-start-date/`.)
 4. **Cash leg, with `match_transaction_id`.**
    - The leg must be an unmatched, non-reversed Transfer leg on the cash Account, naming the row's Account as its counterpart, with the opposite amount. Otherwise the Accept is refused with `invalid-transfer`, reason `not-a-matching-leg`.
    - The ±7-day window applies only to suggestions, not to confirming.
@@ -207,7 +208,7 @@ The Imported transaction's own checks are unchanged. The bank row's Account must
 `recordCashTransaction` with `counterpart_account_id`:
 
 - **The counterpart is a non-cash Account.** One leg is recorded, In transit, waiting for the bank row's Accept.
-- **The counterpart is a cash Account (cash ↔ cash).** Both legs are recorded, and the Match is confirmed. The counterpart's leg has the opposite amount and the same date, description and payee. Both Accounts must accept the date (no closed month on either).
+- **The counterpart is a cash Account (cash ↔ cash).** Both legs are recorded, and the Match is confirmed. The counterpart's leg has the opposite amount and the same date, description and payee. Both Accounts must accept the date (no closed month on either). A date before the counterpart's start date is refused with `invalid-transfer`, reason `BEFORE_START_DATE`, naming the counterpart in `account_id`. A date before the Account's own start date stays `invalid-transaction`, and is checked first.
 
 **Reversing a Transfer leg**
 
