@@ -53,7 +53,8 @@ func TestVoidingALaterImportWithRowsInAClosedMonthIsRefused(t *testing.T) {
 	}
 
 	f.discard(t, "Groceries").AssertJSON(t, http.StatusOK, &importedTransaction{})
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 	f.closed(t, "2026-01", "2510.50")
 
 	f.assertVoidBlockedBy(t, later.StatementImportID, "TOUCHES_CLOSED_MONTH")

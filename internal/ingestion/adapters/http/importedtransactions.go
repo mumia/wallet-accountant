@@ -130,6 +130,10 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 		return transferRefused(refused.Reason), nil
 	}
 
+	if refused, ok := errors.AsType[*app.CategoryDirectionError](err); ok && a.Category != nil {
+		return httpapi.CategoryDirection(*a.Category, refused.Kind, refused.Direction), nil
+	}
+
 	switch {
 	case errors.Is(err, app.ErrHouseholdNotFound), errors.Is(err, app.ErrImportedTransactionNotFound),
 		errors.Is(err, app.ErrAccountNotFound):

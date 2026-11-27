@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -82,11 +83,28 @@ func correctionRefusal(err error) (correction, bool) {
 	}
 }
 
+// categoryDirection answers a Category refused because its kind doesn't
+// fit the amount's direction, naming the chosen Category; nil for any other
+// error.
+func categoryDirection(err error, category uuid.UUID) *oas.TransferProblem {
+	refused, ok := errors.AsType[*domain.DirectionError](err)
+	if !ok {
+		return nil
+	}
+
+	return httpapi.CategoryDirection(category, strings.ToUpper(string(refused.Kind)),
+		strings.ToUpper(string(refused.Direction)))
+}
+
 // ChangeTransaction implements changeTransaction.
 func (h *TransactionHandler) ChangeTransaction(ctx context.Context, req *oas.TransactionChange,
 	params oas.ChangeTransactionParams,
 ) (oas.ChangeTransactionRes, error) {
 	d, err := h.transactions.SetCategory(ctx, params.HouseholdID, params.TransactionID, req.CategoryID)
+	if p := categoryDirection(err, req.CategoryID); p != nil {
+		return p, nil
+	}
+
 	if c, ok := correctionRefusal(err); ok {
 		switch {
 		case c.notFound:
@@ -98,7 +116,9 @@ func (h *TransactionHandler) ChangeTransaction(ctx context.Context, req *oas.Tra
 		case c.problem.Status == http.StatusConflict:
 			return new(oas.ChangeTransactionConflict(c.problem)), nil
 		default:
-			return new(oas.ChangeTransactionUnprocessableEntity(c.problem)), nil
+			p := c.problem
+
+			return &oas.TransferProblem{Type: p.Type, Title: p.Title, Status: p.Status, Detail: p.Detail}, nil
 		}
 	}
 

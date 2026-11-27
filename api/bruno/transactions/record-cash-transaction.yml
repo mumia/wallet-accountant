@@ -48,7 +48,10 @@ docs: |-
   (absent, or the Uncategorised Category, leaves it in Uncategorised;
   any other Internal Category gets 422 `/problems/internal-category`;
   a Category that isn't one of the Household's 422
-  `/problems/invalid-category`), or `counterpart_account_id`, which
+  `/problems/invalid-category`; an Expense Category on money in, or
+  an Income Category on money out, 422 `/problems/category-direction`,
+  naming `category_id`, `category_kind` and the amount's
+  `direction`), or `counterpart_account_id`, which
   makes it a Transfer leg against the Account transfer Category. A
   leg whose counterpart is a statement Account stays In transit until
   that Account's row is Accepted as a Transfer and Matched to it. A

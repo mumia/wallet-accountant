@@ -209,8 +209,11 @@ type (
 	}
 
 	// SetTransactionCategory sets the Category of the non-Account side.
+	// Kind is the chosen Category's, which must fit the direction of the
+	// Account Posting's amount.
 	SetTransactionCategory struct {
 		CategoryID sharedkernel.ID
+		Kind       Kind
 	}
 )
 
@@ -392,7 +395,9 @@ func reverseOpeningBalance(s TransactionState, c ReverseOpeningBalance) ([]Trans
 }
 
 // setTransactionCategory changes the Category of the non-Account side; the
-// Category it already has changes nothing.
+// Category it already has changes nothing. A Transaction that can't take
+// any Category says so before the chosen kind is checked against the
+// direction of its Account Posting.
 func setTransactionCategory(s TransactionState, c SetTransactionCategory) ([]TransactionEvent, error) {
 	if err := correctable(s); err != nil {
 		return nil, err
@@ -409,11 +414,31 @@ func setTransactionCategory(s TransactionState, c SetTransactionCategory) ([]Tra
 		return nil, ErrCategoryRequired
 	case previous == sharedkernel.NilID:
 		return nil, ErrNotOneCategory
-	case previous == c.CategoryID:
+	}
+
+	if err := FitsDirection(c.Kind, s.accountAmount()); err != nil {
+		return nil, err
+	}
+
+	if previous == c.CategoryID {
 		return nil, nil
 	}
 
 	return []TransactionEvent{TransactionCategorySet{CategoryID: c.CategoryID, PreviousCategoryID: previous}}, nil
+}
+
+// accountAmount is the sum of the Account Postings: the amount the
+// Transaction moves into (positive) or out of (negative) its Account.
+func (s TransactionState) accountAmount() sharedkernel.Decimal {
+	var sum sharedkernel.Decimal
+
+	for _, p := range s.Postings {
+		if p.AccountID != sharedkernel.NilID {
+			sum = sum.Add(p.Amount)
+		}
+	}
+
+	return sum
 }
 
 func checkPosting(p Posting) error {

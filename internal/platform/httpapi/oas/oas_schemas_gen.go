@@ -1028,10 +1028,6 @@ type ChangeTransactionUnauthorized Problem
 
 func (*ChangeTransactionUnauthorized) changeTransactionRes() {}
 
-type ChangeTransactionUnprocessableEntity Problem
-
-func (*ChangeTransactionUnprocessableEntity) changeTransactionRes() {}
-
 type CloseAccountMonthBadRequest Problem
 
 func (*CloseAccountMonthBadRequest) closeAccountMonthRes() {}
@@ -5311,7 +5307,8 @@ func (s *TransactionList) SetItems(val []Transaction) {
 func (*TransactionList) listTransferSuggestionsRes() {}
 
 // Problem details (RFC 9457) of a request that can't be carried out. A refused Transfer
-// (`/problems/invalid-transfer`) gives its `reason`.
+// (`/problems/invalid-transfer`) gives its `reason`. A Category whose kind doesn't fit the amount's
+// sign (`/problems/category-direction`) gives `category_id`, `category_kind` and `direction`.
 // Ref: #/components/schemas/TransferProblem
 type TransferProblem struct {
 	// Identifies the problem type.
@@ -5324,6 +5321,13 @@ type TransferProblem struct {
 	Detail OptString `json:"detail"`
 	// Why the Transfer is refused.
 	Reason OptString `json:"reason"`
+	// The Category refused for its kind.
+	CategoryID OptUUID `json:"category_id"`
+	// The refused Category's kind: an Income Category takes only money in, an Expense Category only money
+	// out.
+	CategoryKind OptString `json:"category_kind"`
+	// Which way the amount moves on the Account: `IN` (positive) or `OUT` (negative).
+	Direction OptString `json:"direction"`
 }
 
 // GetType returns the value of Type.
@@ -5351,6 +5355,21 @@ func (s *TransferProblem) GetReason() OptString {
 	return s.Reason
 }
 
+// GetCategoryID returns the value of CategoryID.
+func (s *TransferProblem) GetCategoryID() OptUUID {
+	return s.CategoryID
+}
+
+// GetCategoryKind returns the value of CategoryKind.
+func (s *TransferProblem) GetCategoryKind() OptString {
+	return s.CategoryKind
+}
+
+// GetDirection returns the value of Direction.
+func (s *TransferProblem) GetDirection() OptString {
+	return s.Direction
+}
+
 // SetType sets the value of Type.
 func (s *TransferProblem) SetType(val string) {
 	s.Type = val
@@ -5376,7 +5395,23 @@ func (s *TransferProblem) SetReason(val OptString) {
 	s.Reason = val
 }
 
+// SetCategoryID sets the value of CategoryID.
+func (s *TransferProblem) SetCategoryID(val OptUUID) {
+	s.CategoryID = val
+}
+
+// SetCategoryKind sets the value of CategoryKind.
+func (s *TransferProblem) SetCategoryKind(val OptString) {
+	s.CategoryKind = val
+}
+
+// SetDirection sets the value of Direction.
+func (s *TransferProblem) SetDirection(val OptString) {
+	s.Direction = val
+}
+
 func (*TransferProblem) acceptImportedTransactionRes() {}
+func (*TransferProblem) changeTransactionRes()         {}
 func (*TransferProblem) listTransferSuggestionsRes()   {}
 func (*TransferProblem) recordCashTransactionRes()     {}
 

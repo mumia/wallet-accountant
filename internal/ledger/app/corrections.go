@@ -38,33 +38,35 @@ type TransactionDetail struct {
 }
 
 // chooseCategory returns the Category a User chose for the non-Account
-// side, and the Household's Uncategorised Category. None, or Uncategorised,
-// is Uncategorised; any other Internal Category is ErrInternalCategory, and
-// a Category not in the Household ErrCategoryNotFound.
+// side, its kind, and the Household's Uncategorised Category. None, or
+// Uncategorised, is Uncategorised; any other Internal Category is
+// ErrInternalCategory, and a Category not in the Household
+// ErrCategoryNotFound. Whether the kind fits the amount's direction is the
+// caller's to check, after its own refusals (domain.FitsDirection).
 func (t *Transactions) chooseCategory(ctx context.Context, tx *eventstore.Tx, chosen *uuid.UUID,
-) (category, uncategorised uuid.UUID, err error) {
+) (category, uncategorised uuid.UUID, kind domain.Kind, err error) {
 	uncategorised, err = t.internal.InternalCategory(ctx, tx, domain.RoleUncategorised)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("find the uncategorised category: %w", err)
+		return uuid.Nil, uuid.Nil, "", fmt.Errorf("find the uncategorised category: %w", err)
 	}
 
 	if chosen == nil || *chosen == uncategorised {
-		return uncategorised, uncategorised, nil
+		return uncategorised, uncategorised, domain.KindInternal, nil
 	}
 
 	fold, found, err := t.categories.Folds.Load(ctx, tx, *chosen)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("load category %s: %w", *chosen, err)
+		return uuid.Nil, uuid.Nil, "", fmt.Errorf("load category %s: %w", *chosen, err)
 	}
 
 	switch {
 	case !found:
-		return uuid.Nil, uuid.Nil, ErrCategoryNotFound
+		return uuid.Nil, uuid.Nil, "", ErrCategoryNotFound
 	case fold.State.Kind == domain.KindInternal:
-		return uuid.Nil, uuid.Nil, fmt.Errorf("%w: only Uncategorised can be chosen", ErrInternalCategory)
+		return uuid.Nil, uuid.Nil, "", fmt.Errorf("%w: only Uncategorised can be chosen", ErrInternalCategory)
 	}
 
-	return *chosen, uncategorised, nil
+	return *chosen, uncategorised, fold.State.Kind, nil
 }
 
 // SetCategory sets the Category of the Transaction's non-Account side, with
@@ -89,12 +91,12 @@ func (t *Transactions) SetCategory(ctx context.Context, household, id, category 
 			return ErrTransferLeg
 		}
 
-		chosen, uncategorised, err := t.chooseCategory(ctx, tx, &category)
+		chosen, uncategorised, kind, err := t.chooseCategory(ctx, tx, &category)
 		if err != nil {
 			return err
 		}
 
-		res, err := t.transactions.Execute(ctx, tx, id, domain.SetTransactionCategory{CategoryID: chosen})
+		res, err := t.transactions.Execute(ctx, tx, id, domain.SetTransactionCategory{CategoryID: chosen, Kind: kind})
 		if err != nil {
 			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
 		}

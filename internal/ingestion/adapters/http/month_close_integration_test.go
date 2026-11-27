@@ -212,7 +212,8 @@ func TestAMonthOfAnAccountAwaitingItsFirstImportHasNoBalance(t *testing.T) {
 func TestClosingAMonth(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	before := f.transactions(t, "")
 
@@ -259,7 +260,8 @@ func TestMonthsCloseInOrder(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
 	housing := f.createCategory(t, "Housing", "EXPENSE")
-	f.acceptAll(t, housing, "Rent", "Salary")
+	f.acceptAll(t, housing, "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	p := monthConflict(t, f.closeMonth(t, "2026-02", "2500.00"), "/problems/month-not-open-yet")
 	if p.Title != "Month not open yet" || p.Detail != "February 2026 isn't open yet. Close January 2026 first." ||
@@ -296,7 +298,8 @@ func TestTheOpenMonthClosesOnlyOnceItHasEnded(t *testing.T) {
 	set(time.Date(2026, time.January, 31, 23, 59, 59, 0, time.UTC))
 
 	f := newAcceptFixture(t, apitest.Start(t, apitest.WithClock(func() time.Time { return *now.Load() })), "alice")
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	p := monthConflict(t, f.closeMonth(t, "2026-01", "2510.50"), "/problems/month-not-ended")
 	if p.Title != "Month not ended" || p.Detail != "January 2026 can be closed from 1 February 2026." ||
@@ -345,7 +348,8 @@ func TestEachCloseConditionRefusesTheClose(t *testing.T) {
 	t.Run("balance mismatch", func(t *testing.T) {
 		t.Parallel()
 		f := newAcceptFixture(t, app, "mismatch")
-		f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+		f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+		f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 		p := f.refusedClose(t, "2026-01", "2500.00")
 		assertReasons(t, p, "BALANCE_MISMATCH")
@@ -388,7 +392,8 @@ func TestAWaitingBalanceCheckRefusesTheClose(t *testing.T) {
 		f.pending[i.Description] = i
 	}
 
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary", "Bonus")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary", "Bonus")
 
 	assertMonth(t, f.month(t, "2026-01"), "OPEN", 0, 0, 0)
 	assertMonth(t, f.month(t, "2026-02"), "NOT_OPEN_YET", 1, 1, 0)
@@ -427,7 +432,8 @@ func TestAFailedBalanceCheckRefusesTheCloseUntilItsImportIsVoided(t *testing.T) 
 		t.Fatalf("check = %q, want failed", got.BalanceCheck)
 	}
 
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	p := f.refusedClose(t, "2026-01", "2510.50")
 	assertReasons(t, p, "BALANCE_CHECK_NOT_PASSED")
@@ -457,7 +463,8 @@ func TestAnImportWithRowsOnlyAfterTheMonthDoesntRefuseTheClose(t *testing.T) {
 	}
 
 	housing := f.createCategory(t, "Housing", "EXPENSE")
-	f.acceptAll(t, housing, "Rent", "Salary")
+	f.acceptAll(t, housing, "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	assertMonth(t, f.closed(t, "2026-01", "2510.50"), "CLOSED", 0, 0, 0)
 	f.acceptAll(t, housing, "Coffee")
@@ -480,7 +487,8 @@ func TestAVoidedImportsWaitingCheckDoesntRefuseTheClose(t *testing.T) {
 		t.Fatalf("check = %q, want the voided import still waiting", got.BalanceCheck)
 	}
 
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	assertMonth(t, f.closed(t, "2026-01", "2510.50"), "CLOSED", 0, 0, 0)
 }
@@ -542,7 +550,8 @@ func TestAnotherHouseholdsMonthsAre404(t *testing.T) {
 	app := apitest.Start(t)
 	alice := newAcceptFixture(t, app, "alice")
 	bob := newAcceptFixture(t, app, "bob")
-	alice.acceptAll(t, alice.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	alice.acceptAll(t, alice.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	alice.acceptAll(t, alice.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	for _, household := range []string{alice.household, bob.household} {
 		path := "/api/households/" + household + "/accounts/" + alice.account + "/months/2026-01"
@@ -560,7 +569,8 @@ func TestAnotherHouseholdsMonthsAre404(t *testing.T) {
 func TestRetryingACloseWithItsIdempotencyKeyReplaysIt(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 
 	first := f.app.PostWithKey(t, f.monthPath("2026-01")+"/close", f.token, "close-1", statementBalance("2510.50", "EUR"))
 	if first.Status != http.StatusOK {
@@ -578,7 +588,8 @@ func TestAClosedMonthSurvivesARebuild(t *testing.T) {
 	t.Parallel()
 	app := apitest.Start(t)
 	f := newAcceptFixture(t, app, "alice")
-	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent", "Salary")
+	f.acceptAll(t, f.createCategory(t, "Housing", "EXPENSE"), "Rent")
+	f.acceptAll(t, f.createCategory(t, "Pay", "INCOME"), "Salary")
 	f.closed(t, "2026-01", "2510.50")
 	f.accepted(t, "Coffee", nil)
 

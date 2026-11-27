@@ -80,6 +80,10 @@ func (h *TransactionHandler) RecordCashTransaction(ctx context.Context, req *oas
 		return transferRefused(refused), nil
 	}
 
+	if p := categoryDirection(err, req.CategoryID.Value); p != nil {
+		return p, nil
+	}
+
 	invalid := func(typ, title, detail string) (oas.RecordCashTransactionRes, error) {
 		return httpapi.Unprocessable(typ, title, detail), nil
 	}

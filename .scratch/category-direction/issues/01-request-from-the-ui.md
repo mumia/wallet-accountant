@@ -4,7 +4,7 @@
 
 **Blocked by:** —
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Asked by:** wallet-accountant-ui, while grilling its cash-accounts-and-transfers spec (`../wallet-accountant-ui/.scratch/cash-accounts-and-transfers/spec.md`, "The sign rule"). The UI's ticket 11 waits for the release that carries this. The decisions below were settled by grilling on 2026-11-26.
 
@@ -47,21 +47,21 @@ It's mapped in the Ledger HTTP adapter (`changeTransaction`, `recordCashTransact
 
 ## Acceptance criteria
 
-- [ ] Domain: the direction function, with unit tests for Expense/Income × in/out/zero, and Uncategorised taking either direction.
-- [ ] `SetTransactionCategory` decider: refuses a wrong-direction kind after its existing refusals. Domain tests cover the precedence: a reversal or a reversed Transaction with a wrong-direction Category still gets its own refusal, and so does a closed-month change to Uncategorised.
-- [ ] `chooseCategory` returns the kind, and all three call sites apply the check before booking.
-- [ ] Integration tests, one or more per operation:
-  - [ ] Accept: an Expense Category on a positive row and an Income Category on a negative row get 422 `category-direction` with all fields, and nothing is booked (the row stays pending). A 0.00 row takes either kind. A row in a closed month still gets 409 `month-closed`.
-  - [ ] `changeTransaction`: refused the same way, including in a closed month. A reversal still gets `transaction-is-a-reversal`.
-  - [ ] `recordCashTransaction`: refused the same way, and nothing is recorded.
-  - [ ] Existing tests and fixtures that book a wrong-direction Category are fixed to book a fitting one, not exempted.
-- [ ] `api/openapi.yaml`:
-  - [ ] the new problem type and its schema;
-  - [ ] each of the three operations' descriptions names the refusal (it's part of "Accept's Category rules", which cash and `changeTransaction` refer to);
-  - [ ] `make generate`, with the generated code and the Bruno collection committed.
-- [ ] `internal/ledger/CONTEXT.md`: the rule added under **Category**, saying that an Income Category takes only money in and an Expense Category only money out, and that a zero amount takes either.
-- [ ] `docs/adr/0004-accounts-hold-money-categories-explain-it.md`: a paragraph saying the rule follows from what Income and Expense mean, and that later Rules and Category suggestions (Ingestion) and Scheduled transactions (Planning) must respect it.
-- [ ] `make lint` and `make test-integration` pass.
+- [x] Domain: the direction function, with unit tests for Expense/Income × in/out/zero, and Uncategorised taking either direction.
+- [x] `SetTransactionCategory` decider: refuses a wrong-direction kind after its existing refusals. Domain tests cover the precedence: a reversal or a reversed Transaction with a wrong-direction Category still gets its own refusal, and so does a closed-month change to Uncategorised.
+- [x] `chooseCategory` returns the kind, and all three call sites apply the check before booking.
+- [x] Integration tests, one or more per operation:
+  - [x] Accept: an Expense Category on a positive row and an Income Category on a negative row get 422 `category-direction` with all fields, and nothing is booked (the row stays pending). A 0.00 row takes either kind. A row in a closed month still gets 409 `month-closed`.
+  - [x] `changeTransaction`: refused the same way, including in a closed month. A reversal still gets `transaction-is-a-reversal`.
+  - [x] `recordCashTransaction`: refused the same way, and nothing is recorded.
+  - [x] Existing tests and fixtures that book a wrong-direction Category are fixed to book a fitting one, not exempted.
+- [x] `api/openapi.yaml`:
+  - [x] the new problem type and its schema;
+  - [x] each of the three operations' descriptions names the refusal (it's part of "Accept's Category rules", which cash and `changeTransaction` refer to);
+  - [x] `make generate`, with the generated code and the Bruno collection committed.
+- [x] `internal/ledger/CONTEXT.md`: the rule added under **Category**, saying that an Income Category takes only money in and an Expense Category only money out, and that a zero amount takes either.
+- [x] `docs/adr/0004-accounts-hold-money-categories-explain-it.md`: a paragraph saying the rule follows from what Income and Expense mean, and that later Rules and Category suggestions (Ingestion) and Scheduled transactions (Planning) must respect it.
+- [x] `make lint` and `make test-integration` pass.
 - [ ] After merge: annotated tag `v0.10.0` on the merge commit.
 
 ## Existing data
@@ -73,3 +73,16 @@ Ignore it. No migration or clean-up is needed, because all current data can be d
 - Any change to Transfers, or to the Internal Categories.
 - A special case for refunds.
 - Bulk Accept: the UI makes one call per row, so each row is refused on its own.
+
+## Comments
+
+2026-11-26, implementation notes:
+
+- **Problem shape:** the three new fields are optional properties of `TransferProblem`, the schema already used by the 422 of Accept and cash (it now describes "a request that can't be carried out", not only Transfers). `changeTransaction`'s 422 moved from `UnprocessableEntity` (`Problem`) to `TransferRefused` (`TransferProblem`), so all three share one shape. On the wire this is a superset of the old body, but `oas.ChangeTransactionUnprocessableEntity` is gone from the generated code. `httpapi.CategoryDirection` builds the problem for both adapters.
+- **Domain:** `domain.FitsDirection(kind, amount)` returns a `*domain.DirectionError` (`ErrCategoryDirection`) with the kind and the `Direction` (`in`/`out`). `SetTransactionCategory` carries `Kind`. Its decider checks direction after `correctable`, `transfer-leg`, `transaction-reversed`, a missing Category and a split, and before the "same Category, no change" case. Re-choosing a wrong-direction Category that is already set is refused too. An empty `Kind` fits either way.
+- **`uncategorised-in-closed-month`** is checked by the Account Decider *after* the Transaction Decider. It can never collide with the direction check, because Uncategorised fits either way.
+- **Cash:** the direction check runs after `chooseCategory` and before booking, so it comes after `not-a-cash-account`, `invalid-transaction`, `invalid-transfer`, `internal-category` and `invalid-category`. A date in a closed month with a wrong-direction Category gets `category-direction`, because the month is checked when the Account books. That matches where `internal-category` already sat.
+- **Accept:** Ingestion keeps its month checks first. `wiring/ledgerport.go` turns the Ledger's `*DirectionError` into `*ingestionapp.CategoryDirectionError` with the contract's names.
+- **Fixtures:** Ingestion tests that Accepted Salary (and Bonus) into the Expense Category Housing now use an Income Category, Pay. `januaryClosed`'s Salary too.
+- **Docs:** besides the glossary and ADR-0004, `docs/architecture/consistency.md` names the check for Record cash Transaction, Accept imported transaction and Set Transaction Category.
+
