@@ -6,13 +6,12 @@
 # as a Zitadel identity, runs the stand-in UI's browser test and tears the
 # cluster down. With it run the chart's helm lint and the images.lock check.
 #
-# It runs on every pull request that changes more than docs (ticket 08). A
-# full run took 8 minutes on a developer's Mac and 13 to 25 here; if it stays
-# over ~15 minutes, move it to pushes to main plus nightly
-# (docs/architecture/conventions.md, "CI"). A pull request that only changes
-# .scratch/, docs/ or Markdown skips local-smoke through `changes`, not
-# paths-ignore: local-smoke is a required check, and a job skipped by its
-# `if` counts as passed, while a workflow skipped by paths never reports.
+# A full run took 8 minutes on a developer's Mac and 13 to 25 here, too slow
+# for every pull request, so it runs on pushes to main, nightly (which also
+# catches drift in the env repo and upstream images) and on demand
+# (docs/architecture/conventions.md, "CI"). It is not a required check: pull
+# requests never run it. GitHub fires the schedule on the default branch
+# (main) only.
 #
 # The env repo (mumia/wallet-accountant-deploy) is private: the secret
 # ENV_REPO_DEPLOY_KEY holds a read-only deploy key of it. The repository
@@ -20,50 +19,23 @@
 name: Smoke
 
 on:
-  pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
 
 concurrency:
   group: smoke-${{ github.ref }}
-  cancel-in-progress: true
+  # Every run is on main: let a running smoke finish, so each push's
+  # commit is tested or replaced by a newer queued one.
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  # Whether the change reaches beyond docs. Pushes to main and manual runs
-  # always smoke.
-  changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      code: ${{ steps.diff.outputs.code }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - id: diff
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [ "$EVENT" != pull_request ]; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Anything outside .scratch/, docs/ and Markdown files needs the smoke.
-          if [ "$(git diff --name-only "$BASE...HEAD" | grep -cvE '^(\.scratch/|docs/)|\.md$')" -gt 0 ]; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "code=false" >> "$GITHUB_OUTPUT"
-          fi
-
   local-smoke:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
