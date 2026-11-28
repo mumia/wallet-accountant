@@ -117,11 +117,12 @@ type Ledger interface {
 	BookAccepted(ctx context.Context, tx *eventstore.Tx, booking Booking) error
 	// BookTransfer records an Imported transaction Accepted as a Transfer:
 	// the row's Transfer leg and, for a cash counterpart, the cash leg and
-	// their Match; with MatchLeg, the Match with that In transit leg; for a
-	// bank or credit card counterpart without it, only the row's leg, In
-	// transit. It returns a *TransferRefusedError for an Account it can't be
-	// a Transfer with, and a *MonthError naming the cash Account for a cash
-	// leg in a closed month (consistency map: Accept as Transfer).
+	// their Match; with MatchLeg, the Match with that In transit leg; with
+	// MatchRow, that row's leg and the Match with it; for a bank or credit
+	// card counterpart without either, only the row's leg, In transit. It
+	// returns a *TransferRefusedError for an Account it can't be a Transfer
+	// with, and a *MonthError naming the counterpart for its leg in a
+	// closed month (consistency map: Accept as Transfer).
 	BookTransfer(ctx context.Context, tx *eventstore.Tx, booking TransferBooking) error
 	// TransferSuggestions returns the In transit legs that could be the
 	// other side of the row, on counterpart or, when it is nil, on every
@@ -148,15 +149,18 @@ type Booking struct {
 }
 
 // TransferBooking is an Imported transaction Accepted as a Transfer to or
-// from CashAccount: Booking's Category is unused, and CashLeg is the ID of
-// the cash leg to record, or MatchLeg the cash Account's leg to Match
-// instead.
+// from the Account Counterpart: Booking's Category is unused, and
+// CounterpartLeg is the ID of the leg to record on the Counterpart (the
+// cash leg, or MatchRow's leg). MatchLeg is the Counterpart's In transit
+// leg to Match instead; MatchRow the Counterpart's pending row Accepted in
+// the same command, whose leg is booked and Matched (a pair Accept).
 type TransferBooking struct {
 	Booking
 
 	Counterpart    uuid.UUID
 	CounterpartLeg uuid.UUID
 	MatchLeg       *uuid.UUID
+	MatchRow       *Booking
 }
 
 // StatementImportAggregate is the Statement import Decider wired to the

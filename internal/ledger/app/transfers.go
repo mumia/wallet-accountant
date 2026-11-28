@@ -304,12 +304,38 @@ func (t *Transactions) ConfirmTransfer(ctx context.Context, tx *eventstore.Tx, f
 // from the Account Counterpart: the row as ImportedBooking carries it (its
 // Category is ignored), and for a cash counterpart the ID of the cash leg
 // to record, CounterpartLeg. MatchLeg is the In transit leg the
-// counterpart already has, to Match instead.
+// counterpart already has, to Match instead. MatchRow is a row on a bank
+// or credit card counterpart Accepted with it (a pair Accept), whose leg
+// is booked and Matched; Ingestion checked it is pending, with the
+// opposite amount, and gave it its Transaction ID.
 type ImportedTransfer struct {
 	Row            ImportedBooking
 	Counterpart    uuid.UUID
 	CounterpartLeg uuid.UUID
 	MatchLeg       *uuid.UUID
+	MatchRow       *ImportedBooking
+}
+
+// transferLeg is the Transfer leg an Accepted row records on its Account,
+// naming counterpart: exactly as a plain Accept records the row, but
+// against Account transfer.
+func transferLeg(r ImportedBooking, counterpart uuid.UUID) TransferLegBooking {
+	return TransferLegBooking{
+		Account: r.Account, Counterpart: counterpart, Transaction: r.Transaction, ImportedTx: r.ImportedTransaction,
+		BookingDate: r.BookingDate, TransactionDate: r.TransactionDate, ValueDate: r.ValueDate,
+		Amount: r.Amount, Currency: r.Currency, Description: r.Description, Payee: r.Payee,
+	}
+}
+
+// inAccountOrder returns the two legs in Account ID order, so two Transfers
+// between the same Accounts write their folds in the same order and can't
+// deadlock.
+func inAccountOrder(a, b TransferLegBooking) [2]TransferLegBooking {
+	if b.Account.String() < a.Account.String() {
+		return [2]TransferLegBooking{b, a}
+	}
+
+	return [2]TransferLegBooking{a, b}
 }
 
 // SuggestionWindow is how far either side of a row's Transaction date a
@@ -347,6 +373,10 @@ func (t *Transactions) matchingLeg(ctx context.Context, tx *eventstore.Tx, leg u
 //     linked to it, against Account transfer, naming the counterpart;
 //   - with MatchLeg, that In transit leg of the counterpart is checked and
 //     the two are Matched;
+//   - with MatchRow, a bank or credit card counterpart's row, its leg is
+//     recorded the same way, naming the row's Account, and the two are
+//     Matched; a closed month of the counterpart is refused as an
+//     *AccountError naming it;
 //   - otherwise, a cash counterpart gets the cash leg, with the opposite
 //     amount, the row's description and payee, on the row's Transaction
 //     date, flagged as created by the Transfer, and the two are Matched; a
@@ -368,10 +398,23 @@ func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b Im
 		return uuid.Nil, err
 	}
 
-	row := TransferLegBooking{
-		Account: r.Account, Counterpart: b.Counterpart, Transaction: r.Transaction, ImportedTx: r.ImportedTransaction,
-		BookingDate: r.BookingDate, TransactionDate: r.TransactionDate, ValueDate: r.ValueDate,
-		Amount: r.Amount, Currency: r.Currency, Description: r.Description, Payee: r.Payee,
+	row := transferLeg(r, b.Counterpart)
+
+	if b.MatchRow != nil {
+		if counterpart.IsCash() || b.MatchRow.Account != b.Counterpart {
+			return uuid.Nil, fmt.Errorf("%w: the paired row %s isn't on the statement Account %s", ErrInvalidTransfer,
+				b.MatchRow.ImportedTransaction, b.Counterpart)
+		}
+
+		paired := transferLeg(*b.MatchRow, r.Account)
+
+		for _, leg := range inAccountOrder(row, paired) {
+			if err := t.RecordTransferLeg(ctx, tx, leg); err != nil {
+				return uuid.Nil, err
+			}
+		}
+
+		return t.ConfirmTransfer(ctx, tx, row.Transaction, paired.Transaction)
 	}
 
 	if b.MatchLeg != nil {
@@ -399,12 +442,7 @@ func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b Im
 		Amount: r.Amount.Neg(), Currency: r.Currency, Description: r.Description, Payee: r.Payee,
 	}
 
-	legs := []TransferLegBooking{row, cashLeg}
-	if cashLeg.Account.String() < row.Account.String() {
-		legs = []TransferLegBooking{cashLeg, row}
-	}
-
-	for _, leg := range legs {
+	for _, leg := range inAccountOrder(row, cashLeg) {
 		err := t.RecordTransferLeg(ctx, tx, leg)
 		if err != nil && leg.Account == cashLeg.Account {
 			return uuid.Nil, counterpartLeg(err)

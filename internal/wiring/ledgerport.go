@@ -129,10 +129,16 @@ func importedBooking(b ingestionapp.Booking) ledgerapp.ImportedBooking {
 
 // BookTransfer implements ingestionapp.Ledger.
 func (l ingestionLedger) BookTransfer(ctx context.Context, tx *eventstore.Tx, b ingestionapp.TransferBooking) error {
-	_, err := l.transactions.BookTransfer(ctx, tx, ledgerapp.ImportedTransfer{
+	transfer := ledgerapp.ImportedTransfer{
 		Row: importedBooking(b.Booking), Counterpart: b.Counterpart, CounterpartLeg: b.CounterpartLeg,
 		MatchLeg: b.MatchLeg,
-	})
+	}
+
+	if b.MatchRow != nil {
+		transfer.MatchRow = new(importedBooking(*b.MatchRow))
+	}
+
+	_, err := l.transactions.BookTransfer(ctx, tx, transfer)
 
 	if m := monthError(err); m != nil {
 		return m

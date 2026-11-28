@@ -207,25 +207,36 @@ func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Led
 
 // Acceptance is how a row is Accepted: to Category (nil for
 // Uncategorised), or, with TransferAccount, as a Transfer to or from that
-// cash Account. MatchLeg is a leg the cash Account already has to Match
-// instead of recording a new one.
+// Account. MatchLeg is an In transit leg the Account already has, to Match
+// instead of recording a new one; MatchRow a pending row on the Account,
+// Accepted in the same command as the Transfer's other leg (a pair
+// Accept). At most one of them is set.
 type Acceptance struct {
 	Category        *uuid.UUID
 	TransferAccount *uuid.UUID
 	MatchLeg        *uuid.UUID
+	MatchRow        *uuid.UUID
 }
+
+// TransferNotAMatchingRow is the reason a paired row is refused: it isn't
+// a pending row on the counterpart with the exact opposite amount.
+const TransferNotAMatchingRow = "NOT_A_MATCHING_ROW"
 
 // Accept Accepts a pending Imported transaction booked in its Account's
 // Open month and, through the Ledger in the same database transaction,
 // books it with exactly its amount: to the Category, or to Uncategorised
-// when it has none. Accepted as a Transfer, the Ledger books the row as
-// the bank leg, records the cash leg and Matches them (consistency map:
-// Accept as Transfer). A row in a closed month, then one in a month not
-// open yet, is refused before its own state is checked, and the Ledger
-// checks the month again as it books. The Imported transaction, the Ledger
-// Transaction and the Account each check their own version, and a conflict
-// retries the whole transaction with the same Transaction ID (ADR-0011,
-// ADR-0013, ADR-0024; consistency map: Accept imported transaction).
+// when it has none. Accepted as a Transfer, the Ledger books the row's leg
+// and, for a cash counterpart, the cash leg, and Matches them (consistency
+// map: Accept as Transfer). With MatchRow (a pair Accept), once the row's
+// own state is checked, the paired row is checked (see pairedRow), both
+// are Accepted, their folds written in ID order so two crossing pair
+// Accepts can't deadlock, and the Ledger books both legs and their Match.
+// A row in a closed month, then one in a month not open yet, is refused
+// before its own state is checked, and the Ledger checks the month again
+// as it books. The Imported transactions, the Ledger Transactions and the
+// Accounts each check their own version, and a conflict retries the whole
+// transaction with the same Transaction IDs (ADR-0011, ADR-0013, ADR-0024;
+// consistency map: Accept imported transaction).
 func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, a Acceptance,
 ) (ImportedTransaction, error) {
 	transaction, err := sharedkernel.NewID()
@@ -265,20 +276,37 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 			return err
 		}
 
-		res, err := s.rows.Execute(ctx, tx, id, domain.AcceptImportedTransaction{TransactionID: transaction})
-		if errors.Is(err, domain.ErrImportedTransactionNotImported) {
-			return ErrImportedTransactionNotFound
+		var paired *Booking
+
+		if a.MatchRow != nil && a.TransferAccount != nil {
+			// The row's own state is said before anything about the
+			// paired row.
+			if _, err := s.rows.Decider.Decide(fold.State, domain.AcceptImportedTransaction{
+				TransactionID: transaction,
+			}); err != nil {
+				return notImported(err)
+			}
+
+			row, err := s.pairedRow(ctx, tx, id, fold.State, *a.TransferAccount, *a.MatchRow)
+			if err != nil {
+				return err
+			}
+
+			// The counterpart's leg is the paired row's.
+			paired = &Booking{Transaction: counterpartLeg, ImportedTransaction: *a.MatchRow, Row: row}
 		}
 
+		state, err := s.acceptInIDOrder(ctx, tx, Booking{Transaction: transaction, ImportedTransaction: id}, paired)
 		if err != nil {
-			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+			return err
 		}
 
-		booking := Booking{Transaction: transaction, ImportedTransaction: id, Category: a.Category, Row: res.State}
+		booking := Booking{Transaction: transaction, ImportedTransaction: id, Category: a.Category, Row: state}
 
 		if a.TransferAccount != nil {
 			err = s.ledger.BookTransfer(ctx, tx, TransferBooking{
 				Booking: booking, Counterpart: *a.TransferAccount, CounterpartLeg: counterpartLeg, MatchLeg: a.MatchLeg,
+				MatchRow: paired,
 			})
 		} else {
 			err = s.ledger.BookAccepted(ctx, tx, booking)
@@ -288,7 +316,7 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 			return err //nolint:wrapcheck // the port's error
 		}
 
-		accepted, err = s.withResembled(ctx, tx, ImportedTransaction{ID: id, State: res.State})
+		accepted, err = s.withResembled(ctx, tx, ImportedTransaction{ID: id, State: state})
 
 		return err
 	})
@@ -297,6 +325,107 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 	}
 
 	return accepted, nil
+}
+
+// notImported is the Decider's refusal of a command to a row that was
+// never imported as ErrImportedTransactionNotFound; any other error is
+// returned as it is.
+func notImported(err error) error {
+	if errors.Is(err, domain.ErrImportedTransactionNotImported) {
+		return ErrImportedTransactionNotFound
+	}
+
+	return err
+}
+
+// notAMatchingRow is a paired row refused as NOT_A_MATCHING_ROW.
+func notAMatchingRow(err error) error {
+	return &TransferRefusedError{Reason: TransferNotAMatchingRow, Err: err}
+}
+
+// pairedRow loads, in the caller's transaction, the row named to be
+// Accepted with the row id as the other leg of its Transfer, and checks it
+// (statement-transfers spec "Ingestion"): a pending row on counterpart,
+// not the row itself, with the exact opposite amount in the same currency,
+// otherwise a *TransferRefusedError (NOT_A_MATCHING_ROW); then booked in
+// its Account's Open month, otherwise a *MonthError naming that Account.
+// There is no date window. A Suspected duplicate isn't pending.
+func (s *ImportedTransactions) pairedRow(ctx context.Context, tx *eventstore.Tx, id uuid.UUID,
+	row domain.ImportedTransactionState, counterpart, paired uuid.UUID,
+) (domain.ImportedTransactionState, error) {
+	fold, found, err := s.rows.Folds.Load(ctx, tx, paired)
+	if err != nil {
+		return domain.ImportedTransactionState{}, err //nolint:wrapcheck // the adapter's error
+	}
+
+	p := fold.State
+
+	if !found || paired == id || !p.Imported || p.State != domain.ImportedPending || p.AccountID != counterpart ||
+		p.Currency != row.Currency || !p.Amount.Equal(row.Amount.Neg()) {
+		return domain.ImportedTransactionState{}, notAMatchingRow(fmt.Errorf(
+			"%s isn't a pending row of %s %s on %s", paired, row.Amount.Neg(), row.Currency, counterpart))
+	}
+
+	// Not locked: booking its leg writes its Account's fold, whose version
+	// catches a Close or Reopen that ran meanwhile.
+	account, err := s.ledger.ImportAccount(ctx, tx, p.AccountID)
+	if err != nil {
+		return domain.ImportedTransactionState{}, err //nolint:wrapcheck // the port's error
+	}
+
+	for _, check := range []func(domain.ImportedTransactionState, string) error{closedMonth, notOpenYet} {
+		if err := check(p, account.OpenMonth); err != nil {
+			if m, ok := errors.AsType[*MonthError](err); ok {
+				m.AccountID = p.AccountID
+			}
+
+			return domain.ImportedTransactionState{}, err
+		}
+	}
+
+	return p, nil
+}
+
+// acceptInIDOrder records Accepted on the row, and on the paired row when
+// there is one, each linked to its own leg, writing the folds in ID order
+// so two crossing pair Accepts can't deadlock. It returns the row's new
+// state. The paired row was checked to be pending, so the Decider refusing
+// it now means another command changed it first: NOT_A_MATCHING_ROW.
+func (s *ImportedTransactions) acceptInIDOrder(ctx context.Context, tx *eventstore.Tx, row Booking, paired *Booking,
+) (domain.ImportedTransactionState, error) {
+	order := []Booking{row}
+
+	if paired != nil {
+		order = append(order, *paired)
+
+		if paired.ImportedTransaction.String() < row.ImportedTransaction.String() {
+			order[0], order[1] = order[1], order[0]
+		}
+	}
+
+	var state domain.ImportedTransactionState
+
+	for _, b := range order {
+		res, err := s.rows.Execute(ctx, tx, b.ImportedTransaction, domain.AcceptImportedTransaction{
+			TransactionID: b.Transaction,
+		})
+
+		switch {
+		case err == nil:
+		case b.ImportedTransaction != row.ImportedTransaction && (errors.Is(err, ErrImportedTransactionAlreadyAccepted) ||
+			errors.Is(err, ErrImportedTransactionDiscarded) || errors.Is(err, ErrImportedTransactionSuspectedDuplicate) ||
+			errors.Is(err, domain.ErrImportedTransactionNotPending)):
+			return domain.ImportedTransactionState{}, notAMatchingRow(err)
+		default:
+			return domain.ImportedTransactionState{}, notImported(err)
+		}
+
+		if b.ImportedTransaction == row.ImportedTransaction {
+			state = res.State
+		}
+	}
+
+	return state, nil
 }
 
 // ReturnToPending returns the Imported transaction, Accepted by the Ledger

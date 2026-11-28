@@ -44,6 +44,8 @@ var transferDetails = map[string]string{
 		"either a leg already booked or a pending row.",
 	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on transfer_account_id naming this row's " +
 		"Account with the opposite amount.",
+	"NOT_A_MATCHING_ROW": "match_imported_transaction_id isn't another pending row on transfer_account_id with the " +
+		"opposite amount in the same currency.",
 	"ACCOUNT_KIND_NOT_SUPPORTED": "Loan and crypto wallet Accounts take no part in Transfers yet: only cash, bank " +
 		"and credit card Accounts do.",
 	"SAME_ACCOUNT":      "transfer_account_id is the row's own Account.",
@@ -96,25 +98,29 @@ var importedStatesIn = map[string]domain.ImportedState{
 }
 
 // monthRefusal is the 409 of a row refused for its Booking month (closed,
-// or not open yet), or nil for any other error.
+// or not open yet), or nil for any other error. A month of another Account
+// than the row's, such as a counterpart's, names that Account.
 func monthRefusal(err error) *oas.MonthProblem {
 	e, ok := errors.AsType[*app.MonthError](err)
+
+	var p *oas.MonthProblem
 
 	switch {
 	case !ok:
 		return nil
 	case errors.Is(e.Err, app.ErrMonthClosed):
-		p := httpapi.MonthClosed(e.Month, e.OpenMonth)
-		if e.AccountID != uuid.Nil {
-			p.AccountID = oas.NewOptUUID(e.AccountID)
-		}
-
-		return p
+		p = httpapi.MonthClosed(e.Month, e.OpenMonth)
 	case errors.Is(e.Err, app.ErrMonthNotOpenYet):
-		return httpapi.MonthNotOpenYet(e.Month, e.OpenMonth)
+		p = httpapi.MonthNotOpenYet(e.Month, e.OpenMonth)
 	default:
 		return nil
 	}
+
+	if e.AccountID != uuid.Nil {
+		p.AccountID = oas.NewOptUUID(e.AccountID)
+	}
+
+	return p
 }
 
 // AcceptImportedTransaction implements acceptImportedTransaction.
@@ -138,13 +144,12 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 			return transferRefused("MATCH_LEG_AND_ROW"), nil
 		}
 
-		if v.MatchImportedTransactionID.Set {
-			return nil, fmt.Errorf("%w: match_imported_transaction_id (statement-transfers ticket 04)",
-				httpapi.ErrNotImplemented)
-		}
-
 		if id, ok := v.MatchTransactionID.Get(); ok {
 			a.MatchLeg = &id
+		}
+
+		if id, ok := v.MatchImportedTransactionID.Get(); ok {
+			a.MatchRow = &id
 		}
 
 		if id, ok := v.CategoryID.Get(); ok {

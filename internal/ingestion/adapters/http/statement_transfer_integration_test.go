@@ -5,6 +5,7 @@ package http_test
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/mumia/wallet-accountant/internal/apitest"
@@ -357,4 +358,285 @@ func TestSuggestionsComeFromEveryAccountTheRowCouldBeATransferWith(t *testing.T)
 	reasonAndAccount(t, f.app.Get(t, "/api/households/"+f.household+"/imported-transactions/"+
 		loan.pending["Loan in"].ImportedTransactionID+"/transfer-suggestions", f.token),
 		"ACCOUNT_KIND_NOT_SUPPORTED", loan.account)
+}
+
+// pair is the body of a pair Accept: a Transfer to other, with its pending
+// row described.
+func (f acceptFixture) pair(other acceptFixture, row string) map[string]any {
+	return map[string]any{
+		"transfer_account_id": other.account, "match_imported_transaction_id": other.pending[row].ImportedTransactionID,
+	}
+}
+
+// The bank's Rent row (-1000.00) and the card's Payment row (+1000.00) are
+// both pending: one Accept with match_imported_transaction_id Accepts both,
+// books both legs and Matches them (statement-transfers story 5).
+func TestPairAcceptingTwoPendingRows(t *testing.T) {
+	t.Parallel()
+	f := newAcceptFixture(t, apitest.Start(t), "alice")
+	card := f.addStatementAccount(t, "Card", "CREDIT_CARD", "2026-01-01",
+		"Date;Description;Amount\n02/01/2026;Payment;1.000,00\n", "1000.00")
+
+	rent := f.accepted(t, "Rent", f.pair(card, "Payment"))
+
+	if rent.State != "ACCEPTED" || rent.ImportedTransactionID != f.pending["Rent"].ImportedTransactionID ||
+		rent.AccountID != f.account {
+		t.Errorf("response = %+v, want the Rent row itself, ACCEPTED", rent)
+	}
+
+	if s := card.stateOf(t, "Payment"); s != "ACCEPTED" {
+		t.Errorf("Payment = %s, want ACCEPTED", s)
+	}
+
+	if b := f.balanceOf(t, f.account); b != "-489.50" {
+		t.Errorf("bank balance = %s, want -489.50 (510.50 - 1000.00)", b)
+	}
+
+	if b := f.balanceOf(t, card.account); b != "1000.00" {
+		t.Errorf("card balance = %s, want 1000.00", b)
+	}
+
+	bank, theirs := f.legsOf(t, f.account, ""), f.legsOf(t, card.account, "")
+	if len(bank) != 1 || len(theirs) != 1 {
+		t.Fatalf("legs = %+v and %+v, want one on each Account", bank, theirs)
+	}
+
+	if bank[0].TransactionID != rent.TransactionID || bank[0].CounterpartAccountID != card.account ||
+		bank[0].ImportedTransactionID != f.pending["Rent"].ImportedTransactionID {
+		t.Errorf("bank leg = %+v, want the Rent row's, naming the card", bank[0])
+	}
+
+	if theirs[0].ImportedTransactionID != card.pending["Payment"].ImportedTransactionID ||
+		theirs[0].CounterpartAccountID != f.account || theirs[0].BookingDate != "2026-01-02" ||
+		theirs[0].Description != "Payment" || theirs[0].CategoryName != "Account transfer" ||
+		theirs[0].CreatedByTransfer {
+		t.Errorf("card leg = %+v, want the Payment row's, naming the bank, not created by the Transfer", theirs[0])
+	}
+
+	if bank[0].MatchID == "" || bank[0].MatchID != theirs[0].MatchID {
+		t.Fatalf("match IDs = %q and %q, want one Match", bank[0].MatchID, theirs[0].MatchID)
+	}
+
+	var m match
+	f.app.Get(t, "/api/households/"+f.household+"/matches/"+bank[0].MatchID, f.token).
+		AssertJSON(t, http.StatusOK, &m)
+
+	if len(m.Legs) != 2 {
+		t.Errorf("match = %+v, want two legs", m)
+	}
+
+	for _, account := range []string{f.account, card.account} {
+		if legs := f.legsOf(t, account, "?in_transit=true"); len(legs) != 0 {
+			t.Errorf("legs In transit on %s = %+v, want none", account, legs)
+		}
+	}
+}
+
+// A pair Accept is refused, and nothing is booked, when the paired row
+// isn't another pending row on the counterpart with the opposite amount,
+// or its month isn't open (statement-transfers story 6). A pending row
+// can't be in a closed month (an upload ignores rows there), so the paired
+// row's month-closed check is only a backstop, like the row's own.
+func TestPairAcceptingIsRefused(t *testing.T) {
+	t.Parallel()
+	f := newAcceptFixture(t, apitest.Start(t), "alice")
+	card := f.addStatementAccount(t, "Card", "CREDIT_CARD", "2026-01-01", "Date;Description;Amount\n"+
+		"02/01/2026;Payment;1.000,00\n03/01/2026;Other amount;999,00\n04/01/2026;To discard;1.000,00\n"+
+		"05/01/2026;To accept;1.000,00\n02/02/2026;February;1.000,00\n", "4999.00")
+	savings := f.addStatementAccount(t, "Savings", "BANK_ACCOUNT", "2026-01-01",
+		"Date;Description;Amount\n02/01/2026;Savings in;1.000,00\n", "1000.00")
+
+	card.discard(t, "To discard").AssertJSON(t, http.StatusOK, &map[string]any{})
+	card.accepted(t, "To accept", map[string]any{"category_id": f.createCategory(t, "Refund", "INCOME")})
+
+	card.upload(t, "", "Date;Description;Amount\n02/01/2026;PAYMENT;1.000,00\n", "4999.00", "").
+		AssertJSON(t, http.StatusCreated, &map[string]any{})
+
+	duplicate, ok := card.suspected(t)["PAYMENT"]
+	if !ok {
+		t.Fatal("no Suspected duplicate on the card")
+	}
+
+	cardBalance := f.balanceOf(t, card.account)
+
+	withRow := func(id string) map[string]any {
+		return map[string]any{"transfer_account_id": card.account, "match_imported_transaction_id": id}
+	}
+
+	for name, body := range map[string]map[string]any{
+		"the paired row on another Account":    withRow(savings.pending["Savings in"].ImportedTransactionID),
+		"the paired row Accepted":              withRow(card.pending["To accept"].ImportedTransactionID),
+		"the paired row Discarded":             withRow(card.pending["To discard"].ImportedTransactionID),
+		"the paired row a Suspected duplicate": withRow(duplicate.ImportedTransactionID),
+		"the same row":                         withRow(f.pending["Rent"].ImportedTransactionID),
+		"another amount":                       withRow(card.pending["Other amount"].ImportedTransactionID),
+		"a row that doesn't exist":             withRow("01900000-0000-7000-8000-000000000000"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertReason(t, f.accept(t, "Rent", body), "NOT_A_MATCHING_ROW")
+		})
+	}
+
+	t.Run("both match fields", func(t *testing.T) {
+		body := f.pair(card, "Payment")
+		body["match_transaction_id"] = "01900000-0000-7000-8000-000000000000"
+		assertReason(t, f.accept(t, "Rent", body), "MATCH_LEG_AND_ROW")
+	})
+
+	t.Run("the paired row's month not open yet", func(t *testing.T) {
+		res := f.accept(t, "Rent", f.pair(card, "February"))
+		assertFebruaryNotOpenYet(t, res)
+
+		var p struct {
+			AccountID string `json:"account_id"`
+		}
+
+		if err := json.Unmarshal(res.Body, &p); err != nil {
+			t.Fatal(err)
+		}
+
+		if p.AccountID != card.account {
+			t.Errorf("problem names %q, want the card %s", p.AccountID, card.account)
+		}
+	})
+
+	if s := f.stateOf(t, "Rent"); s != "PENDING" {
+		t.Errorf("Rent = %s, want PENDING", s)
+	}
+
+	for _, row := range []string{"Payment", "Other amount", "February"} {
+		if s := card.stateOf(t, row); s != "PENDING" {
+			t.Errorf("%s = %s, want PENDING", row, s)
+		}
+	}
+
+	if s := savings.stateOf(t, "Savings in"); s != "PENDING" {
+		t.Errorf("Savings in = %s, want PENDING", s)
+	}
+
+	if b := f.balanceOf(t, f.account); b != "510.50" {
+		t.Errorf("bank balance = %s, want 510.50", b)
+	}
+
+	if b := f.balanceOf(t, card.account); b != cardBalance {
+		t.Errorf("card balance = %s, want %s", b, cardBalance)
+	}
+
+	for _, account := range []string{f.account, card.account, savings.account} {
+		if legs := f.legsOf(t, account, ""); len(legs) != 0 {
+			t.Errorf("legs on %s = %+v, want none", account, legs)
+		}
+	}
+}
+
+// Two pair Accepts racing for one row let exactly one through, whether
+// they share the paired row or cross (each Accepting the other's paired
+// row): the rows' versions catch the loser, and their folds are written in
+// ID order so the crossing pair can't deadlock.
+func TestTwoPairAcceptsForOneRowLetOnlyOneThrough(t *testing.T) {
+	t.Parallel()
+
+	for _, race := range []string{"sharing the paired row", "crossing"} {
+		t.Run(race, func(t *testing.T) {
+			t.Parallel()
+			f := newAcceptFixture(t, apitest.Start(t), "alice")
+			card := f.addStatementAccount(t, "Card", "CREDIT_CARD", "2026-01-01",
+				"Date;Description;Amount\n02/01/2026;Payment one;1.000,00\n03/01/2026;Payment two;1.000,00\n",
+				"2000.00")
+
+			accepts := []func() int{
+				func() int { return card.accept(t, "Payment one", card.pair(f, "Rent")).Status },
+				func() int { return card.accept(t, "Payment two", card.pair(f, "Rent")).Status },
+			}
+			if race == "crossing" {
+				accepts[1] = func() int { return f.accept(t, "Rent", f.pair(card, "Payment one")).Status }
+			}
+
+			statuses := make([]int, len(accepts))
+
+			var wg sync.WaitGroup
+			for i, accept := range accepts {
+				wg.Go(func() { statuses[i] = accept() })
+			}
+
+			wg.Wait()
+
+			ok := 0
+
+			for _, s := range statuses {
+				switch s {
+				case http.StatusOK:
+					ok++
+				case http.StatusUnprocessableEntity, http.StatusConflict:
+				default:
+					t.Errorf("status %d, want 200, 409 or 422", s)
+				}
+			}
+
+			if ok != 1 {
+				t.Errorf("statuses = %v, want exactly one 200", statuses)
+			}
+
+			if n := len(f.legsOf(t, f.account, "")); n != 1 {
+				t.Errorf("%d bank legs, want the Rent leg once", n)
+			}
+
+			if n := len(f.legsOf(t, card.account, "")); n != 1 {
+				t.Errorf("%d card legs, want one", n)
+			}
+
+			if b := f.balanceOf(t, card.account); b != "1000.00" {
+				t.Errorf("card balance = %s, want 1000.00", b)
+			}
+
+			if n := len(card.imported(t, "?state=PENDING").Items); n != 1 {
+				t.Errorf("%d pending card rows, want one", n)
+			}
+		})
+	}
+}
+
+// Reversing either leg of a pair-Accepted Transfer leaves the other booked
+// and In transit, returns only the reversed leg's row to pending, and
+// removes the Match (statement-transfers story 13).
+func TestReversingOneLegOfAPairAcceptLeavesTheOtherInTransit(t *testing.T) {
+	t.Parallel()
+
+	for _, reversed := range []string{"the bank leg", "the card leg"} {
+		t.Run(reversed, func(t *testing.T) {
+			t.Parallel()
+			f := newAcceptFixture(t, apitest.Start(t), "alice")
+			card := f.addStatementAccount(t, "Card", "CREDIT_CARD", "2026-01-01",
+				"Date;Description;Amount\n02/01/2026;Payment;1.000,00\n", "1000.00")
+
+			f.accepted(t, "Rent", f.pair(card, "Payment"))
+			rent, payment := f.legsOf(t, f.account, "")[0], f.legsOf(t, card.account, "")[0]
+
+			gone, kept, goneFixture, keptFixture, goneRow, keptRow, keptAccount :=
+				rent, payment, f, card, "Rent", "Payment", card.account
+			if reversed == "the card leg" {
+				gone, kept, goneFixture, keptFixture, goneRow, keptRow, keptAccount =
+					payment, rent, card, f, "Payment", "Rent", f.account
+			}
+
+			goneFixture.reversed(t, gone.TransactionID)
+
+			if s := f.matchStatus(t, rent.MatchID); s != http.StatusNotFound {
+				t.Errorf("getMatch = %d, want 404: the Match is removed", s)
+			}
+
+			inTransit := f.legsOf(t, keptAccount, "?in_transit=true")
+			if len(inTransit) != 1 || inTransit[0].TransactionID != kept.TransactionID {
+				t.Errorf("legs In transit = %+v, want the kept leg", inTransit)
+			}
+
+			if s := goneFixture.stateOf(t, goneRow); s != "PENDING" {
+				t.Errorf("reversed leg's row = %s, want PENDING", s)
+			}
+
+			if s := keptFixture.stateOf(t, keptRow); s != "ACCEPTED" {
+				t.Errorf("kept leg's row = %s, want ACCEPTED", s)
+			}
+		})
+	}
 }

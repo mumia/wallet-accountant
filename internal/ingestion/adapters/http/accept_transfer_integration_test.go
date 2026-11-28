@@ -304,31 +304,6 @@ func TestAcceptingAsATransferBeforeTheCashStartDateIsRefused(t *testing.T) {
 	}
 }
 
-// Until their tickets land, the statement-to-statement pieces of the
-// contract answer 501 and book nothing (statement-transfers ticket 01).
-func TestStatementTransferPiecesAnswerNotImplementedYet(t *testing.T) {
-	t.Parallel()
-	f := newAcceptFixture(t, apitest.Start(t), "alice")
-	savings := addAccount(t, f.app, f.token, f.household)
-	other := f.pending["Salary"].ImportedTransactionID
-
-	for name, res := range map[string]func() *apitest.Response{
-		"match_imported_transaction_id (04)": func() *apitest.Response {
-			return f.accept(t, "Rent", map[string]any{
-				"transfer_account_id": savings, "match_imported_transaction_id": other,
-			})
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			res().AssertProblem(t, http.StatusNotImplemented, "/problems/not-implemented")
-		})
-	}
-
-	if pending := f.imported(t, "?state=PENDING").Items; len(pending) != 3 {
-		t.Errorf("%d pending rows, want all three still pending", len(pending))
-	}
-}
-
 // Every Imported transaction names the Account whose statement it is on,
 // so a suggested row from another Account can be told apart (spec story 11).
 func TestImportedTransactionsNameTheirAccount(t *testing.T) {
