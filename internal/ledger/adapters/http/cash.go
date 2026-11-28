@@ -28,12 +28,13 @@ const TransferReasonCategoryAndTransfer = "CATEGORY_AND_TRANSFER"
 
 // transferDetails explains each reason a Transfer is refused.
 var transferDetails = map[app.TransferReason]string{
-	app.TransferSameAccount:        "The counterpart is the Transaction's own Account.",
-	app.TransferCurrencyMatch:      "The counterpart has another Account currency.",
-	app.TransferUnknownAccount:     "The counterpart is not one of the Household's Accounts.",
-	app.TransferNotAMatchingLeg:    "The legs aren't the two sides of one Transfer.",
-	app.TransferCounterpartNotCash: "Transfers between statement Accounts come later.",
-	app.TransferBeforeStartDate:    "The date is before the counterpart cash Account's start date.",
+	app.TransferSameAccount:     "The counterpart is the Transaction's own Account.",
+	app.TransferCurrencyMatch:   "The counterpart has another Account currency.",
+	app.TransferUnknownAccount:  "The counterpart is not one of the Household's Accounts.",
+	app.TransferNotAMatchingLeg: "The legs aren't the two sides of one Transfer.",
+	app.TransferAccountKindNotSupported: "Loan and crypto wallet Accounts take no part in Transfers yet: only cash, " +
+		"bank and credit card Accounts do.",
+	app.TransferBeforeStartDate: "The date is before the counterpart cash Account's start date.",
 }
 
 // transferRefused is the 422 of a refused Transfer. A leg before the

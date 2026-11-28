@@ -75,10 +75,11 @@ func (e *CategoryDirectionError) Error() string {
 func (e *CategoryDirectionError) Unwrap() []error { return []error{ErrCategoryDirection, e.Err} }
 
 // TransferRefusedError is a refused Accept as Transfer. Reason is the
-// contract's name for why (such as COUNTERPART_NOT_CASH). For a row dated
-// before the cash Account's start date (BEFORE_START_DATE), AccountID
-// names the cash Account, and Date and StartDate the two dates; otherwise
-// they are zero.
+// contract's name for why (such as ACCOUNT_KIND_NOT_SUPPORTED). AccountID
+// names the Account it is refused for, when there is one: the loan or
+// crypto wallet Account, or, for a row dated before the cash Account's
+// start date (BEFORE_START_DATE), the cash Account, with Date and StartDate
+// the two dates; otherwise they are zero.
 type TransferRefusedError struct {
 	Reason    string
 	AccountID uuid.UUID
@@ -228,7 +229,7 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
 
-	cashLeg, err := sharedkernel.NewID()
+	counterpartLeg, err := sharedkernel.NewID()
 	if err != nil {
 		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
@@ -273,7 +274,7 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 
 		if a.TransferAccount != nil {
 			err = s.ledger.BookTransfer(ctx, tx, TransferBooking{
-				Booking: booking, CashAccount: *a.TransferAccount, CashLeg: cashLeg, MatchLeg: a.MatchLeg,
+				Booking: booking, Counterpart: *a.TransferAccount, CounterpartLeg: counterpartLeg, MatchLeg: a.MatchLeg,
 			})
 		} else {
 			err = s.ledger.BookAccepted(ctx, tx, booking)

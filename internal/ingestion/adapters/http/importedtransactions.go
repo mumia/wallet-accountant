@@ -34,9 +34,9 @@ const (
 	InvalidTransferType = "/problems/invalid-transfer"
 )
 
-// counterpartNotCash is the Ledger's reason for a statement counterpart
-// until statement-transfers ticket 02 lands; the handlers answer 501 for
-// it, since the contract no longer has it.
+// counterpartNotCash is the Ledger's reason for suggestions on a statement
+// Account until statement-transfers ticket 03 lands; the handler answers
+// 501 for it, since the contract no longer has it.
 const counterpartNotCash = "COUNTERPART_NOT_CASH"
 
 // transferDetails explains each reason an Accept as Transfer is refused.
@@ -47,8 +47,10 @@ var transferDetails = map[string]string{
 		"the Account they are on.",
 	"MATCH_LEG_AND_ROW": "Send match_transaction_id or match_imported_transaction_id, not both: the other side is " +
 		"either a leg already booked or a pending row.",
-	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on the cash Account naming this row's " +
+	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on transfer_account_id naming this row's " +
 		"Account with the opposite amount.",
+	"ACCOUNT_KIND_NOT_SUPPORTED": "Loan and crypto wallet Accounts take no part in Transfers yet: only cash, bank " +
+		"and credit card Accounts do.",
 	"SAME_ACCOUNT":      "transfer_account_id is the row's own Account.",
 	"CURRENCY_MISMATCH": "transfer_account_id has another Account currency than the row.",
 	"UNKNOWN_ACCOUNT":   "transfer_account_id is not one of the Household's Accounts.",
@@ -165,11 +167,6 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 	}
 
 	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
-		if refused.Reason == counterpartNotCash {
-			return nil, fmt.Errorf("%w: a statement Account as transfer_account_id (statement-transfers ticket 02)",
-				httpapi.ErrNotImplemented)
-		}
-
 		return refusedTransfer(refused), nil
 	}
 

@@ -314,9 +314,6 @@ func TestStatementTransferPiecesAnswerNotImplementedYet(t *testing.T) {
 	other := f.pending["Salary"].ImportedTransactionID
 
 	for name, res := range map[string]func() *apitest.Response{
-		"a statement Account as transfer_account_id (02)": func() *apitest.Response {
-			return f.accept(t, "Rent", map[string]any{"transfer_account_id": savings})
-		},
 		"suggestions on a statement Account (03)": func() *apitest.Response {
 			return f.app.Get(t, "/api/households/"+f.household+"/imported-transactions/"+row+
 				"/transfer-suggestions?account_id="+savings, f.token)

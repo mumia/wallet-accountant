@@ -116,9 +116,11 @@ type Ledger interface {
 	// booked to (consistency map: Accept imported transaction).
 	BookAccepted(ctx context.Context, tx *eventstore.Tx, booking Booking) error
 	// BookTransfer records an Imported transaction Accepted as a Transfer:
-	// the row's Transfer leg, the cash leg on the cash Account, and their
-	// Match. It returns a *TransferRefusedError for a cash Account it can't
-	// be a Transfer to, and a *MonthError naming the cash Account for a cash
+	// the row's Transfer leg and, for a cash counterpart, the cash leg and
+	// their Match; with MatchLeg, the Match with that In transit leg; for a
+	// bank or credit card counterpart without it, only the row's leg, In
+	// transit. It returns a *TransferRefusedError for an Account it can't be
+	// a Transfer with, and a *MonthError naming the cash Account for a cash
 	// leg in a closed month (consistency map: Accept as Transfer).
 	BookTransfer(ctx context.Context, tx *eventstore.Tx, booking TransferBooking) error
 	// TransferSuggestions returns the cash Account's In transit legs that
@@ -150,9 +152,9 @@ type Booking struct {
 type TransferBooking struct {
 	Booking
 
-	CashAccount uuid.UUID
-	CashLeg     uuid.UUID
-	MatchLeg    *uuid.UUID
+	Counterpart    uuid.UUID
+	CounterpartLeg uuid.UUID
+	MatchLeg       *uuid.UUID
 }
 
 // StatementImportAggregate is the Statement import Decider wired to the
