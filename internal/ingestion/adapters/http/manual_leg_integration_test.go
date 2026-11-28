@@ -180,7 +180,7 @@ func TestMatchingALegOnAcceptIsRefused(t *testing.T) {
 		})
 	}
 
-	f.suggestions(t, "Deposit", savings).AssertProblem(t, http.StatusNotImplemented, "/problems/not-implemented")
+	f.suggestions(t, "Deposit", savings).AssertJSON(t, http.StatusOK, &map[string]any{})
 	assertReason(t, f.suggestions(t, "Deposit", "0198f0a0-0000-7000-8000-000000000000"), "UNKNOWN_ACCOUNT")
 
 	if pending := f.imported(t, "?state=PENDING").Items; len(pending) != 3 {

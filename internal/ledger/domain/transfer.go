@@ -41,6 +41,10 @@ var (
 // crypto wallets wait for their own feature (ADR-0026).
 var transferKinds = []AccountKind{AccountKindCash, AccountKindBankAccount, AccountKindCreditCard}
 
+// TakesPartInTransfers reports whether an Account of the kind can be either
+// side of a Transfer: cash, bank and credit card Accounts can.
+func TakesPartInTransfers(kind AccountKind) bool { return slices.Contains(transferKinds, kind) }
+
 // AccountKindError is a Transfer leg refused for the kind of one of its two
 // Accounts: AccountID is that Account, Kind its kind.
 type AccountKindError struct {
@@ -140,9 +144,9 @@ func checkLeg(c RecordTransaction) error {
 		return fmt.Errorf("%w: a transfer leg is one account's posting against account transfer", ErrInvalidPosting)
 	case accounts[0] == c.CounterpartAccountID:
 		return ErrCounterpartIsItself
-	case !slices.Contains(transferKinds, c.AccountKind):
+	case !TakesPartInTransfers(c.AccountKind):
 		return &AccountKindError{AccountID: accounts[0], Kind: c.AccountKind}
-	case !slices.Contains(transferKinds, c.CounterpartKind):
+	case !TakesPartInTransfers(c.CounterpartKind):
 		return &AccountKindError{AccountID: c.CounterpartAccountID, Kind: c.CounterpartKind}
 	}
 

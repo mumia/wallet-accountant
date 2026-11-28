@@ -149,11 +149,17 @@ type TransactionReader interface {
 	// in the Household the transaction is set to, sorted by Booking date,
 	// Transaction ID and Posting.
 	AccountTransactions(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, filter TransactionFilter) ([]AccountTransaction, error)
-	// TransferSuggestions returns the IDs of the cash Account's Transfer
-	// legs that are neither Matched nor reversed, name the row's Account,
-	// have the opposite amount in its currency and a Transaction date within
-	// SuggestionWindow of the row's, closest date first.
-	TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q SuggestionQuery) ([]uuid.UUID, error)
+	// TransferSuggestions returns the IDs of the Transfer legs on q's
+	// Accounts that are neither Matched nor reversed, name the row's
+	// Account, have the opposite amount in its currency and a Transaction
+	// date within SuggestionWindow of the row's, closest date first, then by
+	// ID.
+	TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q LegQuery) ([]uuid.UUID, error)
+	// TransferCounterparts returns the Household's Accounts other than
+	// account in the currency, with their kinds, in the order they were
+	// added.
+	TransferCounterparts(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, currency string,
+	) ([]TransferCounterpart, error)
 }
 
 // InternalCategories finds the Household's Internal Categories.

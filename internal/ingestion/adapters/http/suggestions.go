@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/mumia/wallet-accountant/internal/ingestion/app"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi/oas"
@@ -13,21 +15,15 @@ import (
 // ListTransferSuggestions implements listTransferSuggestions.
 func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, params oas.ListTransferSuggestionsParams,
 ) (oas.ListTransferSuggestionsRes, error) {
-	account, ok := params.AccountID.Get()
-	if !ok {
-		return nil, fmt.Errorf("%w: suggestions without account_id (statement-transfers ticket 03)",
-			httpapi.ErrNotImplemented)
+	var counterpart *uuid.UUID
+	if id, ok := params.AccountID.Get(); ok {
+		counterpart = &id
 	}
 
-	legs, err := h.imported.TransferSuggestions(ctx, params.HouseholdID, params.ImportedTransactionID, account)
+	got, err := h.imported.TransferSuggestions(ctx, params.HouseholdID, params.ImportedTransactionID, counterpart)
 
 	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
-		if refused.Reason == counterpartNotCash {
-			return nil, fmt.Errorf("%w: suggestions on a statement Account (statement-transfers ticket 03)",
-				httpapi.ErrNotImplemented)
-		}
-
-		return transferRefused(refused.Reason), nil
+		return refusedTransfer(refused), nil
 	}
 
 	switch {
@@ -38,11 +34,20 @@ func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, pa
 	}
 
 	out := &oas.TransferSuggestionList{
-		Legs:                 make([]oas.Transaction, 0, len(legs)),
-		ImportedTransactions: []oas.ImportedTransaction{},
+		Legs:                 make([]oas.Transaction, 0, len(got.Legs)),
+		ImportedTransactions: make([]oas.ImportedTransaction, 0, len(got.Rows)),
 	}
 
-	for _, l := range legs {
+	for _, r := range got.Rows {
+		row, err := importedTransactionOut(r)
+		if err != nil {
+			return nil, err
+		}
+
+		out.ImportedTransactions = append(out.ImportedTransactions, row)
+	}
+
+	for _, l := range got.Legs {
 		amount, err := money(l.Amount, l.Currency)
 		if err != nil {
 			return nil, err

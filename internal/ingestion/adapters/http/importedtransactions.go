@@ -34,11 +34,6 @@ const (
 	InvalidTransferType = "/problems/invalid-transfer"
 )
 
-// counterpartNotCash is the Ledger's reason for suggestions on a statement
-// Account until statement-transfers ticket 03 lands; the handler answers
-// 501 for it, since the contract no longer has it.
-const counterpartNotCash = "COUNTERPART_NOT_CASH"
-
 // transferDetails explains each reason an Accept as Transfer is refused.
 var transferDetails = map[string]string{
 	"CATEGORY_AND_TRANSFER": "A Transfer leg is booked against Account transfer: send category_id or " +

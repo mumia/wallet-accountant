@@ -123,11 +123,13 @@ type Ledger interface {
 	// a Transfer with, and a *MonthError naming the cash Account for a cash
 	// leg in a closed month (consistency map: Accept as Transfer).
 	BookTransfer(ctx context.Context, tx *eventstore.Tx, booking TransferBooking) error
-	// TransferSuggestions returns the cash Account's In transit legs that
-	// could be the other side of the row, closest date first, or a
-	// *TransferRefusedError for a cash Account it can't be a Transfer with.
-	TransferSuggestions(ctx context.Context, tx *eventstore.Tx, row domain.ImportedTransactionState, cash uuid.UUID,
-	) ([]SuggestedLeg, error)
+	// TransferSuggestions returns the In transit legs that could be the
+	// other side of the row, on counterpart or, when it is nil, on every
+	// Account the row could be a Transfer with, closest date first, and the
+	// bank and credit card Accounts among those looked on; or a
+	// *TransferRefusedError for an Account it can't be a Transfer with.
+	TransferSuggestions(ctx context.Context, tx *eventstore.Tx, row domain.ImportedTransactionState,
+		counterpart *uuid.UUID) (LedgerSuggestions, error)
 	// ReverseOpeningBalance reverses the Account's Opening balance
 	// Transaction by the Transaction reversal, so the Account awaits its
 	// first Statement import again (consistency map: Void Statement

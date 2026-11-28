@@ -310,18 +310,9 @@ func TestStatementTransferPiecesAnswerNotImplementedYet(t *testing.T) {
 	t.Parallel()
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
 	savings := addAccount(t, f.app, f.token, f.household)
-	row := f.pending["Rent"].ImportedTransactionID
 	other := f.pending["Salary"].ImportedTransactionID
 
 	for name, res := range map[string]func() *apitest.Response{
-		"suggestions on a statement Account (03)": func() *apitest.Response {
-			return f.app.Get(t, "/api/households/"+f.household+"/imported-transactions/"+row+
-				"/transfer-suggestions?account_id="+savings, f.token)
-		},
-		"suggestions without account_id (03)": func() *apitest.Response {
-			return f.app.Get(t, "/api/households/"+f.household+"/imported-transactions/"+row+
-				"/transfer-suggestions", f.token)
-		},
 		"match_imported_transaction_id (04)": func() *apitest.Response {
 			return f.accept(t, "Rent", map[string]any{
 				"transfer_account_id": savings, "match_imported_transaction_id": other,

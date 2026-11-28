@@ -307,24 +307,26 @@ func transferRefusal(err error) error {
 
 // TransferSuggestions implements ingestionapp.Ledger.
 func (l ingestionLedger) TransferSuggestions(ctx context.Context, tx *eventstore.Tx,
-	row ingestiondomain.ImportedTransactionState, cash uuid.UUID,
-) ([]ingestionapp.SuggestedLeg, error) {
-	legs, err := l.transactions.TransferSuggestions(ctx, tx, ledgerapp.SuggestionQuery{
-		RowAccount: row.AccountID, CashAccount: cash, Amount: row.Amount, Currency: row.Currency,
+	row ingestiondomain.ImportedTransactionState, counterpart *uuid.UUID,
+) (ingestionapp.LedgerSuggestions, error) {
+	got, err := l.transactions.TransferSuggestions(ctx, tx, ledgerapp.SuggestionQuery{
+		RowAccount: row.AccountID, Counterpart: counterpart, Amount: row.Amount, Currency: row.Currency,
 		TransactionDate: row.TransactionDate,
 	})
 	if refused := transferRefusal(err); refused != nil {
-		return nil, refused
+		return ingestionapp.LedgerSuggestions{}, refused
 	}
 
 	if err != nil {
-		return nil, err //nolint:wrapcheck // already wrapped by the Ledger
+		return ingestionapp.LedgerSuggestions{}, err //nolint:wrapcheck // already wrapped by the Ledger
 	}
 
-	out := make([]ingestionapp.SuggestedLeg, 0, len(legs))
+	out := ingestionapp.LedgerSuggestions{
+		Legs: make([]ingestionapp.SuggestedLeg, 0, len(got.Legs)), StatementAccounts: got.StatementAccounts,
+	}
 
-	for _, d := range legs {
-		out = append(out, ingestionapp.SuggestedLeg{
+	for _, d := range got.Legs {
+		out.Legs = append(out.Legs, ingestionapp.SuggestedLeg{
 			TransactionID: d.ID, AccountID: d.AccountID, Amount: d.Amount, Currency: d.Currency,
 			BookingDate: d.BookingDate, TransactionDate: d.TransactionDate, Description: d.Description,
 			Payee: d.Payee, CategoryID: d.CategoryID, CategoryName: d.CategoryName,

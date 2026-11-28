@@ -177,6 +177,10 @@ type ImportedTransactionReader interface {
 	// of the Account, sorted by Booking date and then ID (UUIDv7: the order
 	// they were imported, which follows the file's lines).
 	ImportedTransactions(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, filter ImportedFilter) ([]ImportedTransaction, error)
+	// PendingTransferRows returns the pending Imported transactions on q's
+	// Accounts with q's amount and currency and a Transaction date within
+	// SuggestionWindowDays of q's, closest date first, then by ID.
+	PendingTransferRows(ctx context.Context, tx *eventstore.Tx, q PendingRowQuery) ([]ImportedTransaction, error)
 }
 
 // ImportedTransactions lists Accounts' Imported transactions, Accepts them
@@ -606,15 +610,49 @@ type SuggestedLeg struct {
 	CounterpartAccountID uuid.UUID
 }
 
-// TransferSuggestions lists the cash Account's In transit legs that could
-// be the other side of the Imported transaction, read through the Ledger
-// port in one transaction: closest date first, within a week either side
-// of the row's Transaction date (consistency map: List transfer
-// suggestions). A cash Account the row can't be a Transfer with is a
-// *TransferRefusedError.
-func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, household, id, cash uuid.UUID,
-) ([]SuggestedLeg, error) {
-	var out []SuggestedLeg
+// LedgerSuggestions is what the Ledger suggests for a row: In transit Legs,
+// and StatementAccounts, the bank and credit card Accounts it looked on,
+// whose pending rows Ingestion suggests.
+type LedgerSuggestions struct {
+	Legs              []SuggestedLeg
+	StatementAccounts []uuid.UUID
+}
+
+// TransferSuggestions is what could be the other side of a row as a
+// Transfer: In transit Legs, and pending Rows on bank or credit card
+// Accounts, each closest date first.
+type TransferSuggestions struct {
+	Legs []SuggestedLeg
+	Rows []ImportedTransaction
+}
+
+// SuggestionWindowDays is how many days either side of a row's Transaction
+// date a pending row is suggested for it, as the Ledger's window is for
+// legs.
+const SuggestionWindowDays = 7
+
+// PendingRowQuery asks for pending rows on Accounts, with Amount in
+// Currency, and a Transaction date within SuggestionWindowDays of
+// TransactionDate.
+type PendingRowQuery struct {
+	Accounts        []uuid.UUID
+	Amount          sharedkernel.Decimal
+	Currency        string
+	TransactionDate time.Time
+}
+
+// TransferSuggestions works out what could be the other side of the
+// Imported transaction as a Transfer, on counterpart or, when it is nil, on
+// every Account the row could be a Transfer with, in one transaction
+// (consistency map: List transfer suggestions): the In transit legs, read
+// through the Ledger port, and the pending rows on the bank and credit card
+// Accounts among them, read here, both with the opposite amount, within a
+// week either side of the row's Transaction date, closest first. An Account
+// the row can't be a Transfer with is a *TransferRefusedError.
+func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, household, id uuid.UUID,
+	counterpart *uuid.UUID,
+) (TransferSuggestions, error) {
+	var out TransferSuggestions
 
 	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
 		fold, found, err := s.rows.Folds.Load(ctx, tx, id)
@@ -626,12 +664,28 @@ func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, househol
 			return ErrImportedTransactionNotFound
 		}
 
-		out, err = s.ledger.TransferSuggestions(ctx, tx, fold.State, cash)
+		row := fold.State
 
-		return err //nolint:wrapcheck // the port's error
+		ledger, err := s.ledger.TransferSuggestions(ctx, tx, row, counterpart)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		out.Legs = ledger.Legs
+
+		if len(ledger.StatementAccounts) == 0 {
+			return nil
+		}
+
+		out.Rows, err = s.reader.PendingTransferRows(ctx, tx, PendingRowQuery{
+			Accounts: ledger.StatementAccounts, Amount: row.Amount.Neg(), Currency: row.Currency,
+			TransactionDate: row.TransactionDate,
+		})
+
+		return err //nolint:wrapcheck // the adapter's error
 	})
 	if err != nil {
-		return nil, fmt.Errorf("transfer suggestions for imported transaction %s: %w", id, err)
+		return TransferSuggestions{}, fmt.Errorf("transfer suggestions for imported transaction %s: %w", id, err)
 	}
 
 	return out, nil

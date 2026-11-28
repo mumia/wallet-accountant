@@ -281,3 +281,80 @@ func TestATransferWithALoanOrCryptoWalletIsRefused(t *testing.T) {
 		t.Errorf("wallet balance = %s, want 20.00", b)
 	}
 }
+
+// suggestionList is listTransferSuggestions' answer.
+type suggestionList struct {
+	Legs                 []legLine             `json:"legs"`
+	ImportedTransactions []importedTransaction `json:"imported_transactions"`
+}
+
+func (f acceptFixture) suggested(t *testing.T, row, query string) suggestionList {
+	t.Helper()
+
+	var l suggestionList
+	f.app.Get(t, "/api/households/"+f.household+"/imported-transactions/"+f.pending[row].ImportedTransactionID+
+		"/transfer-suggestions"+query, f.token).AssertJSON(t, http.StatusOK, &l)
+
+	return l
+}
+
+// Suggestions for the bank's Rent row (-1000.00 on 2026-01-01) come from
+// every Account it could be a Transfer with when none is named: the In
+// transit leg on the wallet, and the pending rows of +1000.00 within a week
+// on the card and the savings Account, closest first, the savings row
+// although its month isn't open yet. Rows too far away, of another amount,
+// on a loan, or Suspected duplicates aren't suggested (statement-transfers
+// stories 9-11).
+func TestSuggestionsComeFromEveryAccountTheRowCouldBeATransferWith(t *testing.T) {
+	t.Parallel()
+	f := newAcceptFixture(t, apitest.Start(t), "alice")
+	wallet := f.addCash(t, "Wallet", "EUR", "20.00")
+	leg := f.recordLeg(t, wallet, f.account, "2026-01-01", "1000.00")
+	card := f.addStatementAccount(t, "Card", "CREDIT_CARD", "2026-01-01", "Date;Description;Amount\n"+
+		"02/01/2026;Payment;1.000,00\n09/01/2026;Too late;1.000,00\n03/01/2026;Other amount;999,00\n", "2999.00")
+	savings := f.addStatementAccount(t, "Savings", "BANK_ACCOUNT", "2025-12-01",
+		"Date;Description;Amount\n04/01/2026;Savings in;1.000,00\n", "1000.00")
+	loan := f.addStatementAccount(t, "Loan", "LOAN", "2026-01-01",
+		"Date;Description;Amount\n01/01/2026;Loan in;1.000,00\n", "-9000.00")
+
+	// A second card file repeats the payment: a Suspected duplicate, which
+	// isn't pending.
+	card.upload(t, "", "Date;Description;Amount\n02/01/2026;PAYMENT;1.000,00\n", "2999.00", "").
+		AssertJSON(t, http.StatusCreated, &map[string]any{})
+
+	if n := len(card.suspected(t)); n != 1 {
+		t.Fatalf("%d Suspected duplicates on the card, want 1", n)
+	}
+
+	all := f.suggested(t, "Rent", "")
+
+	if len(all.Legs) != 1 || all.Legs[0].TransactionID != leg.TransactionID {
+		t.Errorf("legs = %+v, want the wallet's leg", all.Legs)
+	}
+
+	rows := all.ImportedTransactions
+	if len(rows) != 2 || rows[0].ImportedTransactionID != card.pending["Payment"].ImportedTransactionID ||
+		rows[0].AccountID != card.account ||
+		rows[1].ImportedTransactionID != savings.pending["Savings in"].ImportedTransactionID ||
+		rows[1].AccountID != savings.account {
+		t.Errorf("rows = %+v, want the card's Payment then the savings row, each naming its Account", rows)
+	}
+
+	only := f.suggested(t, "Rent", "?account_id="+card.account)
+	if len(only.Legs) != 0 || len(only.ImportedTransactions) != 1 ||
+		only.ImportedTransactions[0].Description != "Payment" {
+		t.Errorf("suggestions on the card = %+v, want only its Payment", only)
+	}
+
+	cash := f.suggested(t, "Rent", "?account_id="+wallet)
+	if len(cash.Legs) != 1 || len(cash.ImportedTransactions) != 0 {
+		t.Errorf("suggestions on the wallet = %+v, want only its leg", cash)
+	}
+
+	reasonAndAccount(t, f.app.Get(t, "/api/households/"+f.household+"/imported-transactions/"+
+		f.pending["Rent"].ImportedTransactionID+"/transfer-suggestions?account_id="+loan.account, f.token),
+		"ACCOUNT_KIND_NOT_SUPPORTED", loan.account)
+	reasonAndAccount(t, f.app.Get(t, "/api/households/"+f.household+"/imported-transactions/"+
+		loan.pending["Loan in"].ImportedTransactionID+"/transfer-suggestions", f.token),
+		"ACCOUNT_KIND_NOT_SUPPORTED", loan.account)
+}

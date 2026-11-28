@@ -42,10 +42,6 @@ const (
 	TransferUnknownAccount          TransferReason = "UNKNOWN_ACCOUNT"
 	TransferNotAMatchingLeg         TransferReason = "NOT_A_MATCHING_LEG"
 	TransferBeforeStartDate         TransferReason = "BEFORE_START_DATE"
-	// TransferCounterpartNotCash refuses suggestions on a statement Account
-	// until statement-transfers ticket 03 lands; the contract no longer has
-	// it, and the API answers 501 for it.
-	TransferCounterpartNotCash TransferReason = "COUNTERPART_NOT_CASH"
 )
 
 // TransferRefusedError is a refused Transfer and why.
@@ -320,34 +316,6 @@ type ImportedTransfer struct {
 // cash leg is suggested for it.
 const SuggestionWindow = 7 * 24 * time.Hour
 
-// checkCashCounterpart refuses, for a bank row on the Account account in
-// currency, a cash Account that is the row's own, not the Household's, not
-// cash, or in another currency.
-func (t *Transactions) checkCashCounterpart(ctx context.Context, tx *eventstore.Tx, account, cash uuid.UUID,
-	currency string,
-) error {
-	if cash == account {
-		return &TransferRefusedError{Reason: TransferSameAccount, Err: domain.ErrCounterpartIsItself}
-	}
-
-	fold, found, err := t.accounts.Folds.Load(ctx, tx, cash)
-	if err != nil {
-		return fmt.Errorf("load account %s: %w", cash, err)
-	}
-
-	switch {
-	case !found:
-		return &TransferRefusedError{Reason: TransferUnknownAccount, Err: ErrAccountNotFound}
-	case !fold.State.IsCash():
-		return &TransferRefusedError{Reason: TransferCounterpartNotCash, Err: ErrNotACashAccount}
-	case fold.State.Currency != currency:
-		return &TransferRefusedError{Reason: TransferCurrencyMatch, Err: fmt.Errorf("%w: %s, not %s",
-			ErrCurrencyMismatch, fold.State.Currency, currency)}
-	}
-
-	return nil
-}
-
 // matchingLeg refuses, as NOT_A_MATCHING_LEG, a leg to Match that isn't an
 // In transit leg on the counterpart naming the row's Account, with the
 // opposite amount. There is no date window (spec "Accept as Transfer").
@@ -450,39 +418,148 @@ func (t *Transactions) BookTransfer(ctx context.Context, tx *eventstore.Tx, b Im
 	return t.ConfirmTransfer(ctx, tx, row.Transaction, cashLeg.Transaction)
 }
 
-// SuggestionQuery asks which cash legs could be the other side of a bank
-// row: the row's Account, signed amount, currency and Transaction date,
-// and the cash Account whose legs are suggested.
+// SuggestionQuery asks what could be the other side of a row as a
+// Transfer: the row's Account, signed amount, currency and Transaction
+// date, and Counterpart, the one Account to look on, or nil for every
+// Account the row could be a Transfer with.
 type SuggestionQuery struct {
 	RowAccount      uuid.UUID
-	CashAccount     uuid.UUID
+	Counterpart     *uuid.UUID
 	Amount          sharedkernel.Decimal
 	Currency        string
 	TransactionDate time.Time
 }
 
-// TransferSuggestions lists, in the caller's transaction, the cash
-// Account's In transit legs naming the row's Account, with the opposite
-// amount, dated within SuggestionWindow of the row's Transaction date,
-// closest first. They are worked out on each request and never stored. A
-// cash Account the row can't be a Transfer with is a *TransferRefusedError.
-func (t *Transactions) TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q SuggestionQuery,
-) ([]TransactionDetail, error) {
-	if err := t.checkCashCounterpart(ctx, tx, q.RowAccount, q.CashAccount, q.Currency); err != nil {
-		return nil, err
+// LegQuery asks the reader for the In transit legs on Accounts that could be
+// the other side of a row: they name RowAccount, have the opposite of
+// Amount in Currency, and a Transaction date within SuggestionWindow of
+// TransactionDate.
+type LegQuery struct {
+	RowAccount      uuid.UUID
+	Accounts        []uuid.UUID
+	Amount          sharedkernel.Decimal
+	Currency        string
+	TransactionDate time.Time
+}
+
+// TransferCounterpart is an Account a row could be a Transfer with.
+type TransferCounterpart struct {
+	ID   uuid.UUID
+	Kind domain.AccountKind
+}
+
+// TransferSuggestions is what could be the other side of a row: Legs, the
+// In transit legs, closest date first, and StatementAccounts, the bank and
+// credit card Accounts among the counterparts looked on, whose pending rows
+// Ingestion suggests.
+type TransferSuggestions struct {
+	Legs              []TransactionDetail
+	StatementAccounts []uuid.UUID
+}
+
+// transferCounterparts returns the Accounts a row on account, in currency,
+// could be a Transfer with: only, when it is given, or else every other
+// Account of the Household in that currency of a kind that takes part in
+// Transfers. A row's Account or an only that takes no part, or an only
+// that is the row's own, not the Household's or in another currency, is a
+// *TransferRefusedError.
+func (t *Transactions) transferCounterparts(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, currency string,
+	only *uuid.UUID,
+) ([]TransferCounterpart, error) {
+	own, found, err := t.accounts.Folds.Load(ctx, tx, account)
+	if err != nil {
+		return nil, fmt.Errorf("load account %s: %w", account, err)
 	}
 
-	ids, err := t.reader.TransferSuggestions(ctx, tx, q)
+	if !found {
+		return nil, ErrAccountNotFound
+	}
+
+	refusedKind := func(id uuid.UUID, kind domain.AccountKind) error {
+		return &TransferRefusedError{Reason: TransferAccountKindNotSupported, Err: &AccountError{
+			Account: id, Err: &domain.AccountKindError{AccountID: id, Kind: kind},
+		}}
+	}
+
+	if !domain.TakesPartInTransfers(own.State.Kind) {
+		return nil, refusedKind(account, own.State.Kind)
+	}
+
+	if only != nil {
+		counterpart, err := t.checkCounterpart(ctx, tx, account, *only, currency)
+		if err != nil {
+			return nil, err
+		}
+
+		if !domain.TakesPartInTransfers(counterpart.Kind) {
+			return nil, refusedKind(*only, counterpart.Kind)
+		}
+
+		return []TransferCounterpart{{ID: *only, Kind: counterpart.Kind}}, nil
+	}
+
+	all, err := t.reader.TransferCounterparts(ctx, tx, account, currency)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // the adapter's error
 	}
 
-	out := make([]TransactionDetail, 0, len(ids))
+	var out []TransferCounterpart
+
+	for _, c := range all {
+		if domain.TakesPartInTransfers(c.Kind) {
+			out = append(out, c)
+		}
+	}
+
+	return out, nil
+}
+
+// TransferSuggestions works out, in the caller's transaction, what could be
+// the other side of a row as a Transfer (statement-transfers spec
+// "Suggestions"): the counterparts it could be a Transfer with, their In
+// transit legs naming the row's Account, with the opposite amount, dated
+// within SuggestionWindow of the row's Transaction date, closest first, and
+// which of the counterparts are bank or credit card Accounts. They are
+// worked out on each request and never stored. An Account the row can't be
+// a Transfer with is a *TransferRefusedError.
+func (t *Transactions) TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q SuggestionQuery,
+) (TransferSuggestions, error) {
+	counterparts, err := t.transferCounterparts(ctx, tx, q.RowAccount, q.Currency, q.Counterpart)
+	if err != nil {
+		return TransferSuggestions{}, err
+	}
+
+	var (
+		accounts []uuid.UUID
+		out      TransferSuggestions
+	)
+
+	for _, c := range counterparts {
+		accounts = append(accounts, c.ID)
+
+		if c.Kind != domain.AccountKindCash {
+			out.StatementAccounts = append(out.StatementAccounts, c.ID)
+		}
+	}
+
+	if len(accounts) == 0 {
+		return out, nil
+	}
+
+	ids, err := t.reader.TransferSuggestions(ctx, tx, LegQuery{
+		RowAccount: q.RowAccount, Accounts: accounts, Amount: q.Amount, Currency: q.Currency,
+		TransactionDate: q.TransactionDate,
+	})
+	if err != nil {
+		return TransferSuggestions{}, err //nolint:wrapcheck // the adapter's error
+	}
+
+	out.Legs = make([]TransactionDetail, 0, len(ids))
 
 	for _, id := range ids {
 		fold, found, err := t.transactions.Folds.Load(ctx, tx, id)
 		if err != nil {
-			return nil, fmt.Errorf("load transaction %s: %w", id, err)
+			return TransferSuggestions{}, fmt.Errorf("load transaction %s: %w", id, err)
 		}
 
 		if !found {
@@ -491,10 +568,10 @@ func (t *Transactions) TransferSuggestions(ctx context.Context, tx *eventstore.T
 
 		d, err := t.detail(ctx, tx, id, fold.State)
 		if err != nil {
-			return nil, err
+			return TransferSuggestions{}, err
 		}
 
-		out = append(out, d)
+		out.Legs = append(out.Legs, d)
 	}
 
 	return out, nil
