@@ -2657,7 +2657,7 @@ func encodeListStatementImportsResponse(response ListStatementImportsRes, w http
 
 func encodeListTransferSuggestionsResponse(response ListTransferSuggestionsRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *TransactionList:
+	case *TransferSuggestionList:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err

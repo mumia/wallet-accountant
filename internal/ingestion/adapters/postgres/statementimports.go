@@ -718,3 +718,32 @@ func (ImportedTransactionReader) ImportedTransactions(ctx context.Context, tx *e
 
 	return list, nil
 }
+
+// PendingTransferRows implements app.ImportedTransactionReader.
+func (ImportedTransactionReader) PendingTransferRows(ctx context.Context, tx *eventstore.Tx, q app.PendingRowQuery,
+) ([]app.ImportedTransaction, error) {
+	rows, err := tx.Query(ctx, `SELECT `+importedColumns+`, id FROM imported_transactions
+		WHERE household_id = $1 AND account_id = ANY($2::uuid[]) AND state = $3
+		  AND amount = $4::numeric AND currency = $5
+		  AND transaction_date BETWEEN $6::date - $7::int AND $6::date + $7::int
+		ORDER BY abs(transaction_date - $6::date), transaction_date, id`,
+		tx.HouseholdID(), q.Accounts, string(domain.ImportedPending), q.Amount.String(), q.Currency,
+		q.TransactionDate.Format(time.DateOnly), app.SuggestionWindowDays)
+	if err != nil {
+		return nil, fmt.Errorf("list pending transfer rows: %w", err)
+	}
+
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (app.ImportedTransaction, error) {
+		var i app.ImportedTransaction
+
+		s, err := scanImported(r, &i.ID)
+		i.State = s
+
+		return i, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list pending transfer rows: %w", err)
+	}
+
+	return list, nil
+}

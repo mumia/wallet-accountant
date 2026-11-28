@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/mumia/wallet-accountant/internal/sharedkernel"
 )
@@ -30,7 +31,32 @@ var (
 	// ErrMatchIDRequired is returned for matching or unmatching without the
 	// Match.
 	ErrMatchIDRequired = errors.New("match ID required")
+	// ErrAccountKindNotSupported is returned, as an *AccountKindError, for a
+	// Transfer leg with a loan or crypto wallet Account on either side
+	// (ADR-0026).
+	ErrAccountKindNotSupported = errors.New("account kind takes no part in transfers")
 )
+
+// transferKinds are the Account kinds that take part in Transfers. Loans and
+// crypto wallets wait for their own feature (ADR-0026).
+var transferKinds = []AccountKind{AccountKindCash, AccountKindBankAccount, AccountKindCreditCard}
+
+// TakesPartInTransfers reports whether an Account of the kind can be either
+// side of a Transfer: cash, bank and credit card Accounts can.
+func TakesPartInTransfers(kind AccountKind) bool { return slices.Contains(transferKinds, kind) }
+
+// AccountKindError is a Transfer leg refused for the kind of one of its two
+// Accounts: AccountID is that Account, Kind its kind.
+type AccountKindError struct {
+	AccountID sharedkernel.ID
+	Kind      AccountKind
+}
+
+func (e *AccountKindError) Error() string {
+	return fmt.Sprintf("%s: account %s is a %s", ErrAccountKindNotSupported, e.AccountID, e.Kind)
+}
+
+func (e *AccountKindError) Unwrap() error { return ErrAccountKindNotSupported }
 
 // IsTransferLeg reports whether the Transaction is a Transfer leg: it names
 // a counterpart Account.
@@ -93,8 +119,9 @@ func (TransactionMatched) isTransactionEvent()   {}
 func (TransactionUnmatched) isTransactionEvent() {}
 
 // checkLeg refuses a Transfer leg that isn't one Account's Posting against
-// a Category, or that names its own Account as counterpart, and a
-// Transaction created by a Transfer that isn't a leg.
+// a Category, that names its own Account as counterpart, or whose Account or
+// counterpart is of a kind that takes no part in Transfers (its own Account
+// checked first), and a Transaction created by a Transfer that isn't a leg.
 func checkLeg(c RecordTransaction) error {
 	if c.CounterpartAccountID == sharedkernel.NilID {
 		if c.CreatedByTransfer {
@@ -117,6 +144,10 @@ func checkLeg(c RecordTransaction) error {
 		return fmt.Errorf("%w: a transfer leg is one account's posting against account transfer", ErrInvalidPosting)
 	case accounts[0] == c.CounterpartAccountID:
 		return ErrCounterpartIsItself
+	case !TakesPartInTransfers(c.AccountKind):
+		return &AccountKindError{AccountID: accounts[0], Kind: c.AccountKind}
+	case !TakesPartInTransfers(c.CounterpartKind):
+		return &AccountKindError{AccountID: c.CounterpartAccountID, Kind: c.CounterpartKind}
 	}
 
 	return nil

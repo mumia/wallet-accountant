@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/mumia/wallet-accountant/internal/ingestion/app"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi"
 	"github.com/mumia/wallet-accountant/internal/platform/httpapi/oas"
@@ -13,10 +15,15 @@ import (
 // ListTransferSuggestions implements listTransferSuggestions.
 func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, params oas.ListTransferSuggestionsParams,
 ) (oas.ListTransferSuggestionsRes, error) {
-	legs, err := h.imported.TransferSuggestions(ctx, params.HouseholdID, params.ImportedTransactionID, params.AccountID)
+	var counterpart *uuid.UUID
+	if id, ok := params.AccountID.Get(); ok {
+		counterpart = &id
+	}
+
+	got, err := h.imported.TransferSuggestions(ctx, params.HouseholdID, params.ImportedTransactionID, counterpart)
 
 	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
-		return transferRefused(refused.Reason), nil
+		return refusedTransfer(refused), nil
 	}
 
 	switch {
@@ -26,9 +33,21 @@ func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, pa
 		return nil, fmt.Errorf("list transfer suggestions: %w", err)
 	}
 
-	out := &oas.TransactionList{Items: make([]oas.Transaction, 0, len(legs))}
+	out := &oas.TransferSuggestionList{
+		Legs:                 make([]oas.Transaction, 0, len(got.Legs)),
+		ImportedTransactions: make([]oas.ImportedTransaction, 0, len(got.Rows)),
+	}
 
-	for _, l := range legs {
+	for _, r := range got.Rows {
+		row, err := importedTransactionOut(r)
+		if err != nil {
+			return nil, err
+		}
+
+		out.ImportedTransactions = append(out.ImportedTransactions, row)
+	}
+
+	for _, l := range got.Legs {
 		amount, err := money(l.Amount, l.Currency)
 		if err != nil {
 			return nil, err
@@ -50,7 +69,7 @@ func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, pa
 			t.Payee = oas.NewOptString(l.Payee)
 		}
 
-		out.Items = append(out.Items, t)
+		out.Legs = append(out.Legs, t)
 	}
 
 	return out, nil

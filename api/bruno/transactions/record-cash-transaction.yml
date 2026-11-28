@@ -63,7 +63,9 @@ docs: |-
   the Account itself, isn't one of the Household's, or has another
   Account currency get 422 `/problems/invalid-transfer` with a
   `reason`. So does a date before a cash counterpart's start date
-  (`BEFORE_START_DATE`, naming the counterpart in `account_id`). An
+  (`BEFORE_START_DATE`, naming the counterpart in `account_id`), and a
+  loan or crypto wallet counterpart, which take no part in Transfers
+  (`ACCOUNT_KIND_NOT_SUPPORTED`, naming it in `account_id`). An
   Account that isn't cash gets 422
   `/problems/not-a-cash-account`: statement Accounts take
   Transactions only from their statements. A zero amount, one in

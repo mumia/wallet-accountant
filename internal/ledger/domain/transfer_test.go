@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
@@ -27,6 +28,8 @@ func withdrawal() domain.RecordTransaction {
 		BookingDate:          startDate,
 		Description:          "ATM",
 		CounterpartAccountID: mainAccount,
+		AccountKind:          domain.AccountKindCash,
+		CounterpartKind:      domain.AccountKindBankAccount,
 		Postings: []domain.Posting{
 			{AccountID: walletAccount, Amount: dec("50.00"), Currency: "EUR"},
 			{CategoryID: transferCat, Amount: dec("-50.00"), Currency: "EUR"},
@@ -88,6 +91,48 @@ func TestRecordingATransferLegRefusals(t *testing.T) {
 	noCounterpart := withdrawal()
 	noCounterpart.CounterpartAccountID, noCounterpart.CreatedByTransfer = sharedkernel.NilID, true
 	decidertest.Given(t, domain.Transaction).When(noCounterpart).ThenError(domain.ErrNotATransferLeg)
+}
+
+// Only cash, bank and credit card Accounts take part in Transfers: a loan or
+// crypto wallet on either side is refused, naming it, the leg's own Account
+// first (ADR-0026).
+func TestATransferLegWithALoanOrCryptoWalletIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		own, counterpart domain.AccountKind
+		want             sharedkernel.ID
+	}{
+		"a loan counterpart":          {domain.AccountKindCash, domain.AccountKindLoan, mainAccount},
+		"a crypto wallet counterpart": {domain.AccountKindBankAccount, domain.AccountKindCryptoWallet, mainAccount},
+		"its own Account a loan":      {domain.AccountKindLoan, domain.AccountKindBankAccount, walletAccount},
+		"both, its own named first":   {domain.AccountKindCryptoWallet, domain.AccountKindLoan, walletAccount},
+		"no kinds given":              {"", "", walletAccount},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			c := withdrawal()
+			c.AccountKind, c.CounterpartKind = tc.own, tc.counterpart
+
+			_, err := domain.Transaction.Decide(domain.TransactionState{}, c)
+
+			refused, ok := errors.AsType[*domain.AccountKindError](err)
+			if !ok || !errors.Is(err, domain.ErrAccountKindNotSupported) || refused.AccountID != tc.want {
+				t.Errorf("error = %v, want an account kind refusal naming %s", err, tc.want)
+			}
+		})
+	}
+
+	for _, kinds := range [][2]domain.AccountKind{
+		{domain.AccountKindCash, domain.AccountKindCash},
+		{domain.AccountKindBankAccount, domain.AccountKindCreditCard},
+		{domain.AccountKindCreditCard, domain.AccountKindBankAccount},
+	} {
+		c := withdrawal()
+		c.AccountKind, c.CounterpartKind = kinds[0], kinds[1]
+		decidertest.Given(t, domain.Transaction).When(c).Then(recordedWithdrawal())
+	}
 }
 
 func TestSettingTheCategoryOfATransferLegIsRefused(t *testing.T) {

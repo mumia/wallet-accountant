@@ -75,10 +75,11 @@ func (e *CategoryDirectionError) Error() string {
 func (e *CategoryDirectionError) Unwrap() []error { return []error{ErrCategoryDirection, e.Err} }
 
 // TransferRefusedError is a refused Accept as Transfer. Reason is the
-// contract's name for why (such as COUNTERPART_NOT_CASH). For a row dated
-// before the cash Account's start date (BEFORE_START_DATE), AccountID
-// names the cash Account, and Date and StartDate the two dates; otherwise
-// they are zero.
+// contract's name for why (such as ACCOUNT_KIND_NOT_SUPPORTED). AccountID
+// names the Account it is refused for, when there is one: the loan or
+// crypto wallet Account, or, for a row dated before the cash Account's
+// start date (BEFORE_START_DATE), the cash Account, with Date and StartDate
+// the two dates; otherwise they are zero.
 type TransferRefusedError struct {
 	Reason    string
 	AccountID uuid.UUID
@@ -176,6 +177,10 @@ type ImportedTransactionReader interface {
 	// of the Account, sorted by Booking date and then ID (UUIDv7: the order
 	// they were imported, which follows the file's lines).
 	ImportedTransactions(ctx context.Context, tx *eventstore.Tx, account uuid.UUID, filter ImportedFilter) ([]ImportedTransaction, error)
+	// PendingTransferRows returns the pending Imported transactions on q's
+	// Accounts with q's amount and currency and a Transaction date within
+	// SuggestionWindowDays of q's, closest date first, then by ID.
+	PendingTransferRows(ctx context.Context, tx *eventstore.Tx, q PendingRowQuery) ([]ImportedTransaction, error)
 }
 
 // ImportedTransactions lists Accounts' Imported transactions, Accepts them
@@ -202,25 +207,36 @@ func NewImportedTransactions(scope HouseholdScope, accounts Accounts, ledger Led
 
 // Acceptance is how a row is Accepted: to Category (nil for
 // Uncategorised), or, with TransferAccount, as a Transfer to or from that
-// cash Account. MatchLeg is a leg the cash Account already has to Match
-// instead of recording a new one.
+// Account. MatchLeg is an In transit leg the Account already has, to Match
+// instead of recording a new one; MatchRow a pending row on the Account,
+// Accepted in the same command as the Transfer's other leg (a pair
+// Accept). At most one of them is set.
 type Acceptance struct {
 	Category        *uuid.UUID
 	TransferAccount *uuid.UUID
 	MatchLeg        *uuid.UUID
+	MatchRow        *uuid.UUID
 }
+
+// TransferNotAMatchingRow is the reason a paired row is refused: it isn't
+// a pending row on the counterpart with the exact opposite amount.
+const TransferNotAMatchingRow = "NOT_A_MATCHING_ROW"
 
 // Accept Accepts a pending Imported transaction booked in its Account's
 // Open month and, through the Ledger in the same database transaction,
 // books it with exactly its amount: to the Category, or to Uncategorised
-// when it has none. Accepted as a Transfer, the Ledger books the row as
-// the bank leg, records the cash leg and Matches them (consistency map:
-// Accept as Transfer). A row in a closed month, then one in a month not
-// open yet, is refused before its own state is checked, and the Ledger
-// checks the month again as it books. The Imported transaction, the Ledger
-// Transaction and the Account each check their own version, and a conflict
-// retries the whole transaction with the same Transaction ID (ADR-0011,
-// ADR-0013, ADR-0024; consistency map: Accept imported transaction).
+// when it has none. Accepted as a Transfer, the Ledger books the row's leg
+// and, for a cash counterpart, the cash leg, and Matches them (consistency
+// map: Accept as Transfer). With MatchRow (a pair Accept), once the row's
+// own state is checked, the paired row is checked (see pairedRow), both
+// are Accepted, their folds written in ID order so two crossing pair
+// Accepts can't deadlock, and the Ledger books both legs and their Match.
+// A row in a closed month, then one in a month not open yet, is refused
+// before its own state is checked, and the Ledger checks the month again
+// as it books. The Imported transactions, the Ledger Transactions and the
+// Accounts each check their own version, and a conflict retries the whole
+// transaction with the same Transaction IDs (ADR-0011, ADR-0013, ADR-0024;
+// consistency map: Accept imported transaction).
 func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UUID, a Acceptance,
 ) (ImportedTransaction, error) {
 	transaction, err := sharedkernel.NewID()
@@ -228,7 +244,7 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
 
-	cashLeg, err := sharedkernel.NewID()
+	counterpartLeg, err := sharedkernel.NewID()
 	if err != nil {
 		return ImportedTransaction{}, err //nolint:wrapcheck // already wrapped by the shared kernel
 	}
@@ -260,20 +276,37 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 			return err
 		}
 
-		res, err := s.rows.Execute(ctx, tx, id, domain.AcceptImportedTransaction{TransactionID: transaction})
-		if errors.Is(err, domain.ErrImportedTransactionNotImported) {
-			return ErrImportedTransactionNotFound
+		var paired *Booking
+
+		if a.MatchRow != nil && a.TransferAccount != nil {
+			// The row's own state is said before anything about the
+			// paired row.
+			if _, err := s.rows.Decider.Decide(fold.State, domain.AcceptImportedTransaction{
+				TransactionID: transaction,
+			}); err != nil {
+				return notImported(err)
+			}
+
+			row, err := s.pairedRow(ctx, tx, id, fold.State, *a.TransferAccount, *a.MatchRow)
+			if err != nil {
+				return err
+			}
+
+			// The counterpart's leg is the paired row's.
+			paired = &Booking{Transaction: counterpartLeg, ImportedTransaction: *a.MatchRow, Row: row}
 		}
 
+		state, err := s.acceptInIDOrder(ctx, tx, Booking{Transaction: transaction, ImportedTransaction: id}, paired)
 		if err != nil {
-			return err //nolint:wrapcheck // the Decider's refusal or the runtime's error
+			return err
 		}
 
-		booking := Booking{Transaction: transaction, ImportedTransaction: id, Category: a.Category, Row: res.State}
+		booking := Booking{Transaction: transaction, ImportedTransaction: id, Category: a.Category, Row: state}
 
 		if a.TransferAccount != nil {
 			err = s.ledger.BookTransfer(ctx, tx, TransferBooking{
-				Booking: booking, CashAccount: *a.TransferAccount, CashLeg: cashLeg, MatchLeg: a.MatchLeg,
+				Booking: booking, Counterpart: *a.TransferAccount, CounterpartLeg: counterpartLeg, MatchLeg: a.MatchLeg,
+				MatchRow: paired,
 			})
 		} else {
 			err = s.ledger.BookAccepted(ctx, tx, booking)
@@ -283,7 +316,7 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 			return err //nolint:wrapcheck // the port's error
 		}
 
-		accepted, err = s.withResembled(ctx, tx, ImportedTransaction{ID: id, State: res.State})
+		accepted, err = s.withResembled(ctx, tx, ImportedTransaction{ID: id, State: state})
 
 		return err
 	})
@@ -292,6 +325,107 @@ func (s *ImportedTransactions) Accept(ctx context.Context, household, id uuid.UU
 	}
 
 	return accepted, nil
+}
+
+// notImported is the Decider's refusal of a command to a row that was
+// never imported as ErrImportedTransactionNotFound; any other error is
+// returned as it is.
+func notImported(err error) error {
+	if errors.Is(err, domain.ErrImportedTransactionNotImported) {
+		return ErrImportedTransactionNotFound
+	}
+
+	return err
+}
+
+// notAMatchingRow is a paired row refused as NOT_A_MATCHING_ROW.
+func notAMatchingRow(err error) error {
+	return &TransferRefusedError{Reason: TransferNotAMatchingRow, Err: err}
+}
+
+// pairedRow loads, in the caller's transaction, the row named to be
+// Accepted with the row id as the other leg of its Transfer, and checks it
+// (statement-transfers spec "Ingestion"): a pending row on counterpart,
+// not the row itself, with the exact opposite amount in the same currency,
+// otherwise a *TransferRefusedError (NOT_A_MATCHING_ROW); then booked in
+// its Account's Open month, otherwise a *MonthError naming that Account.
+// There is no date window. A Suspected duplicate isn't pending.
+func (s *ImportedTransactions) pairedRow(ctx context.Context, tx *eventstore.Tx, id uuid.UUID,
+	row domain.ImportedTransactionState, counterpart, paired uuid.UUID,
+) (domain.ImportedTransactionState, error) {
+	fold, found, err := s.rows.Folds.Load(ctx, tx, paired)
+	if err != nil {
+		return domain.ImportedTransactionState{}, err //nolint:wrapcheck // the adapter's error
+	}
+
+	p := fold.State
+
+	if !found || paired == id || !p.Imported || p.State != domain.ImportedPending || p.AccountID != counterpart ||
+		p.Currency != row.Currency || !p.Amount.Equal(row.Amount.Neg()) {
+		return domain.ImportedTransactionState{}, notAMatchingRow(fmt.Errorf(
+			"%s isn't a pending row of %s %s on %s", paired, row.Amount.Neg(), row.Currency, counterpart))
+	}
+
+	// Not locked: booking its leg writes its Account's fold, whose version
+	// catches a Close or Reopen that ran meanwhile.
+	account, err := s.ledger.ImportAccount(ctx, tx, p.AccountID)
+	if err != nil {
+		return domain.ImportedTransactionState{}, err //nolint:wrapcheck // the port's error
+	}
+
+	for _, check := range []func(domain.ImportedTransactionState, string) error{closedMonth, notOpenYet} {
+		if err := check(p, account.OpenMonth); err != nil {
+			if m, ok := errors.AsType[*MonthError](err); ok {
+				m.AccountID = p.AccountID
+			}
+
+			return domain.ImportedTransactionState{}, err
+		}
+	}
+
+	return p, nil
+}
+
+// acceptInIDOrder records Accepted on the row, and on the paired row when
+// there is one, each linked to its own leg, writing the folds in ID order
+// so two crossing pair Accepts can't deadlock. It returns the row's new
+// state. The paired row was checked to be pending, so the Decider refusing
+// it now means another command changed it first: NOT_A_MATCHING_ROW.
+func (s *ImportedTransactions) acceptInIDOrder(ctx context.Context, tx *eventstore.Tx, row Booking, paired *Booking,
+) (domain.ImportedTransactionState, error) {
+	order := []Booking{row}
+
+	if paired != nil {
+		order = append(order, *paired)
+
+		if paired.ImportedTransaction.String() < row.ImportedTransaction.String() {
+			order[0], order[1] = order[1], order[0]
+		}
+	}
+
+	var state domain.ImportedTransactionState
+
+	for _, b := range order {
+		res, err := s.rows.Execute(ctx, tx, b.ImportedTransaction, domain.AcceptImportedTransaction{
+			TransactionID: b.Transaction,
+		})
+
+		switch {
+		case err == nil:
+		case b.ImportedTransaction != row.ImportedTransaction && (errors.Is(err, ErrImportedTransactionAlreadyAccepted) ||
+			errors.Is(err, ErrImportedTransactionDiscarded) || errors.Is(err, ErrImportedTransactionSuspectedDuplicate) ||
+			errors.Is(err, domain.ErrImportedTransactionNotPending)):
+			return domain.ImportedTransactionState{}, notAMatchingRow(err)
+		default:
+			return domain.ImportedTransactionState{}, notImported(err)
+		}
+
+		if b.ImportedTransaction == row.ImportedTransaction {
+			state = res.State
+		}
+	}
+
+	return state, nil
 }
 
 // ReturnToPending returns the Imported transaction, Accepted by the Ledger
@@ -605,15 +739,49 @@ type SuggestedLeg struct {
 	CounterpartAccountID uuid.UUID
 }
 
-// TransferSuggestions lists the cash Account's In transit legs that could
-// be the other side of the Imported transaction, read through the Ledger
-// port in one transaction: closest date first, within a week either side
-// of the row's Transaction date (consistency map: List transfer
-// suggestions). A cash Account the row can't be a Transfer with is a
-// *TransferRefusedError.
-func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, household, id, cash uuid.UUID,
-) ([]SuggestedLeg, error) {
-	var out []SuggestedLeg
+// LedgerSuggestions is what the Ledger suggests for a row: In transit Legs,
+// and StatementAccounts, the bank and credit card Accounts it looked on,
+// whose pending rows Ingestion suggests.
+type LedgerSuggestions struct {
+	Legs              []SuggestedLeg
+	StatementAccounts []uuid.UUID
+}
+
+// TransferSuggestions is what could be the other side of a row as a
+// Transfer: In transit Legs, and pending Rows on bank or credit card
+// Accounts, each closest date first.
+type TransferSuggestions struct {
+	Legs []SuggestedLeg
+	Rows []ImportedTransaction
+}
+
+// SuggestionWindowDays is how many days either side of a row's Transaction
+// date a pending row is suggested for it, as the Ledger's window is for
+// legs.
+const SuggestionWindowDays = 7
+
+// PendingRowQuery asks for pending rows on Accounts, with Amount in
+// Currency, and a Transaction date within SuggestionWindowDays of
+// TransactionDate.
+type PendingRowQuery struct {
+	Accounts        []uuid.UUID
+	Amount          sharedkernel.Decimal
+	Currency        string
+	TransactionDate time.Time
+}
+
+// TransferSuggestions works out what could be the other side of the
+// Imported transaction as a Transfer, on counterpart or, when it is nil, on
+// every Account the row could be a Transfer with, in one transaction
+// (consistency map: List transfer suggestions): the In transit legs, read
+// through the Ledger port, and the pending rows on the bank and credit card
+// Accounts among them, read here, both with the opposite amount, within a
+// week either side of the row's Transaction date, closest first. An Account
+// the row can't be a Transfer with is a *TransferRefusedError.
+func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, household, id uuid.UUID,
+	counterpart *uuid.UUID,
+) (TransferSuggestions, error) {
+	var out TransferSuggestions
 
 	err := s.scope.InHousehold(ctx, household, func(ctx context.Context, tx *eventstore.Tx, _ uuid.UUID) error {
 		fold, found, err := s.rows.Folds.Load(ctx, tx, id)
@@ -625,12 +793,28 @@ func (s *ImportedTransactions) TransferSuggestions(ctx context.Context, househol
 			return ErrImportedTransactionNotFound
 		}
 
-		out, err = s.ledger.TransferSuggestions(ctx, tx, fold.State, cash)
+		row := fold.State
 
-		return err //nolint:wrapcheck // the port's error
+		ledger, err := s.ledger.TransferSuggestions(ctx, tx, row, counterpart)
+		if err != nil {
+			return err //nolint:wrapcheck // the port's error
+		}
+
+		out.Legs = ledger.Legs
+
+		if len(ledger.StatementAccounts) == 0 {
+			return nil
+		}
+
+		out.Rows, err = s.reader.PendingTransferRows(ctx, tx, PendingRowQuery{
+			Accounts: ledger.StatementAccounts, Amount: row.Amount.Neg(), Currency: row.Currency,
+			TransactionDate: row.TransactionDate,
+		})
+
+		return err //nolint:wrapcheck // the adapter's error
 	})
 	if err != nil {
-		return nil, fmt.Errorf("transfer suggestions for imported transaction %s: %w", id, err)
+		return TransferSuggestions{}, fmt.Errorf("transfer suggestions for imported transaction %s: %w", id, err)
 	}
 
 	return out, nil

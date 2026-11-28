@@ -27,21 +27,37 @@ type Handler interface {
 	// Account's `open_month`.
 	//
 	// With `transfer_account_id` instead of `category_id`, the row is Accepted as a Transfer to or from
-	// that cash Account: the Transaction recorded is the row's Transfer leg, against the Account transfer
-	// Category, and the cash Account gets the opposite leg, dated on the row's Transaction date, with its
-	// description and payee. The two legs are Matched in the same transaction. With
-	// `match_transaction_id`, no cash leg is recorded: the given leg, one the cash Account already has In
-	// transit (see `listTransferSuggestions`), is Matched instead. A cash leg dated in a closed month of
-	// the cash Account gets 409 `/problems/month-closed`, naming the cash Account in `account_id`. Refused
-	// Transfers get 422 `/problems/invalid-transfer` with a `reason`: both `category_id` and
-	// `transfer_account_id` (`CATEGORY_AND_TRANSFER`), `match_transaction_id` alone
-	// (`MATCH_WITHOUT_TRANSFER`), a counterpart that isn't a cash Account (`COUNTERPART_NOT_CASH`;
-	// Transfers between statement Accounts come later), the row's own Account (`SAME_ACCOUNT`), another
-	// Account currency (`CURRENCY_MISMATCH`), an Account that isn't the Household's (`UNKNOWN_ACCOUNT`), a
-	// leg to match that isn't an In transit leg on the cash Account naming this row's Account with the
-	// opposite amount (`NOT_A_MATCHING_LEG`), or a row dated before the cash Account's start date, when
-	// the cash Account didn't exist yet (`BEFORE_START_DATE`, naming the cash Account in `account_id`).
-	// Nothing is booked, and the row stays pending.
+	// that Account (ADR-0026): the Transaction recorded is the row's Transfer leg, against the Account
+	// transfer Category, naming that Account as its counterpart. Only cash, bank and credit card Accounts
+	// take part in Transfers: a loan or crypto wallet Account on either side is refused.
+	//
+	// A cash counterpart gets the opposite leg, dated on the row's Transaction date, with its description
+	// and payee, and the two legs are Matched in the same transaction. With `match_transaction_id`, no
+	// cash leg is recorded: the given leg, one the cash Account already has In transit (see
+	// `listTransferSuggestions`), is Matched instead. A cash leg dated in a closed month of the cash
+	// Account gets 409 `/problems/month-closed`, naming the cash Account in `account_id`.
+	//
+	// A bank or credit card counterpart gets no leg: its leg can only come from its own statement. The
+	// row's leg stays In transit, or is Matched to `match_transaction_id`, an In transit leg the
+	// counterpart already has, or to the leg of `match_imported_transaction_id`, a pending row on the
+	// counterpart, which is Accepted in the same transaction with its own leg. The paired row must be
+	// booked in its Account's open month: otherwise 409 `/problems/month-closed` or
+	// `/problems/month-not-open-yet`, naming its Account in `account_id`. The response is this row; the
+	// paired row is read with `listImportedTransactions`. A leg in a closed month can still be Matched: a
+	// Match changes no amount.
+	//
+	// Refused Transfers get 422 `/problems/invalid-transfer` with a `reason`: both `category_id` and
+	// `transfer_account_id` (`CATEGORY_AND_TRANSFER`), `match_transaction_id` or
+	// `match_imported_transaction_id` without `transfer_account_id` (`MATCH_WITHOUT_TRANSFER`), both
+	// `match_transaction_id` and `match_imported_transaction_id` (`MATCH_LEG_AND_ROW`), a loan or crypto
+	// wallet Account on either side (`ACCOUNT_KIND_NOT_SUPPORTED`, naming it in `account_id`), the row's
+	// own Account (`SAME_ACCOUNT`), another Account currency (`CURRENCY_MISMATCH`), an Account that isn't
+	// the Household's (`UNKNOWN_ACCOUNT`), a leg to match that isn't an In transit leg on the counterpart
+	// naming this row's Account with the opposite amount (`NOT_A_MATCHING_LEG`), a row to pair that isn't
+	// a pending row on the counterpart, other than this one, with the opposite amount
+	// (`NOT_A_MATCHING_ROW`), or a row dated before a cash counterpart's start date, when the cash Account
+	// didn't exist yet (`BEFORE_START_DATE`, naming the cash Account in `account_id`). Nothing is booked,
+	// and every row stays pending.
 	//
 	// Retrying with the same Idempotency-Key and body returns the original result and never books twice.
 	//
@@ -379,12 +395,23 @@ type Handler interface {
 	ListStatementImports(ctx context.Context, params ListStatementImportsParams) (ListStatementImportsRes, error)
 	// ListTransferSuggestions implements listTransferSuggestions operation.
 	//
-	// Lists the Transfer legs on the cash Account `account_id` that could be the other side of this
-	// Imported transaction: not Matched and not reversed, naming the row's Account as their counterpart,
-	// with the opposite amount, and dated within 7 days either side of the row's Transaction date. Closest
-	// date first. They are worked out on each request and never stored; a User confirms one by Accepting
-	// the row with it as `match_transaction_id`. An `account_id` that isn't a cash Account of the
-	// Household gets 422 `/problems/invalid-transfer` (`COUNTERPART_NOT_CASH` or `UNKNOWN_ACCOUNT`).
+	// Lists what could be the other side of this Imported transaction as a Transfer, on the Account
+	// `account_id` or, without it, on every Account of the Household it could be a Transfer with: another
+	// cash, bank or credit card Account in the row's currency, when the row's own Account is one of those
+	// kinds too.
+	//
+	//  - `legs`: Transfer legs that are In transit (not Matched and not reversed), naming the row's
+	//    Account as their counterpart. A User confirms one by Accepting the row with it as
+	//    `match_transaction_id`.
+	//  - `imported_transactions`: pending rows on a bank or credit card Account, including rows booked in
+	//    a month that isn't open yet. A User confirms one by Accepting the row with it as
+	//    `match_imported_transaction_id`.
+	//
+	// Both have the opposite amount and are dated within 7 days either side of the row's Transaction date,
+	// closest date first. They are worked out on each request and never stored. An `account_id` the row
+	// can't be a Transfer with gets 422 `/problems/invalid-transfer` (`ACCOUNT_KIND_NOT_SUPPORTED`,
+	// `SAME_ACCOUNT`, `CURRENCY_MISMATCH` or `UNKNOWN_ACCOUNT`), and so does a row on a loan or crypto
+	// wallet Account (`ACCOUNT_KIND_NOT_SUPPORTED`).
 	//
 	// GET /households/{household_id}/imported-transactions/{imported_transaction_id}/transfer-suggestions
 	ListTransferSuggestions(ctx context.Context, params ListTransferSuggestionsParams) (ListTransferSuggestionsRes, error)
@@ -441,12 +468,13 @@ type Handler interface {
 	// Both `category_id` and `counterpart_account_id`, a counterpart that is the Account itself, isn't one
 	// of the Household's, or has another Account currency get 422 `/problems/invalid-transfer` with a
 	// `reason`. So does a date before a cash counterpart's start date (`BEFORE_START_DATE`, naming the
-	// counterpart in `account_id`). An Account that isn't cash gets 422 `/problems/not-a-cash-account`:
-	// statement Accounts take Transactions only from their statements. A zero amount, one in another
-	// currency or with more decimal places than the Account's, a date after today (UTC) or before the
-	// Account's start date gets 422 `/problems/invalid-transaction`. A date in a closed month of either
-	// Account gets 409 `/problems/month-closed`, naming the Account in `account_id`; months after the open
-	// month are fine for a cash Account (ADR-0024).
+	// counterpart in `account_id`), and a loan or crypto wallet counterpart, which take no part in
+	// Transfers (`ACCOUNT_KIND_NOT_SUPPORTED`, naming it in `account_id`). An Account that isn't cash gets
+	// 422 `/problems/not-a-cash-account`: statement Accounts take Transactions only from their statements.
+	// A zero amount, one in another currency or with more decimal places than the Account's, a date after
+	// today (UTC) or before the Account's start date gets 422 `/problems/invalid-transaction`. A date in a
+	// closed month of either Account gets 409 `/problems/month-closed`, naming the Account in
+	// `account_id`; months after the open month are fine for a cash Account (ADR-0024).
 	//
 	// POST /households/{household_id}/accounts/{account_id}/transactions
 	RecordCashTransaction(ctx context.Context, req *CashTransactionCreation, params RecordCashTransactionParams) (RecordCashTransactionRes, error)

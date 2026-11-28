@@ -254,19 +254,19 @@ func (CategoryReader) InternalCategory(ctx context.Context, tx *eventstore.Tx, r
 
 // TransferSuggestions implements app.TransactionReader with the Account
 // Posting lookup rows of In transit legs.
-func (TransactionReader) TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q app.SuggestionQuery,
+func (TransactionReader) TransferSuggestions(ctx context.Context, tx *eventstore.Tx, q app.LegQuery,
 ) ([]uuid.UUID, error) {
 	date := q.TransactionDate.Format(domain.DateLayout)
 
 	rows, err := tx.Query(ctx, `SELECT p.transaction_id
 		FROM account_postings p
 		JOIN ledger_transactions t ON t.household_id = p.household_id AND t.id = p.transaction_id
-		WHERE p.household_id = $1 AND p.account_id = $2 AND t.counterpart_account_id = $3
+		WHERE p.household_id = $1 AND p.account_id = ANY($2::uuid[]) AND t.counterpart_account_id = $3
 		  AND t.match_id IS NULL AND t.reversed_by_transaction_id IS NULL
 		  AND p.amount = $4::numeric AND p.currency = $5
 		  AND p.transaction_date BETWEEN $6::date - $7::int AND $6::date + $7::int
 		ORDER BY abs(p.transaction_date - $6::date), p.transaction_date, p.transaction_id`,
-		tx.HouseholdID(), q.CashAccount, q.RowAccount, q.Amount.Neg().String(), q.Currency, date,
+		tx.HouseholdID(), q.Accounts, q.RowAccount, q.Amount.Neg().String(), q.Currency, date,
 		int(app.SuggestionWindow/(24*time.Hour)))
 	if err != nil {
 		return nil, fmt.Errorf("list transfer suggestions: %w", err)
@@ -278,4 +278,23 @@ func (TransactionReader) TransferSuggestions(ctx context.Context, tx *eventstore
 	}
 
 	return ids, nil
+}
+
+// TransferCounterparts implements app.TransactionReader. Account IDs are
+// UUIDv7, so the Accounts come in the order they were added.
+func (TransactionReader) TransferCounterparts(ctx context.Context, tx *eventstore.Tx, account uuid.UUID,
+	currency string,
+) ([]app.TransferCounterpart, error) {
+	rows, err := tx.Query(ctx, `SELECT id, kind FROM accounts
+		WHERE household_id = $1 AND id <> $2 AND currency = $3 ORDER BY id`, tx.HouseholdID(), account, currency)
+	if err != nil {
+		return nil, fmt.Errorf("list transfer counterparts: %w", err)
+	}
+
+	list, err := pgx.CollectRows(rows, pgx.RowToStructByPos[app.TransferCounterpart])
+	if err != nil {
+		return nil, fmt.Errorf("list transfer counterparts: %w", err)
+	}
+
+	return list, nil
 }

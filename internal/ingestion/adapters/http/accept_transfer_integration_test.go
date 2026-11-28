@@ -170,15 +170,19 @@ func TestAcceptingAsATransferIsRefused(t *testing.T) {
 	f := newAcceptFixture(t, apitest.Start(t), "alice")
 	wallet := f.addCash(t, "Wallet", "EUR", "20.00")
 	dollars := f.addCash(t, "Dollars", "USD", "20.00")
-	savings := addAccount(t, f.app, f.token, f.household)
 	food := f.createCategory(t, "Food", "EXPENSE")
 
 	for reason, body := range map[string]map[string]any{
-		"CATEGORY_AND_TRANSFER": {"category_id": food, "transfer_account_id": wallet},
-		"COUNTERPART_NOT_CASH":  {"transfer_account_id": savings},
-		"SAME_ACCOUNT":          {"transfer_account_id": f.account},
-		"CURRENCY_MISMATCH":     {"transfer_account_id": dollars},
-		"UNKNOWN_ACCOUNT":       {"transfer_account_id": "0198f0a0-0000-7000-8000-000000000000"},
+		"CATEGORY_AND_TRANSFER":  {"category_id": food, "transfer_account_id": wallet},
+		"MATCH_WITHOUT_TRANSFER": {"match_imported_transaction_id": "0198f0a0-0000-7000-8000-000000000000"},
+		"MATCH_LEG_AND_ROW": {
+			"transfer_account_id":           wallet,
+			"match_transaction_id":          "0198f0a0-0000-7000-8000-000000000000",
+			"match_imported_transaction_id": "0198f0a0-0000-7000-8000-000000000001",
+		},
+		"SAME_ACCOUNT":      {"transfer_account_id": f.account},
+		"CURRENCY_MISMATCH": {"transfer_account_id": dollars},
+		"UNKNOWN_ACCOUNT":   {"transfer_account_id": "0198f0a0-0000-7000-8000-000000000000"},
 	} {
 		t.Run(reason, func(t *testing.T) {
 			res := f.accept(t, "Rent", body)
@@ -297,5 +301,25 @@ func TestAcceptingAsATransferBeforeTheCashStartDateIsRefused(t *testing.T) {
 	// Salary is dated 2026-01-15, the wallet's start date.
 	if a := f.accepted(t, "Salary", map[string]any{"transfer_account_id": wallet.AccountID}); a.State != "ACCEPTED" {
 		t.Errorf("accepted = %+v, want ACCEPTED on the start date", a)
+	}
+}
+
+// Every Imported transaction names the Account whose statement it is on,
+// so a suggested row from another Account can be told apart (spec story 11).
+func TestImportedTransactionsNameTheirAccount(t *testing.T) {
+	t.Parallel()
+	f := newAcceptFixture(t, apitest.Start(t), "alice")
+
+	for _, i := range f.imported(t, "").Items {
+		if i.AccountID != f.account {
+			t.Errorf("row %d account_id = %q, want %s", i.Line, i.AccountID, f.account)
+		}
+	}
+
+	var accepted importedTransaction
+	f.accept(t, "Rent", nil).AssertJSON(t, http.StatusOK, &accepted)
+
+	if accepted.AccountID != f.account {
+		t.Errorf("accepted row account_id = %q, want %s", accepted.AccountID, f.account)
 	}
 }

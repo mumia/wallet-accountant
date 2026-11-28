@@ -2539,7 +2539,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 											switch method {
 											case "GET":
 												r.name = ListTransferSuggestionsOperation
-												r.summary = "Cash legs an Imported transaction could be Matched to"
+												r.summary = "What could be the other side of an Imported transaction's Transfer"
 												r.operationID = "listTransferSuggestions"
 												r.operationGroup = ""
 												r.pathPattern = "/households/{household_id}/imported-transactions/{imported_transaction_id}/transfer-suggestions"

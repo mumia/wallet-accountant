@@ -77,7 +77,7 @@ Money moving between two of the Household's Accounts, recorded as two Transfer l
 _Avoid_: Movement, internal payment
 
 **Transfer leg**:
-One side of a Transfer: a Transaction on one Account, against Account transfer, naming the other Account as its Counterpart Account.
+One side of a Transfer: a Transaction on one Account, against Account transfer, naming the other Account as its Counterpart Account. Between two statement Accounts, each leg comes from its own Account's statement.
 _Avoid_: Side, half, mirror transaction
 
 **Counterpart Account**:

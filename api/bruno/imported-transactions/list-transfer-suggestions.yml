@@ -1,5 +1,5 @@
 info:
-  name: Cash legs an Imported transaction could be Matched to
+  name: What could be the other side of an Imported transaction's Transfer
   type: http
   seq: 3
 http:
@@ -17,17 +17,31 @@ http:
     - name: account_id
       value: ""
       type: query
-      description: The cash Account whose legs are suggested
+      description: The one Account whose legs and rows are suggested; absent, every Account the row could be a Transfer with
+      disabled: true
   auth: inherit
 docs: |-
-  Lists the Transfer legs on the cash Account `account_id` that could
-  be the other side of this Imported transaction: not Matched and not
-  reversed, naming the row's Account as their counterpart, with the
-  opposite amount, and dated within 7 days either side of the row's
-  Transaction date. Closest date first. They are worked out on each
-  request and never stored; a User confirms one by Accepting the row
-  with it as `match_transaction_id`. An `account_id` that isn't a
-  cash Account of the Household gets 422 `/problems/invalid-transfer`
-  (`COUNTERPART_NOT_CASH` or `UNKNOWN_ACCOUNT`).
+  Lists what could be the other side of this Imported transaction as a
+  Transfer, on the Account `account_id` or, without it, on every
+  Account of the Household it could be a Transfer with: another cash,
+  bank or credit card Account in the row's currency, when the row's
+  own Account is one of those kinds too.
+
+  - `legs`: Transfer legs that are In transit (not Matched and not
+    reversed), naming the row's Account as their counterpart. A User
+    confirms one by Accepting the row with it as
+    `match_transaction_id`.
+  - `imported_transactions`: pending rows on a bank or credit card
+    Account, including rows booked in a month that isn't open yet. A
+    User confirms one by Accepting the row with it as
+    `match_imported_transaction_id`.
+
+  Both have the opposite amount and are dated within 7 days either
+  side of the row's Transaction date, closest date first. They are
+  worked out on each request and never stored. An `account_id` the
+  row can't be a Transfer with gets 422 `/problems/invalid-transfer`
+  (`ACCOUNT_KIND_NOT_SUPPORTED`, `SAME_ACCOUNT`, `CURRENCY_MISMATCH`
+  or `UNKNOWN_ACCOUNT`), and so does a row on a loan or crypto wallet
+  Account (`ACCOUNT_KIND_NOT_SUPPORTED`).
 
   Operation `listTransferSuggestions`.

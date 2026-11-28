@@ -180,11 +180,14 @@ type (
 	// ImportedTransactionID links it to the Imported transaction it books;
 	// ReversalOf to the Transaction it reverses. CounterpartAccountID makes
 	// it a Transfer leg, and CreatedByTransfer says an Accept as Transfer
-	// recorded it.
+	// recorded it. A leg gives the kinds of its Account and of its
+	// counterpart, AccountKind and CounterpartKind, which aren't recorded.
 	RecordTransaction struct {
 		ImportedTransactionID sharedkernel.ID
 		ReversalOf            sharedkernel.ID
 		CounterpartAccountID  sharedkernel.ID
+		AccountKind           AccountKind
+		CounterpartKind       AccountKind
 		CreatedByTransfer     bool
 		OpeningBalance        bool
 		BookingDate           time.Time

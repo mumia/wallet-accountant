@@ -38,11 +38,16 @@ const (
 var transferDetails = map[string]string{
 	"CATEGORY_AND_TRANSFER": "A Transfer leg is booked against Account transfer: send category_id or " +
 		"transfer_account_id, not both.",
-	"COUNTERPART_NOT_CASH": "transfer_account_id must be a cash Account: Transfers between statement Accounts " +
-		"come later.",
-	"MATCH_WITHOUT_TRANSFER": "match_transaction_id needs transfer_account_id, the cash Account it is on.",
-	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on the cash Account naming this row's " +
+	"MATCH_WITHOUT_TRANSFER": "match_transaction_id and match_imported_transaction_id need transfer_account_id, " +
+		"the Account they are on.",
+	"MATCH_LEG_AND_ROW": "Send match_transaction_id or match_imported_transaction_id, not both: the other side is " +
+		"either a leg already booked or a pending row.",
+	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on transfer_account_id naming this row's " +
 		"Account with the opposite amount.",
+	"NOT_A_MATCHING_ROW": "match_imported_transaction_id isn't another pending row on transfer_account_id with the " +
+		"opposite amount in the same currency.",
+	"ACCOUNT_KIND_NOT_SUPPORTED": "Loan and crypto wallet Accounts take no part in Transfers yet: only cash, bank " +
+		"and credit card Accounts do.",
 	"SAME_ACCOUNT":      "transfer_account_id is the row's own Account.",
 	"CURRENCY_MISMATCH": "transfer_account_id has another Account currency than the row.",
 	"UNKNOWN_ACCOUNT":   "transfer_account_id is not one of the Household's Accounts.",
@@ -93,25 +98,29 @@ var importedStatesIn = map[string]domain.ImportedState{
 }
 
 // monthRefusal is the 409 of a row refused for its Booking month (closed,
-// or not open yet), or nil for any other error.
+// or not open yet), or nil for any other error. A month of another Account
+// than the row's, such as a counterpart's, names that Account.
 func monthRefusal(err error) *oas.MonthProblem {
 	e, ok := errors.AsType[*app.MonthError](err)
+
+	var p *oas.MonthProblem
 
 	switch {
 	case !ok:
 		return nil
 	case errors.Is(e.Err, app.ErrMonthClosed):
-		p := httpapi.MonthClosed(e.Month, e.OpenMonth)
-		if e.AccountID != uuid.Nil {
-			p.AccountID = oas.NewOptUUID(e.AccountID)
-		}
-
-		return p
+		p = httpapi.MonthClosed(e.Month, e.OpenMonth)
 	case errors.Is(e.Err, app.ErrMonthNotOpenYet):
-		return httpapi.MonthNotOpenYet(e.Month, e.OpenMonth)
+		p = httpapi.MonthNotOpenYet(e.Month, e.OpenMonth)
 	default:
 		return nil
 	}
+
+	if e.AccountID != uuid.Nil {
+		p.AccountID = oas.NewOptUUID(e.AccountID)
+	}
+
+	return p
 }
 
 // AcceptImportedTransaction implements acceptImportedTransaction.
@@ -127,12 +136,20 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 			return transferRefused("CATEGORY_AND_TRANSFER"), nil
 		}
 
-		if v.MatchTransactionID.Set && !v.TransferAccountID.Set {
+		if (v.MatchTransactionID.Set || v.MatchImportedTransactionID.Set) && !v.TransferAccountID.Set {
 			return transferRefused("MATCH_WITHOUT_TRANSFER"), nil
+		}
+
+		if v.MatchTransactionID.Set && v.MatchImportedTransactionID.Set {
+			return transferRefused("MATCH_LEG_AND_ROW"), nil
 		}
 
 		if id, ok := v.MatchTransactionID.Get(); ok {
 			a.MatchLeg = &id
+		}
+
+		if id, ok := v.MatchImportedTransactionID.Get(); ok {
+			a.MatchRow = &id
 		}
 
 		if id, ok := v.CategoryID.Get(); ok {
@@ -263,6 +280,7 @@ func importedTransactionOut(i app.ImportedTransaction) (oas.ImportedTransaction,
 	item := oas.ImportedTransaction{
 		ImportedTransactionID: i.ID,
 		StatementImportID:     s.StatementImportID,
+		AccountID:             s.AccountID,
 		State:                 importedStatesOut[s.State],
 		Line:                  int32(s.Line), //nolint:gosec // a statement file is far smaller
 		BookingDate:           s.BookingDate,

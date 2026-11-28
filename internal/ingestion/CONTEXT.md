@@ -37,7 +37,7 @@ The state of an Imported transaction waiting for a User to Accept or Discard it.
 _Avoid_: Unreviewed, new, open, unconfirmed
 
 **Accepted**:
-The state of an Imported transaction that a User has confirmed as new because no manual entry corresponds to it, and whose Category the User has confirmed. The system suggests a Category; if it has none, the transaction goes to Uncategorised.
+The state of an Imported transaction that a User has confirmed as new because no manual entry corresponds to it, and whose Category the User has confirmed. The system suggests a Category; if it has none, the transaction goes to Uncategorised. Two rows on two of the Household's statement Accounts can be Accepted together as the two legs of one Transfer.
 _Avoid_: Approved, cleared
 
 **Rule**:
