@@ -75,6 +75,7 @@ type accountTransaction struct {
 type importedTransaction struct {
 	ImportedTransactionID string     `json:"imported_transaction_id"`
 	StatementImportID     string     `json:"statement_import_id"`
+	AccountID             string     `json:"account_id"`
 	State                 string     `json:"state"`
 	Line                  int        `json:"line"`
 	BookingDate           string     `json:"booking_date"`

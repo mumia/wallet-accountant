@@ -97,14 +97,19 @@ func TestAManualCashLegIsSuggestedAndMatchedOnAccept(t *testing.T) {
 	}
 
 	var suggested struct {
-		Items []legLine `json:"items"`
+		Legs                 []legLine             `json:"legs"`
+		ImportedTransactions []importedTransaction `json:"imported_transactions"`
 	}
 
 	f.suggestions(t, "Deposit", wallet).AssertJSON(t, http.StatusOK, &suggested)
 
-	if len(suggested.Items) != 2 || suggested.Items[0].TransactionID != near.TransactionID ||
-		suggested.Items[1].TransactionID != week.TransactionID {
-		t.Errorf("suggestions = %+v, want the legs of the 13th and the 22nd, closest first", suggested.Items)
+	if len(suggested.Legs) != 2 || suggested.Legs[0].TransactionID != near.TransactionID ||
+		suggested.Legs[1].TransactionID != week.TransactionID {
+		t.Errorf("suggested legs = %+v, want the legs of the 13th and the 22nd, closest first", suggested.Legs)
+	}
+
+	if len(suggested.ImportedTransactions) != 0 {
+		t.Errorf("suggested rows = %+v, want none: a cash Account has no statement", suggested.ImportedTransactions)
 	}
 
 	// The leg 8 days away isn't suggested, but can still be confirmed.
@@ -175,7 +180,7 @@ func TestMatchingALegOnAcceptIsRefused(t *testing.T) {
 		})
 	}
 
-	assertReason(t, f.suggestions(t, "Deposit", savings), "COUNTERPART_NOT_CASH")
+	f.suggestions(t, "Deposit", savings).AssertProblem(t, http.StatusNotImplemented, "/problems/not-implemented")
 	assertReason(t, f.suggestions(t, "Deposit", "0198f0a0-0000-7000-8000-000000000000"), "UNKNOWN_ACCOUNT")
 
 	if pending := f.imported(t, "?state=PENDING").Items; len(pending) != 3 {

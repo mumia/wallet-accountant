@@ -1910,6 +1910,8 @@ type ImportedTransaction struct {
 	ImportedTransactionID uuid.UUID `json:"imported_transaction_id"`
 	// The Statement import that brought it in.
 	StatementImportID uuid.UUID `json:"statement_import_id"`
+	// The Account whose statement it is on.
+	AccountID uuid.UUID `json:"account_id"`
 	// Where it is in its review.
 	State string `json:"state"`
 	// Its line in the statement file.
@@ -1940,6 +1942,11 @@ func (s *ImportedTransaction) GetImportedTransactionID() uuid.UUID {
 // GetStatementImportID returns the value of StatementImportID.
 func (s *ImportedTransaction) GetStatementImportID() uuid.UUID {
 	return s.StatementImportID
+}
+
+// GetAccountID returns the value of AccountID.
+func (s *ImportedTransaction) GetAccountID() uuid.UUID {
+	return s.AccountID
 }
 
 // GetState returns the value of State.
@@ -2007,6 +2014,11 @@ func (s *ImportedTransaction) SetStatementImportID(val uuid.UUID) {
 	s.StatementImportID = val
 }
 
+// SetAccountID sets the value of AccountID.
+func (s *ImportedTransaction) SetAccountID(val uuid.UUID) {
+	s.AccountID = val
+}
+
 // SetState sets the value of State.
 func (s *ImportedTransaction) SetState(val string) {
 	s.State = val
@@ -2072,10 +2084,15 @@ type ImportedTransactionAcceptance struct {
 	// The Category on the other side of the Transaction; absent, or the Uncategorised Category, leaves it
 	// in Uncategorised.
 	CategoryID OptUUID `json:"category_id"`
-	// The cash Account on the other side, which Accepts the row as a Transfer instead of with a Category.
+	// The cash, bank or credit card Account on the other side, which Accepts the row as a Transfer instead
+	// of with a Category.
 	TransferAccountID OptUUID `json:"transfer_account_id"`
-	// An In transit leg on `transfer_account_id` to Match the row to, instead of recording a new cash leg.
+	// An In transit leg on `transfer_account_id` to Match the row to; for a cash Account, instead of
+	// recording a new cash leg.
 	MatchTransactionID OptUUID `json:"match_transaction_id"`
+	// A pending row on `transfer_account_id`, a bank or credit card Account, to Accept together with this
+	// one as the other leg of the Transfer.
+	MatchImportedTransactionID OptUUID `json:"match_imported_transaction_id"`
 }
 
 // GetCategoryID returns the value of CategoryID.
@@ -2093,6 +2110,11 @@ func (s *ImportedTransactionAcceptance) GetMatchTransactionID() OptUUID {
 	return s.MatchTransactionID
 }
 
+// GetMatchImportedTransactionID returns the value of MatchImportedTransactionID.
+func (s *ImportedTransactionAcceptance) GetMatchImportedTransactionID() OptUUID {
+	return s.MatchImportedTransactionID
+}
+
 // SetCategoryID sets the value of CategoryID.
 func (s *ImportedTransactionAcceptance) SetCategoryID(val OptUUID) {
 	s.CategoryID = val
@@ -2106,6 +2128,11 @@ func (s *ImportedTransactionAcceptance) SetTransferAccountID(val OptUUID) {
 // SetMatchTransactionID sets the value of MatchTransactionID.
 func (s *ImportedTransactionAcceptance) SetMatchTransactionID(val OptUUID) {
 	s.MatchTransactionID = val
+}
+
+// SetMatchImportedTransactionID sets the value of MatchImportedTransactionID.
+func (s *ImportedTransactionAcceptance) SetMatchImportedTransactionID(val OptUUID) {
+	s.MatchImportedTransactionID = val
 }
 
 // A page of an Account's Imported transactions.
@@ -5287,29 +5314,10 @@ func (s *TransactionChange) SetCategoryID(val uuid.UUID) {
 	s.CategoryID = val
 }
 
-// A list of Transactions.
-// Ref: #/components/schemas/TransactionList
-type TransactionList struct {
-	// The Transactions.
-	Items []Transaction `json:"items"`
-}
-
-// GetItems returns the value of Items.
-func (s *TransactionList) GetItems() []Transaction {
-	return s.Items
-}
-
-// SetItems sets the value of Items.
-func (s *TransactionList) SetItems(val []Transaction) {
-	s.Items = val
-}
-
-func (*TransactionList) listTransferSuggestionsRes() {}
-
 // Problem details (RFC 9457) of a request that can't be carried out. A refused Transfer
-// (`/problems/invalid-transfer`) gives its `reason`, and for `BEFORE_START_DATE` the cash Account in
-// `account_id`. A Category whose kind doesn't fit the amount's sign (`/problems/category-direction`)
-// gives `category_id`, `category_kind` and `direction`.
+// (`/problems/invalid-transfer`) gives its `reason`, and for `BEFORE_START_DATE` and
+// `ACCOUNT_KIND_NOT_SUPPORTED` the Account in `account_id`. A Category whose kind doesn't fit the
+// amount's sign (`/problems/category-direction`) gives `category_id`, `category_kind` and `direction`.
 // Ref: #/components/schemas/TransferProblem
 type TransferProblem struct {
 	// Identifies the problem type.
@@ -5322,8 +5330,8 @@ type TransferProblem struct {
 	Detail OptString `json:"detail"`
 	// Why the Transfer is refused.
 	Reason OptString `json:"reason"`
-	// The cash Account the Transfer is refused for: for `BEFORE_START_DATE`, the one whose start date is
-	// after the leg's date.
+	// The Account the Transfer is refused for: for `BEFORE_START_DATE`, the cash Account whose start date
+	// is after the leg's date; for `ACCOUNT_KIND_NOT_SUPPORTED`, the loan or crypto wallet Account.
 	AccountID OptUUID `json:"account_id"`
 	// The Category refused for its kind.
 	CategoryID OptUUID `json:"category_id"`
@@ -5428,6 +5436,37 @@ func (*TransferProblem) acceptImportedTransactionRes() {}
 func (*TransferProblem) changeTransactionRes()         {}
 func (*TransferProblem) listTransferSuggestionsRes()   {}
 func (*TransferProblem) recordCashTransactionRes()     {}
+
+// What could be the other side of an Imported transaction's Transfer.
+// Ref: #/components/schemas/TransferSuggestionList
+type TransferSuggestionList struct {
+	// In transit Transfer legs, closest date first.
+	Legs []Transaction `json:"legs"`
+	// Pending rows on bank or credit card Accounts, closest date first.
+	ImportedTransactions []ImportedTransaction `json:"imported_transactions"`
+}
+
+// GetLegs returns the value of Legs.
+func (s *TransferSuggestionList) GetLegs() []Transaction {
+	return s.Legs
+}
+
+// GetImportedTransactions returns the value of ImportedTransactions.
+func (s *TransferSuggestionList) GetImportedTransactions() []ImportedTransaction {
+	return s.ImportedTransactions
+}
+
+// SetLegs sets the value of Legs.
+func (s *TransferSuggestionList) SetLegs(val []Transaction) {
+	s.Legs = val
+}
+
+// SetImportedTransactions sets the value of ImportedTransactions.
+func (s *TransferSuggestionList) SetImportedTransactions(val []ImportedTransaction) {
+	s.ImportedTransactions = val
+}
+
+func (*TransferSuggestionList) listTransferSuggestionsRes() {}
 
 // A Statement import whose Balance check stops a Month close.
 // Ref: #/components/schemas/UncheckedStatementImport

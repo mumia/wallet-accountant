@@ -34,13 +34,19 @@ const (
 	InvalidTransferType = "/problems/invalid-transfer"
 )
 
+// counterpartNotCash is the Ledger's reason for a statement counterpart
+// until statement-transfers ticket 02 lands; the handlers answer 501 for
+// it, since the contract no longer has it.
+const counterpartNotCash = "COUNTERPART_NOT_CASH"
+
 // transferDetails explains each reason an Accept as Transfer is refused.
 var transferDetails = map[string]string{
 	"CATEGORY_AND_TRANSFER": "A Transfer leg is booked against Account transfer: send category_id or " +
 		"transfer_account_id, not both.",
-	"COUNTERPART_NOT_CASH": "transfer_account_id must be a cash Account: Transfers between statement Accounts " +
-		"come later.",
-	"MATCH_WITHOUT_TRANSFER": "match_transaction_id needs transfer_account_id, the cash Account it is on.",
+	"MATCH_WITHOUT_TRANSFER": "match_transaction_id and match_imported_transaction_id need transfer_account_id, " +
+		"the Account they are on.",
+	"MATCH_LEG_AND_ROW": "Send match_transaction_id or match_imported_transaction_id, not both: the other side is " +
+		"either a leg already booked or a pending row.",
 	"NOT_A_MATCHING_LEG": "match_transaction_id isn't an In transit leg on the cash Account naming this row's " +
 		"Account with the opposite amount.",
 	"SAME_ACCOUNT":      "transfer_account_id is the row's own Account.",
@@ -127,8 +133,17 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 			return transferRefused("CATEGORY_AND_TRANSFER"), nil
 		}
 
-		if v.MatchTransactionID.Set && !v.TransferAccountID.Set {
+		if (v.MatchTransactionID.Set || v.MatchImportedTransactionID.Set) && !v.TransferAccountID.Set {
 			return transferRefused("MATCH_WITHOUT_TRANSFER"), nil
+		}
+
+		if v.MatchTransactionID.Set && v.MatchImportedTransactionID.Set {
+			return transferRefused("MATCH_LEG_AND_ROW"), nil
+		}
+
+		if v.MatchImportedTransactionID.Set {
+			return nil, fmt.Errorf("%w: match_imported_transaction_id (statement-transfers ticket 04)",
+				httpapi.ErrNotImplemented)
 		}
 
 		if id, ok := v.MatchTransactionID.Get(); ok {
@@ -150,6 +165,11 @@ func (h *StatementImportHandler) AcceptImportedTransaction(ctx context.Context, 
 	}
 
 	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
+		if refused.Reason == counterpartNotCash {
+			return nil, fmt.Errorf("%w: a statement Account as transfer_account_id (statement-transfers ticket 02)",
+				httpapi.ErrNotImplemented)
+		}
+
 		return refusedTransfer(refused), nil
 	}
 
@@ -263,6 +283,7 @@ func importedTransactionOut(i app.ImportedTransaction) (oas.ImportedTransaction,
 	item := oas.ImportedTransaction{
 		ImportedTransactionID: i.ID,
 		StatementImportID:     s.StatementImportID,
+		AccountID:             s.AccountID,
 		State:                 importedStatesOut[s.State],
 		Line:                  int32(s.Line), //nolint:gosec // a statement file is far smaller
 		BookingDate:           s.BookingDate,

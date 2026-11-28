@@ -13,9 +13,20 @@ import (
 // ListTransferSuggestions implements listTransferSuggestions.
 func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, params oas.ListTransferSuggestionsParams,
 ) (oas.ListTransferSuggestionsRes, error) {
-	legs, err := h.imported.TransferSuggestions(ctx, params.HouseholdID, params.ImportedTransactionID, params.AccountID)
+	account, ok := params.AccountID.Get()
+	if !ok {
+		return nil, fmt.Errorf("%w: suggestions without account_id (statement-transfers ticket 03)",
+			httpapi.ErrNotImplemented)
+	}
+
+	legs, err := h.imported.TransferSuggestions(ctx, params.HouseholdID, params.ImportedTransactionID, account)
 
 	if refused, ok := errors.AsType[*app.TransferRefusedError](err); ok {
+		if refused.Reason == counterpartNotCash {
+			return nil, fmt.Errorf("%w: suggestions on a statement Account (statement-transfers ticket 03)",
+				httpapi.ErrNotImplemented)
+		}
+
 		return transferRefused(refused.Reason), nil
 	}
 
@@ -26,7 +37,10 @@ func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, pa
 		return nil, fmt.Errorf("list transfer suggestions: %w", err)
 	}
 
-	out := &oas.TransactionList{Items: make([]oas.Transaction, 0, len(legs))}
+	out := &oas.TransferSuggestionList{
+		Legs:                 make([]oas.Transaction, 0, len(legs)),
+		ImportedTransactions: []oas.ImportedTransaction{},
+	}
 
 	for _, l := range legs {
 		amount, err := money(l.Amount, l.Currency)
@@ -50,7 +64,7 @@ func (h *StatementImportHandler) ListTransferSuggestions(ctx context.Context, pa
 			t.Payee = oas.NewOptString(l.Payee)
 		}
 
-		out.Items = append(out.Items, t)
+		out.Legs = append(out.Legs, t)
 	}
 
 	return out, nil

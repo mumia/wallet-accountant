@@ -4364,8 +4364,9 @@ type ListTransferSuggestionsParams struct {
 	HouseholdID uuid.UUID
 	// The Imported transaction's ID.
 	ImportedTransactionID uuid.UUID
-	// The cash Account whose legs are suggested.
-	AccountID uuid.UUID
+	// The one Account whose legs and rows are suggested; absent, every Account the row could be a Transfer
+	// with.
+	AccountID OptUUID `json:",omitempty,omitzero"`
 }
 
 func unpackListTransferSuggestionsParams(packed middleware.Parameters) (params ListTransferSuggestionsParams) {
@@ -4388,7 +4389,9 @@ func unpackListTransferSuggestionsParams(packed middleware.Parameters) (params L
 			Name: "account_id",
 			In:   "query",
 		}
-		params.AccountID = packed[key].(uuid.UUID)
+		if v, ok := packed[key]; ok {
+			params.AccountID = v.(OptUUID)
+		}
 	}
 	return params
 }
@@ -4495,23 +4498,28 @@ func decodeListTransferSuggestionsParams(args [2]string, argsEscaped bool, r *ht
 
 		if err := q.HasParam(cfg); err == nil {
 			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
+				var paramsDotAccountIDVal uuid.UUID
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToUUID(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotAccountIDVal = c
+					return nil
+				}(); err != nil {
 					return err
 				}
-
-				c, err := conv.ToUUID(val)
-				if err != nil {
-					return err
-				}
-
-				params.AccountID = c
+				params.AccountID.SetTo(paramsDotAccountIDVal)
 				return nil
 			}); err != nil {
 				return err
 			}
-		} else {
-			return err
 		}
 		return nil
 	}(); err != nil {
